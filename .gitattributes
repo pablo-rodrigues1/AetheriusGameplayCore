@@ -1,3 +1,8 @@
 # Preserve the mirrored integration snapshot and vendor provenance bytes.
 integrations/ui-runtime-changes/** -text
 modules/class-system/vendor/ui-core/** -text
+
+# O hash de cada migration aplicada fica gravado no banco, e os dados do catalogo sao assinados:
+# estes arquivos precisam ter os mesmos bytes em qualquer maquina, qualquer que seja o core.autocrlf.
+database/migrations/*.sql text eol=lf
+catalog/*.json text eol=lf
