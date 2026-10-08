@@ -1,0 +1,194 @@
+import assert from 'node:assert/strict';
+import { after, before, beforeEach, test } from 'node:test';
+import { createRequire } from 'node:module';
+import { composeStandingStoneGrants, createStandingStoneSpike, planGrantProjection, standingStoneDefinitions } from './index.mjs';
+
+const serverRequire = createRequire(new URL('../../../aetherius-server/build/dist/server/gamemode/core/pg.js', import.meta.url));
+const { Pool } = serverRequire('pg');
+const { createGameplayCore } = createRequire(import.meta.url)('../../dist/aetherius-gameplay-core.cjs');
+const databaseUrl = process.env.AETHERIUS_TEST_DATABASE_URL;
+if (!databaseUrl) throw new Error('AETHERIUS_TEST_DATABASE_URL is required');
+
+const pool = new Pool({ connectionString: databaseUrl, max: 4 });
+const logs = [];
+let serviceSequence = 0;
+
+function fakeMp({ activeActor = null } = {}) {
+  const ids = new Map();
+  const descs = new Map();
+  let nextId = 0x1000;
+  const mp = {
+    onActivate: undefined,
+    calls: [],
+    getIdFromDesc(desc) {
+      if (!ids.has(desc)) {
+        nextId += 1;
+        ids.set(desc, nextId);
+        descs.set(nextId, desc);
+      }
+      return ids.get(desc);
+    },
+    getDescFromId(id) { return descs.get(id) ?? `000000:Skyrim.esm`; },
+    callPapyrusFunction(callType, className, functionName, self, args) {
+      mp.calls.push({ callType, className, functionName, self, args });
+      return true;
+    },
+    isConnected(userId) { return activeActor !== null && userId === 1; },
+    getUserActor(userId) { return activeActor !== null && userId === 1 ? activeActor : undefined; },
+    getActorsByProfileId(profileId) { return activeActor !== null && profileId === 7 ? [activeActor] : []; }
+  };
+  return mp;
+}
+
+function newService(mp = fakeMp()) {
+  serviceSequence += 1;
+  return {
+    mp,
+    service: createStandingStoneSpike({ mp, pg: { init: () => pool }, log: { info: message => logs.push(message) } }),
+    characterKey: `a6s2-test-${Date.now()}-${serviceSequence}`
+  };
+}
+
+async function clearSpikeRows() {
+  await pool.query(`TRUNCATE spike_standing_stone_projections,
+    spike_standing_stone_commands, spike_standing_stone_choices`);
+}
+
+before(async () => {
+  const { service } = newService();
+  await service.initialize();
+  service.shutdown();
+});
+beforeEach(clearSpikeRows);
+after(async () => { await pool.end(); });
+
+test('troca de pedra remove a antiga e adiciona a nova por StableFormKey', async () => {
+  const { service, mp, characterKey } = newService();
+  await service.initialize();
+  await service.chooseStandingStone({ requestId: 'switch-a', characterKey, stone: 'skyrim.esm|0D232D', actorId: 0x201 });
+  mp.calls.length = 0;
+  await service.chooseStandingStone({ requestId: 'switch-b', characterKey, stone: 'skyrim.esm|0D232E', actorId: 0x201 });
+  assert.deepEqual(mp.calls.map(call => [call.functionName, call.args[0].desc]), [
+    ['RemoveSpell', '0E5F4C:Skyrim.esm'],
+    ['AddSpell', '0E5F47:Skyrim.esm']
+  ]);
+  service.shutdown();
+});
+
+test('uma origem adicional mantém o feitiço compartilhado na troca', () => {
+  const oldStoneGrant = composeStandingStoneGrants('skyrim.esm|0D232D');
+  const otherSource = [{
+    kind: 'spell', definition: oldStoneGrant[0].definition,
+    source: { kind: 'CLASS', key: 'test-class' }
+  }];
+  const diff = planGrantProjection(oldStoneGrant, [
+    ...composeStandingStoneGrants('skyrim.esm|0D232E'), ...otherSource
+  ]);
+  assert.equal(diff.removed.length, 0);
+  assert.deepEqual(diff.added.map(grant => grant.definition.stableFormKey), ['skyrim.esm|0E5F47']);
+});
+
+test('catálogo cobre 13 pedras e os 14 feitiços com vínculo legível no export', () => {
+  const grants = Object.keys(standingStoneDefinitions).flatMap(stone => composeStandingStoneGrants(stone));
+  const spellKeys = new Set(grants.map(grant => grant.definition.stableFormKey));
+  assert.equal(Object.keys(standingStoneDefinitions).length, 13);
+  assert.equal(spellKeys.size, 14);
+});
+
+test('bundle mantém o spike desligado por padrão e o liga só pela flag dedicada', async () => {
+  let pgInitCalls = 0;
+  const disabled = createGameplayCore({ mp: fakeMp(), pg: { init() { pgInitCalls += 1; throw new Error('should stay off'); } }, env: {},
+    log: { info: message => logs.push(message) } });
+  await disabled.initialize();
+  assert.equal(disabled.info().features.find(feature => feature.id === 'standing-stones').mode, 'off');
+  assert.equal(pgInitCalls, 0);
+  await disabled.shutdown();
+
+  const mp = fakeMp();
+  const original = () => 'previous';
+  mp.onActivate = original;
+  const enabled = createGameplayCore({ mp, pg: { init() { pgInitCalls += 1; return pool; } },
+    env: { ENABLE_STANDING_STONE_SPIKE: 'true' }, log: { info: message => logs.push(message) } });
+  await enabled.initialize();
+  assert.equal(enabled.info().features.find(feature => feature.id === 'standing-stones').mode, 'active');
+  assert.equal(pgInitCalls, 1);
+  await enabled.shutdown();
+  assert.equal(mp.onActivate, original);
+});
+
+test('requestId repetido grava um comando e projeta uma única vez', async () => {
+  const { service, mp, characterKey } = newService();
+  await service.initialize();
+  const command = { requestId: 'same-request', characterKey, stone: 'skyrim.esm|0D2339', actorId: 0x202 };
+  await service.chooseStandingStone(command);
+  const callsAfterFirst = mp.calls.length;
+  const duplicate = await service.chooseStandingStone(command);
+  const rows = await pool.query('SELECT count(*)::int AS count FROM spike_standing_stone_commands WHERE request_id = $1', [command.requestId]);
+  assert.equal(duplicate.duplicate, true);
+  assert.equal(rows.rows[0].count, 1);
+  assert.equal(mp.calls.length, callsAfterFirst);
+  service.shutdown();
+});
+
+test('dois comandos concorrentes deixam um estado final completo e projetado', async () => {
+  const { service, mp, characterKey } = newService();
+  await service.initialize();
+  await Promise.all([
+    service.chooseStandingStone({ requestId: 'race-a', characterKey, stone: 'skyrim.esm|0D232D', actorId: 0x203 }),
+    service.chooseStandingStone({ requestId: 'race-b', characterKey, stone: 'skyrim.esm|0D2339', actorId: 0x203 })
+  ]);
+  const [fact, projection] = await Promise.all([
+    pool.query('SELECT stone_key FROM spike_standing_stone_choices WHERE character_key = $1', [characterKey]),
+    pool.query('SELECT grants FROM spike_standing_stone_projections WHERE character_key = $1', [characterKey])
+  ]);
+  const finalStone = fact.rows[0].stone_key;
+  const expected = composeStandingStoneGrants(finalStone);
+  assert.ok(['skyrim.esm|0D232D', 'skyrim.esm|0D2339'].includes(finalStone));
+  assert.deepEqual(projection.rows[0].grants.map(grant => grant.definition.stableFormKey),
+    expected.map(grant => grant.definition.stableFormKey));
+  assert.equal(mp.calls.at(-1).functionName, 'AddSpell');
+  assert.equal(mp.calls.at(-1).args[0].desc, finalStone === 'skyrim.esm|0D232D' ? '0E5F4C:Skyrim.esm' : '0E5F61:Skyrim.esm');
+  service.shutdown();
+});
+
+test('processo novo reidrata o fato e reenvia após o reset de feitiços do spawn', async () => {
+  const first = { ...newService(), characterKey: '7' };
+  await first.service.initialize();
+  await first.service.chooseStandingStone({ requestId: 'restart-choice', characterKey: first.characterKey,
+    stone: 'skyrim.esm|0D2333', actorId: 0x204 });
+  first.service.shutdown();
+
+  const secondMp = fakeMp({ activeActor: 0x205 });
+  const second = { ...newService(secondMp), characterKey: first.characterKey };
+  await second.service.initialize();
+  const rehydrated = await second.service.rehydrate(second.characterKey, 0x205);
+  assert.equal(rehydrated.stone, 'skyrim.esm|0D2333');
+  await new Promise(resolve => setTimeout(resolve, 3150));
+  assert.deepEqual(secondMp.calls.map(call => call.functionName), ['RemoveSpell', 'AddSpell']);
+  assert.deepEqual(secondMp.calls.map(call => call.args[0].desc), ['0E5F5E:Skyrim.esm', '0E5F5E:Skyrim.esm']);
+  second.service.shutdown();
+});
+
+test('onActivate veta sincronamente, persiste em segundo plano e shutdown restaura o handler', async () => {
+  const oldHandler = () => 'previous-handler';
+  const mp = fakeMp();
+  mp.onActivate = oldHandler;
+  const { service, characterKey } = newService(mp);
+  await service.initialize();
+  const target = mp.getIdFromDesc('0D232F:Skyrim.esm');
+  const actor = 0x206;
+  mp.getActorsByProfileId = profileId => profileId === 7 ? [actor] : [];
+  const result = mp.onActivate(target, actor);
+  assert.equal(result, false);
+  assert.equal(typeof result?.then, 'undefined');
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const persisted = await pool.query('SELECT stone_key FROM spike_standing_stone_choices WHERE character_key = $1', [String(7)]);
+    if (persisted.rows.length) break;
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  const persisted = await pool.query('SELECT stone_key FROM spike_standing_stone_choices WHERE character_key = $1', [String(7)]);
+  assert.equal(persisted.rows[0].stone_key, 'skyrim.esm|0D232F');
+  service.shutdown();
+  assert.equal(mp.onActivate, oldHandler);
+  assert.equal(characterKey.startsWith('a6s2-test-'), true);
+});
