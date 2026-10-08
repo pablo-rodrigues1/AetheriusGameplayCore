@@ -85,6 +85,8 @@ Valor inválido é tratado como `off`, com aviso no log. Sistema ausente da conf
 | `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY=true` | faz o Core aceitar a identidade do jogador com o servidor em `offlineMode`, isto é, sem login validado. O servidor local de teste roda assim; o oficial não. Sem esta opção e com `offlineMode` ligado, os sistemas não agem para ninguém |
 | `ENABLE_STANDING_STONE_SPIKE=true` | liga o protótipo antigo das pedras, com tabelas próprias (`spike_*`). Nunca junto com `GAMEPLAY_CORE_MODE_STANDING_STONES` em `canary` ou `active`: o sistema novo recusa iniciar. No oficial o protótipo nunca foi usado; deixe ausente ou `false` |
 
+| `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` (a ser entregue com o sistema de classes) | **ATENÇÃO: nunca no servidor oficial.** Faz todo personagem ser tratado como nível de classe 40 desde a criação, recebendo de uma vez os perks de todos os marcos. Existe só para testar as classes no ambiente local sem precisar ganhar XP. A regra real, definida pelo dono do projeto em 08/10/2026, é: o nível fica guardado no servidor e vem do XP do sistema de leveling do Core, concedido pelo abate de inimigos conforme as tabelas de valores. A opção não grava nível nem XP no personagem: ao removê-la, o nível volta a ser o do leveling. O Core só a aceita com o servidor em `offlineMode` e escreve um aviso no log a cada boot |
+
 A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolvimento: ela transferiu para o sistema novo a pedra de um personagem de teste que vinha do protótipo. O servidor oficial não tem dados do protótipo e não precisa dela.
 
 ## 5. O que cada sistema faz quando ligado
@@ -116,6 +118,17 @@ A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolviment
 6. Passar para `active`.
 
 No ambiente local os passos 4 e 5 foram pulados: o sistema foi direto para `active`, porque só há um personagem de teste.
+
+### Conferência obrigatória antes de ligar qualquer sistema no servidor oficial
+
+No `.env` do gamemode do servidor oficial, estas opções têm de estar **ausentes**:
+
+- `GAMEPLAY_CORE_DEV_CLASS_LEVEL` (daria nível 40 a todos os personagens);
+- `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY`;
+- `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV`;
+- `ENABLE_STANDING_STONE_SPIKE`.
+
+E `offlineMode` tem de estar desligado nas configurações do servidor. No log de boot não pode aparecer nenhum aviso do Core com a palavra `DEV`.
 
 ## 7. Como conferir
 
