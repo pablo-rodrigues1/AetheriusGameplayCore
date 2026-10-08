@@ -20,6 +20,24 @@ buscas por chave e ID de runtime e os métodos `lookup`/`resolve` dos contratos.
 Os mapas ficam em closures privadas. Depois do boot nenhuma consulta chama o host,
 disco, rede ou banco. O ID numérico vive apenas no catálogo em memória.
 
+Desde B2-fix1, há duas assinaturas SHA-256. `DomainData.signature` continua
+protegendo o arquivo completo (incluindo as assinaturas dos records) e a
+reconciliação de todos os plugins relevantes do domínio. `CatalogRecord.signature`
+versiona apenas a definição: identidade, tipo, plugin de definição, kind, winner,
+dados e tamanho/CRC32/kind do plugin de definição. Nomes de plugins são
+normalizados para minúsculas no cálculo. Domínio, epoch, outros records e
+fingerprints de outros plugins não entram na assinatura do record.
+
+`DefinitionRef.catalogSignature` recebe `CatalogRecord.signature`.
+`lookup(definition)` e `resolve(key, signature)` conferem essa assinatura do
+record em memória; assinatura do domínio, de outro record ou antiga resulta em
+`UNSUPPORTED`. O boot também recalcula cada assinatura de record e recusa
+inconsistências. Um mesmo record gerado dos mesmos exports e fingerprints em
+dois domínios produz referências iguais e pode compor no ActorState. Os
+contratos permanecem iguais; dados antigos sem assinatura por record precisam
+ser regenerados. O bundle deve ser recompilado depois da regeneração, pois
+embute os dados e a implementação do catálogo.
+
 `unsupported` descreve vínculos/semânticas incompletos nos exports, separadamente
 da saúde do boot. O spell de corrida do Corcel está presente como definição, mas
 nunca entra na lista de concessões de uma pedra. C1 deve declarar essa limitação.
@@ -31,7 +49,6 @@ O ensaio real e sua limitação de execução ficam no relatório B2 e nas evid�
 Na pasta deste pacote:
 
 ```powershell
-npm install --workspaces=false --cache .npm-cache --ignore-scripts
 npm run typecheck --workspaces=false
 npm test --workspaces=false
 npm run build --workspaces=false
@@ -41,3 +58,8 @@ Node 22.14 é a baseline local. Os testes executam TypeScript com
 `--experimental-strip-types`; o build fornece JavaScript e declarações em
 `.build/shared/record-catalog/src/`. B1 pode importar os fontes em TypeScript pelo
 bundler. Não foi feita ligação ao runtime/bundle nesta ordem.
+
+No aceite de B2-fix1, as dependências disponíveis eram as locais dos pacotes;
+`node_modules` da raiz estava ausente. O typecheck foi executado diretamente
+com `node shared/record-catalog/node_modules/typescript/bin/tsc --noEmit -p
+shared/record-catalog/tsconfig.json` a partir da raiz do Core, sem instalação.

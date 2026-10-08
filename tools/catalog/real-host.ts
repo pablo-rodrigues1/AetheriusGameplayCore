@@ -13,7 +13,15 @@ import type { SkyMpCatalogApi } from './host.ts';
 
 interface NativeHost extends SkyMpCatalogApi { getDescFromId(id: number): string; tick(): void }
 interface Settings { port: number; listenHost: string; maxPlayers: number; dataDir: string; loadOrder: string[]; npcEnabled: boolean; logLevel: string; reloot: object }
-interface Snapshot { domains: { domain: string; signature: string; entries: { key: string; runtimeFormId: number; descriptor: string; type: string; winner: string; data: object }[] }[]; lightProbe: { key: string; runtimeFormId: number }[] }
+interface Snapshot { domains: { domain: string; signature: string; entries: { key: string; signature: string; runtimeFormId: number; descriptor: string; type: string; winner: string; data: object }[] }[]; lightProbe: { key: string; runtimeFormId: number }[] }
+
+/** Required argument, validated before any file is written or native host opens. */
+export function parseHostPort(value: string | undefined): number {
+  if (!value || !/^\d+$/.test(value) || !Number.isInteger(Number(value)) || Number(value) < 1 || Number(value) > 65535) {
+    throw new TypeError('Explicit UDP port required (integer 1..65535); no default port');
+  }
+  return Number(value);
+}
 
 // Reads only TES4/MAST, not record content; protects master-before-dependent validity.
 export function masters(file: string): string[] {
@@ -70,9 +78,10 @@ function reorder(order: string[], metadata: PluginFingerprint[], dependencies: M
   }
   throw new Error('No valid swap for light plugins');
 }
-function child(workspace: string, evidence: string, configFile: string): void {
+function child(workspace: string, evidence: string, port: number, configFile: string): void {
   const data = ['standing-stones', 'races'].map(name => JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog', `${name}.json`), 'utf8')) as DomainData);
   const settings = JSON.parse(readFileSync(configFile, 'utf8')) as Settings;
+  assert.equal(settings.port, port, 'Child settings must use the requested port');
   const require = createRequire(import.meta.url);
   // Native code's emitter setup expects a CommonJS loader; no gamemode/bundle is loaded.
   (globalThis as typeof globalThis & { require?: NodeJS.Require }).require = require;
@@ -89,7 +98,7 @@ function child(workspace: string, evidence: string, configFile: string): void {
     entries: catalog.records.map(record => {
       const descriptor = mp.getDescFromId(record.runtimeFormId);
       assert.equal(decodeFormKey(descriptor, 'skymp', record.pluginKind), record.definition.stableFormKey);
-      return { key: record.definition.stableFormKey, runtimeFormId: record.runtimeFormId, descriptor,
+      return { key: record.definition.stableFormKey, signature: record.definition.catalogSignature, runtimeFormId: record.runtimeFormId, descriptor,
         type: record.definition.recordType, winner: record.winnerPlugin, data: record.data };
     }) })), lightProbe: [] };
   // Real light records from their own defining files, addressed only by filename/local id.
@@ -105,10 +114,12 @@ function child(workspace: string, evidence: string, configFile: string): void {
     fingerprintBytes: host.plugins().reduce((sum, p) => sum + ('size' in p ? p.size : 0), 0), totalBootMs: performance.now() - start }));
 }
 async function main(): Promise<void> {
-  const [workspaceArg, evidenceArg, mode, config] = process.argv.slice(2);
-  assert.ok(workspaceArg && evidenceArg, 'Usage: real-host.ts <workspace> <evidence-dir> [child <config>]');
+  const [workspaceArg, evidenceArg, portArg, mode, config] = process.argv.slice(2);
+  assert.ok(workspaceArg && evidenceArg, 'Usage: real-host.ts <workspace> <evidence-dir> <udp-port> [child <config>]');
+  const port = parseHostPort(portArg);
   const workspace = resolve(workspaceArg), evidence = resolve(evidenceArg);
-  if (mode === 'child') { assert.ok(config); child(workspace, evidence, config); return; }
+  if (mode === 'child') { assert.ok(config); child(workspace, evidence, port, config); return; }
+  assert.equal(mode, undefined, 'Unexpected real-host argument');
   const serverData = join(workspace, 'aetherius-server/build/dist/server/data');
   const manifest = JSON.parse(readFileSync(join(serverData, 'aetherius-loadorder.json'), 'utf8')) as { loadOrder: string[]; plugins: PluginFingerprint[] };
   const dependencies = new Map(manifest.loadOrder.map(name => [name.toLowerCase(), masters(join(serverData, name))]));
@@ -131,14 +142,14 @@ async function main(): Promise<void> {
   const files = ['original', 'reordered'].map(name => join(evidence, `${name}.settings.json`));
   for (const [name, loadOrder] of [['original', manifest.loadOrder], ['reordered', changed.order]] as const) {
     // Deliberately omit account, credentials, saves, gamemode, damage and bundle settings.
-    const settings: Settings = { port: 7777, listenHost: '127.0.0.1', maxPlayers: 1, dataDir: serverData, loadOrder: [...loadOrder], npcEnabled: false, logLevel: 'warn', reloot: {} };
+    const settings: Settings = { port, listenHost: '127.0.0.1', maxPlayers: 1, dataDir: serverData, loadOrder: [...loadOrder], npcEnabled: false, logLevel: 'warn', reloot: {} };
     writeFileSync(join(evidence, `${name}.settings.json`), JSON.stringify(settings, null, 2));
   }
   for (const file of files) {
-    const portCheck = spawnSync('pwsh', ['-NoProfile', '-Command', '$endpoint=Get-NetUDPEndpoint -LocalPort 7777 -ErrorAction SilentlyContinue; if ($endpoint) { $endpoint | Select-Object LocalAddress,LocalPort,OwningProcess; exit 2 }; Write-Output "UDP 7777 FREE"'], { encoding: 'utf8' });
+    const portCheck = spawnSync('pwsh', ['-NoProfile', '-Command', `$endpoint=Get-NetUDPEndpoint -LocalPort ${port} -ErrorAction SilentlyContinue; if ($endpoint) { $endpoint | Select-Object LocalAddress,LocalPort,OwningProcess; exit 2 }; Write-Output "UDP ${port} FREE"`], { encoding: 'utf8' });
     writeFileSync(join(evidence, `${basename(file, '.json')}.port.txt`), `${portCheck.stdout}${portCheck.stderr}`);
-    assert.equal(portCheck.status, 0, 'UDP 7777 is in use or could not be checked; owner server is never stopped');
-    const launched = spawnSync(process.execPath, ['--experimental-strip-types', fileURLToPath(import.meta.url), workspace, evidence, 'child', file], { cwd: evidence, encoding: 'utf8', timeout: 180000, maxBuffer: 16 * 1024 * 1024 });
+    assert.equal(portCheck.status, 0, `UDP ${port} is in use or could not be checked; owner server is never stopped`);
+    const launched = spawnSync(process.execPath, ['--experimental-strip-types', fileURLToPath(import.meta.url), workspace, evidence, String(port), 'child', file], { cwd: evidence, encoding: 'utf8', timeout: 180000, maxBuffer: 16 * 1024 * 1024 });
     writeFileSync(join(evidence, `${basename(file, '.json')}.log`), `${launched.stdout}\n${launched.stderr}\nexit=${launched.status}\nerror=${launched.error?.message ?? ''}\n`);
     assert.equal(launched.status, 0, `Host failed: ${basename(file)} (see .log)`);
   }
@@ -150,4 +161,6 @@ async function main(): Promise<void> {
   assert.ok(snapshots[0]!.lightProbe.some(p => snapshots[1]!.lightProbe.find(other => other.key === p.key)!.runtimeFormId !== p.runtimeFormId), 'A light probe must change its runtime id');
   console.log(JSON.stringify({ result: 'PASSED', movedPlugins: changed.moved, changedRelevantRecords: altered.length, equivalentDomains: snapshots[0]!.domains.map(d => d.domain) }));
 }
-main().catch(error => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch(error => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });
+}

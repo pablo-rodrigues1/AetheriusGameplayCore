@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { DomainData, PluginFingerprint } from '../../shared/record-catalog/src/types.ts';
-import { contentSignature } from '../../shared/record-catalog/src/index.ts';
+import { contentSignature, recordSignature } from '../../shared/record-catalog/src/index.ts';
 import { fingerprintFiles } from './host.ts';
 
 const workspace = resolve(process.argv[2] ?? '../../../');
@@ -19,6 +19,11 @@ const actual = observations as readonly PluginFingerprint[];
 for (const domain of domains) {
   assert.equal(contentSignature(domain), domain.signature);
   for (const plugin of domain.dependencies) assert.deepEqual(actual.find(p => p.filename.toLowerCase() === plugin.filename.toLowerCase()), plugin);
+  for (const record of domain.records) {
+    const defining = domain.dependencies.find(p => p.filename.toLowerCase() === record.definingPlugin.toLowerCase());
+    assert.ok(defining, `Missing defining plugin: ${record.stableFormKey}`);
+    assert.equal(record.signature, recordSignature(record, defining), `Record signature mismatch: ${record.stableFormKey}`);
+  }
   console.log(JSON.stringify({ domain: domain.domain, roots: domain.roots.length, records: domain.records.length,
     unsupported: domain.unsupported, dependencies: domain.dependencies.map(p => p.filename), bytesToHash: domain.dependencies.reduce((sum, p) => sum + p.size, 0) }));
 }

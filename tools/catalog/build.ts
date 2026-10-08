@@ -3,7 +3,7 @@ import { createInterface } from 'node:readline';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decodeFormKey, encodeFormKey } from '../../shared/record-catalog/src/codecs.ts';
-import { canonicalJson, contentSignature } from '../../shared/record-catalog/src/integrity.ts';
+import { canonicalJson, contentSignature, recordSignature } from '../../shared/record-catalog/src/integrity.ts';
 import type { CatalogRecord, DomainData, PluginFingerprint, UnsupportedLink } from '../../shared/record-catalog/src/types.ts';
 import type { JsonObject, JsonValue } from '../../shared/contracts/src/messages.ts';
 import type { RecordType, StableFormKey } from '../../shared/contracts/src/identity.ts';
@@ -93,8 +93,9 @@ export async function buildDomains(exportsDir: string, fingerprints: readonly Pl
       depend(row.winner);
       const recordType = recordTypes[row.type];
       if (!recordType) throw new TypeError(`Unexpected record type ${row.type}`);
-      records.set(stableFormKey, { stableFormKey, recordType, definingPlugin: definingPlugin.filename,
-        pluginKind: definingPlugin.isLight ? 'LIGHT' : 'FULL', winnerPlugin: row.winner, data });
+      const record: Omit<CatalogRecord, 'signature'> = { stableFormKey, recordType, definingPlugin: definingPlugin.filename,
+        pluginKind: definingPlugin.isLight ? 'LIGHT' : 'FULL', winnerPlugin: row.winner, data };
+      records.set(stableFormKey, { ...record, signature: recordSignature(record, definingPlugin) });
       return stableFormKey;
     }
     function addEffect(stableFormKey: StableFormKey): void {

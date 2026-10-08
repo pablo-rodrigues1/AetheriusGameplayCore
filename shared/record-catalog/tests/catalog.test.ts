@@ -3,11 +3,13 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createStableFormKey } from '../../contracts/src/identity.ts';
-import type { CatalogSignature, RuntimeFormId, StableFormKey } from '../../contracts/src/identity.ts';
-import { contentSignature, decodeFormKey, encodeFormKey, loadDomain } from '../src/index.ts';
+import type { CatalogSignature, CharacterKey, DefinitionRef, RuntimeFormId, StableFormKey } from '../../contracts/src/identity.ts';
+import { contentSignature, decodeFormKey, encodeFormKey, loadDomain, recordSignature } from '../src/index.ts';
 import type { CatalogHost, DomainData, PluginFingerprint } from '../src/types.ts';
 import { createFileHost } from '../../../tools/catalog/host.ts';
 import { buildDomains } from '../../../tools/catalog/build.ts';
+import { parseHostPort } from '../../../tools/catalog/real-host.ts';
+import { compose, effectiveSet } from '../../../modules/actor-state-system/src/index.ts';
 
 const readDomain = (name: string): DomainData => JSON.parse(readFileSync(new URL(`../../../catalog/${name}.json`, import.meta.url), 'utf8')) as DomainData;
 const stones = readDomain('standing-stones');
@@ -94,7 +96,7 @@ for (const data of [stones, races]) test(`immutable boot-only lookup and port ch
   const record = catalog.roots[0]!;
   assert.equal(catalog.byKey(record.definition.stableFormKey), record);
   assert.equal(catalog.byRuntimeId(record.runtimeFormId), record);
-  assert.equal(catalog.resolve(record.definition.stableFormKey, data.signature).status, 'SUPPORTED');
+  assert.equal(catalog.resolve(record.definition.stableFormKey, record.definition.catalogSignature).status, 'SUPPORTED');
   assert.equal(catalog.lookup(record.definition).status, 'SUPPORTED');
   assert.equal(catalog.lookup({ ...record.definition, recordType: 'WEAP' }).status, 'UNSUPPORTED');
   assert.equal(catalog.resolve(record.definition.stableFormKey, 'stale' as CatalogSignature).status, 'UNSUPPORTED');
@@ -107,7 +109,7 @@ test('full and light defining records survive different host namespaces', () => 
   const lightKey = key(0x818, 'Test Light.esp', 'LIGHT');
   const payload = { ...stones, records: [...stones.records, { ...full, stableFormKey: lightKey, definingPlugin: 'Test Light.esp', pluginKind: 'LIGHT' as const, winnerPlugin: 'Test Light.esp' }],
     dependencies: [...stones.dependencies, { filename: 'Test Light.esp', size: 12, crc32: -1, isLight: true }] };
-  const data = { ...payload, signature: contentSignature(payload) };
+  const data = signedDomain(payload);
   const first = loadDomain(data, simulated(data));
   const reordered = loadDomain(data, simulated(data, true));
   assert.equal(first.status, 'SUPPORTED');
@@ -118,6 +120,110 @@ test('full and light defining records survive different host namespaces', () => 
     assert.notEqual(record.runtimeFormId, other.runtimeFormId);
   }
   assert.notEqual(first.byKey(lightKey)!.runtimeFormId, reordered.byKey(lightKey)!.runtimeFormId);
+});
+
+/** Re-sign explicit fixture edits as the offline builder would. */
+function signedDomain(input: DomainData): DomainData {
+  const payload = { ...input, records: input.records.map(record => ({ ...record,
+    signature: recordSignature(record, input.dependencies.find(p => p.filename.toLowerCase() === record.definingPlugin.toLowerCase())!) })) };
+  return { ...payload, signature: contentSignature(payload) };
+}
+
+test('one exported record in two fixture domains composes with both origins', async () => {
+  // Fixture changes one race ActorEffect to reference the real Warrior spell;
+  // all other selected rows retain export content. No new production domain.
+  const generated = await buildDomains(fileURLToPath(new URL('./fixtures/overlap/', import.meta.url)), metadata.plugins);
+  const [stoneData, raceData] = generated as [DomainData, DomainData];
+  assert.notEqual(stoneData.signature, raceData.signature);
+  const stoneCatalog = loadDomain(stoneData, simulated(stoneData));
+  const raceCatalog = loadDomain(raceData, simulated(raceData, true));
+  assert.equal(stoneCatalog.status, 'SUPPORTED', stoneCatalog.issues.join('; '));
+  assert.equal(raceCatalog.status, 'SUPPORTED', raceCatalog.issues.join('; '));
+  const shared = key(0xe5f4c);
+  const first = stoneCatalog.byKey(shared)!.definition as DefinitionRef<'SPEL'>;
+  const second = raceCatalog.byKey(shared)!.definition as DefinitionRef<'SPEL'>;
+  assert.deepEqual(first, second);
+  assert.equal(stoneCatalog.lookup(second).status, 'SUPPORTED');
+  assert.equal(raceCatalog.lookup(first).status, 'SUPPORTED');
+  assert.equal(raceCatalog.resolve(shared, first.catalogSignature).status, 'SUPPORTED');
+  const composed = compose('profile:1' as CharacterKey, [
+    [{ kind: 'ability', definition: first, source: { kind: 'STANDING_STONE', key: 'warrior' }, revision: 1 }],
+    [{ kind: 'ability', definition: second, source: { kind: 'RACE', key: raceData.roots[0]! }, revision: 1 }]
+  ], { facts: 1, grants: 1, equipment: 0, effects: 0, catalog: 1 });
+  assert.equal(composed.grants.length, 2);
+  const effective = effectiveSet(composed);
+  assert.equal(effective.grants.length, 1);
+  assert.deepEqual(effective.grants[0]!.sources.map(s => s.kind).sort(), ['RACE', 'STANDING_STONE']);
+});
+
+test('editing one record changes only its signature and rejects its previous reference', () => {
+  const original = loadDomain(stones, simulated(stones));
+  const target = original.records.find(r => r.definition.recordType === 'SPEL')!;
+  const modified = signedDomain({ ...stones, records: stones.records.map(r => r.stableFormKey === target.definition.stableFormKey
+    ? { ...r, data: { ...r.data, spellType: 'fixture-edited' } } : r) });
+  const current = loadDomain(modified, simulated(modified));
+  assert.equal(current.status, 'SUPPORTED');
+  assert.notEqual(current.signature, original.signature);
+  for (const prior of original.records) {
+    const next = current.byKey(prior.definition.stableFormKey)!;
+    if (prior === target) {
+      assert.notEqual(next.definition.catalogSignature, prior.definition.catalogSignature);
+      assert.equal(current.lookup(prior.definition).status, 'UNSUPPORTED');
+      assert.equal(current.resolve(prior.definition.stableFormKey, prior.definition.catalogSignature).status, 'UNSUPPORTED');
+    } else {
+      assert.equal(next.definition.catalogSignature, prior.definition.catalogSignature);
+      assert.equal(current.lookup(prior.definition).status, 'SUPPORTED');
+    }
+  }
+});
+
+for (const field of ['size', 'crc32', 'isLight'] as const) test(`defining plugin ${field} changes only its records' signatures`, () => {
+  // Mundus also wins Skyrim-defined records: those must retain their signature.
+  const before = new Map(stones.records.map(r => [r.stableFormKey, r.signature]));
+  const modified = signedDomain({ ...stones, dependencies: stones.dependencies.map(p => p.filename === 'Mundus.esp'
+    ? { ...p, [field]: field === 'isLight' ? !p.isLight : field === 'size' ? p.size + 1 : p.crc32 ^ 1 } : p) });
+  const own = modified.records.filter(r => r.definingPlugin === 'Mundus.esp');
+  const other = modified.records.filter(r => r.definingPlugin !== 'Mundus.esp');
+  assert.ok(own.length && other.length);
+  assert.notEqual(modified.signature, stones.signature);
+  for (const record of own) assert.notEqual(record.signature, before.get(record.stableFormKey));
+  for (const record of other) assert.equal(record.signature, before.get(record.stableFormKey));
+  // Kind change cannot be reconciled with the old record namespaces.
+  const catalog = loadDomain(modified, simulated(modified));
+  assert.equal(catalog.status, field === 'isLight' ? 'UNSUPPORTED' : 'SUPPORTED');
+});
+
+test('domain metadata, siblings and unrelated dependencies do not version an existing record', () => {
+  const before = loadDomain(stones, simulated(stones));
+  const payload = { ...stones, domain: 'races' as const, exportEpoch: 'fixture-other-epoch',
+    dependencies: [...stones.dependencies, { filename: 'Unrelated.esp', size: 12, crc32: 1, isLight: false }],
+    records: stones.records.slice(0, -1), roots: [stones.records[0]!.stableFormKey], unsupported: [] };
+  const modified = { ...payload, signature: contentSignature(payload) };
+  const after = loadDomain(modified, simulated(modified, true));
+  assert.equal(after.status, 'SUPPORTED', after.issues.join('; '));
+  assert.notEqual(after.signature, before.signature);
+  for (const record of after.records) assert.equal(record.definition.catalogSignature,
+    before.byKey(record.definition.stableFormKey)!.definition.catalogSignature);
+});
+
+test('ports reject domain, another record and stale signatures; tampered record signature blocks boot', () => {
+  const catalog = loadDomain(stones, simulated(stones));
+  const first = catalog.records[0]!, other = catalog.records[1]!;
+  assert.notEqual(first.definition.catalogSignature, other.definition.catalogSignature);
+  for (const signature of [stones.signature, other.definition.catalogSignature, 'stale' as CatalogSignature]) {
+    assert.equal(catalog.resolve(first.definition.stableFormKey, signature).status, 'UNSUPPORTED');
+    assert.equal(catalog.lookup({ ...first.definition, catalogSignature: signature }).status, 'UNSUPPORTED');
+  }
+  const payload = { ...stones, records: stones.records.map((r, i) => i === 0 ? { ...r, signature: stones.signature } : r) };
+  const modified = { ...payload, signature: contentSignature(payload) };
+  assert.match(loadDomain(modified, simulated(modified)).issues.join('; '), /Record content signature mismatch/);
+});
+
+test('real-host requires an explicit valid UDP port without opening a native server', () => {
+  assert.equal(parseHostPort('7791'), 7791);
+  for (const input of [undefined, '', '0', '-1', '65536', '1.5', 'NaN', '7791;exit', ' 7791']) {
+    assert.throws(() => parseHostPort(input), /Explicit UDP port required/);
+  }
 });
 for (const kind of ['missing', 'crc', 'size', 'light'] as const) test(`plugin ${kind} blocks only dependent domain`, () => {
   const host = simulated(stones);

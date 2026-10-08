@@ -3,11 +3,11 @@ import { parseStableFormKey, stableFormKeyParts } from '../../contracts/src/iden
 import type { PortResult } from '../../contracts/src/capabilities.ts';
 import type { CatalogEntry } from '../../contracts/src/ports.ts';
 import { encodeFormKey } from './codecs.ts';
-import { contentSignature, deepFreeze } from './integrity.ts';
+import { contentSignature, deepFreeze, recordSignature } from './integrity.ts';
 import type { CatalogHost, DomainCatalog, DomainData, PluginFingerprint, ResolvedRecord } from './types.ts';
 export * from './types.ts';
 export * from './codecs.ts';
-export { contentSignature, canonicalJson } from './integrity.ts';
+export { contentSignature, canonicalJson, recordSignature } from './integrity.ts';
 
 /** All host calls are confined to this boot function. No caller-owned object is frozen. */
 export function loadDomain(input: DomainData, host: CatalogHost): DomainCatalog {
@@ -53,6 +53,7 @@ export function loadDomain(input: DomainData, host: CatalogHost): DomainCatalog 
           throw new TypeError('Missing/inconsistent definition or winner dependency');
         }
         if (byKey.has(record.stableFormKey)) throw new TypeError('Duplicate record');
+        if (recordSignature(record, defining) !== record.signature) throw new TypeError('Record content signature mismatch');
         const id = host.getIdFromDesc(encodeFormKey(record.stableFormKey, 'skymp', record.pluginKind, defining.filename));
         if (!Number.isSafeInteger(id) || id < 1 || id > 2 ** 32 - 1 || Math.floor(id / 2 ** 24) === 255) {
           throw new TypeError('Invalid/static record id required');
@@ -64,7 +65,7 @@ export function loadDomain(input: DomainData, host: CatalogHost): DomainCatalog 
         const runtimeFormId = id as RuntimeFormId;
         if (byRuntime.has(runtimeFormId)) throw new TypeError('Runtime resolution collision');
         const resolved: ResolvedRecord = deepFreeze({
-          definition: { stableFormKey: record.stableFormKey, recordType: record.recordType, catalogSignature: data.signature },
+          definition: { stableFormKey: record.stableFormKey, recordType: record.recordType, catalogSignature: record.signature },
           pluginKind: record.pluginKind, winnerPlugin: record.winnerPlugin, data: record.data, runtimeFormId
         });
         byKey.set(record.stableFormKey, resolved);
@@ -84,7 +85,7 @@ export function loadDomain(input: DomainData, host: CatalogHost): DomainCatalog 
     lookup(definition: DefinitionRef): PortResult<CatalogEntry> {
       if (status !== 'SUPPORTED') return fail(issues.join('; '));
       const record = byKey.get(definition.stableFormKey);
-      if (!record || definition.catalogSignature !== data.signature || definition.recordType !== record.definition.recordType) {
+      if (!record || definition.catalogSignature !== record.definition.catalogSignature || definition.recordType !== record.definition.recordType) {
         return fail('Record absent or type/catalog signature mismatch');
       }
       return Object.freeze({ status: 'SUPPORTED', value: record });
@@ -92,7 +93,7 @@ export function loadDomain(input: DomainData, host: CatalogHost): DomainCatalog 
     resolve(key: StableFormKey, signature: CatalogSignature): PortResult<RuntimeFormId> {
       if (status !== 'SUPPORTED') return fail(issues.join('; '));
       const record = byKey.get(key);
-      return record && signature === data.signature
+      return record && signature === record.definition.catalogSignature
         ? Object.freeze({ status: 'SUPPORTED', value: record.runtimeFormId }) : fail('Record absent or catalog signature mismatch');
     }
   };

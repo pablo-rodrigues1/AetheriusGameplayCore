@@ -16,6 +16,8 @@ export interface UnavailablePluginFingerprint {
 }
 export type PluginObservation = PluginFingerprint | UnavailablePluginFingerprint;
 export interface CatalogRecord {
+  /** Record content + defining plugin fingerprint; independent of domain. */
+  readonly signature: CatalogSignature;
   readonly stableFormKey: StableFormKey;
   readonly recordType: RecordType;
   readonly definingPlugin: string;
