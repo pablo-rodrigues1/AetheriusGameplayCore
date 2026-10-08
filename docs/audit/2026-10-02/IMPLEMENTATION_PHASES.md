@@ -1,5 +1,8 @@
 # Fases executáveis de implementação
 
+> [!WARNING]
+> **HISTÓRICO — substituído em 07/10/2026.** As fases F0–F12 abaixo não são mais o roteiro. Fonte atual: [docs/architecture/adr/D7-ordem-de-implementacao.md](../../architecture/adr/D7-ordem-de-implementacao.md). Este arquivo é mantido como evidência.
+
 > [!IMPORTANT]
 > Atualizado em 05/10/2026 para seguir a [arquitetura canônica](../../architecture/AETHERIUS_GAMEPLAY_CORE_ARCHITECTURE.md). Este arquivo continua sendo o detalhamento de execução; em caso de conflito arquitetural, prevalece o documento canônico.
 

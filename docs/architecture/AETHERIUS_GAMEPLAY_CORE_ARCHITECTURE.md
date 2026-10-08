@@ -348,6 +348,9 @@ A regra vale igualmente para sistemas futuros como profissões, crafting/refino,
 
 ## 13. Ordem de implementação
 
+> [!IMPORTANT]
+> **Substituída em 07/10/2026.** A ordem vigente está em [adr/D7-ordem-de-implementacao.md](adr/D7-ordem-de-implementacao.md), e as demais decisões em [adr/README.md](adr/README.md). O escopo foi reduzido ao suporte dos efeitos de raças, pedras guardiãs, classes, religião, perks, feitiços e dano; inventário, economia, painel e os serviços legados do gamemode ficaram fora. Onde este documento fala em `ActorKey`, `SpellProjectionPort`, `InventoryTransactionPort` ou em `shared/persistence` fornecer o pool, valem `CharacterKey`, `GrantProjectionPort`, ausência de port de inventário e o pool já existente do gamemode. O diagrama abaixo é histórico.
+
 ```text
 F0  Baseline + manifest + characterization
  |
