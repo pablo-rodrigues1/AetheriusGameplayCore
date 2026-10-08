@@ -21,7 +21,8 @@ const key = (local: number, plugin = 'Skyrim.esm', kind: 'FULL' | 'LIGHT' = 'FUL
  * Host-issued numbers are opaque: no plugin slots/indices are simulated in Core.
  * Distinct resolver snapshots represent a reordered full and light namespace. */
 function simulated(data: DomainData, changed = false): CatalogHost {
-  const ids = new Map(data.records.map((r, i) => [r.stableFormKey, (changed ? 6000000 : 3000000) + i]));
+  const ids = new Map(data.records.map((r, i) => [r.stableFormKey,
+    (r.pluginKind === 'LIGHT' ? changed ? 4263000000 : 4262000000 : changed ? 6000000 : 3000000) + i]));
   return { plugins: () => changed ? [...data.dependencies].reverse() : data.dependencies,
     getIdFromDesc(desc) {
       const filename = desc.slice(desc.indexOf(':') + 1);
@@ -136,6 +137,15 @@ test('mapping a missing record, wrong types and exceptions are unsupported', () 
     assert.equal(catalog.status, 'UNSUPPORTED');
     assert.equal(catalog.byKey(stones.roots[0]!), undefined);
   }
+});
+test('unreadable relevant file blocks its domain, unrelated file errors are ignored', () => {
+  const host = simulated(stones);
+  host.plugins = () => [...stones.dependencies.filter(p => p.filename !== 'Mundus.esp'),
+    { filename: 'Mundus.esp', status: 'UNSUPPORTED', reason: 'File is unreadable' }];
+  assert.match(loadDomain(stones, host).issues.join('; '), /fingerprint unavailable.*File is unreadable/);
+  const raceHost = simulated(races);
+  raceHost.plugins = () => [...races.dependencies, { filename: 'Mundus.esp', status: 'UNSUPPORTED', reason: 'File is unreadable' }];
+  assert.equal(loadDomain(races, raceHost).status, 'SUPPORTED');
 });
 test('invalid ids, dynamic records, collisions and resolver exceptions block boot', () => {
   for (const resolver of [() => 0, () => NaN, () => -1, () => 2 ** 32, () => 255 * 2 ** 24 + 1, () => 123, () => { throw new Error('resolve failed'); }]) {

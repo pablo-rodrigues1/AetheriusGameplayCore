@@ -4,7 +4,7 @@ import type { PortResult } from '../../contracts/src/capabilities.ts';
 import type { CatalogEntry } from '../../contracts/src/ports.ts';
 import { encodeFormKey } from './codecs.ts';
 import { contentSignature, deepFreeze } from './integrity.ts';
-import type { CatalogHost, DomainCatalog, DomainData, ResolvedRecord } from './types.ts';
+import type { CatalogHost, DomainCatalog, DomainData, PluginFingerprint, ResolvedRecord } from './types.ts';
 export * from './types.ts';
 export * from './codecs.ts';
 export { contentSignature, canonicalJson } from './integrity.ts';
@@ -22,11 +22,13 @@ export function loadDomain(input: DomainData, host: CatalogHost): DomainCatalog 
     if (contentSignature(data) !== data.signature) throw new TypeError('Catalog content signature mismatch');
     const dependencies = new Map(data.dependencies.map(p => [p.filename.toLowerCase(), p]));
     if (dependencies.size !== data.dependencies.length) throw new TypeError('Duplicate dependency');
-    const active = new Map<string, ReturnType<CatalogHost['plugins']>[number]>();
+    const active = new Map<string, PluginFingerprint>();
+    const unavailable = new Map<string, string>();
     for (const plugin of host.plugins()) {
       const name = plugin.filename.toLowerCase();
-      if (dependencies.has(name) && active.has(name)) throw new TypeError(`Duplicate active plugin: ${plugin.filename}`);
-      active.set(name, plugin);
+      if (dependencies.has(name) && (active.has(name) || unavailable.has(name))) throw new TypeError(`Duplicate active plugin: ${plugin.filename}`);
+      if ('status' in plugin) unavailable.set(name, plugin.reason);
+      else active.set(name, plugin);
     }
     for (const expected of data.dependencies) {
       if (!Number.isSafeInteger(expected.size) || expected.size < 12 || !Number.isInteger(expected.crc32)
@@ -34,7 +36,8 @@ export function loadDomain(input: DomainData, host: CatalogHost): DomainCatalog 
         throw new TypeError(`Invalid plugin metadata: ${expected.filename}`);
       }
       const actual = active.get(expected.filename.toLowerCase());
-      if (!actual) issues.push(`Plugin absent: ${expected.filename}`);
+      if (!actual) issues.push(unavailable.has(expected.filename.toLowerCase())
+        ? `Plugin fingerprint unavailable: ${expected.filename}: ${unavailable.get(expected.filename.toLowerCase())}` : `Plugin absent: ${expected.filename}`);
       else if (actual.size !== expected.size || actual.crc32 !== expected.crc32 || actual.isLight !== expected.isLight) {
         issues.push(`Plugin signature/kind mismatch: ${expected.filename}`);
       }
@@ -53,6 +56,9 @@ export function loadDomain(input: DomainData, host: CatalogHost): DomainCatalog 
         const id = host.getIdFromDesc(encodeFormKey(record.stableFormKey, 'skymp', record.pluginKind, defining.filename));
         if (!Number.isSafeInteger(id) || id < 1 || id > 2 ** 32 - 1 || Math.floor(id / 2 ** 24) === 255) {
           throw new TypeError('Invalid/static record id required');
+        }
+        if ((Math.floor(id / 2 ** 24) === 254) !== (record.pluginKind === 'LIGHT')) {
+          throw new TypeError('Runtime record namespace disagrees with plugin kind');
         }
         if (host.lookupEspmRecordById(id).type !== record.recordType) throw new TypeError('Record absent or type differs');
         const runtimeFormId = id as RuntimeFormId;

@@ -9,6 +9,12 @@ export interface PluginFingerprint {
   readonly crc32: number;
   readonly isLight: boolean;
 }
+export interface UnavailablePluginFingerprint {
+  readonly filename: string;
+  readonly status: 'UNSUPPORTED';
+  readonly reason: string;
+}
+export type PluginObservation = PluginFingerprint | UnavailablePluginFingerprint;
 export interface CatalogRecord {
   readonly stableFormKey: StableFormKey;
   readonly recordType: RecordType;
@@ -36,7 +42,7 @@ export interface DomainData {
 export interface RecordInspection { readonly type: string }
 export interface CatalogHost {
   /** Boot-only snapshot of actual active files, never a global signature or positions. */
-  plugins(): readonly PluginFingerprint[];
+  plugins(): readonly PluginObservation[];
   /** SkyMP getIdFromDesc: numeric result, or throws. */
   getIdFromDesc(descriptor: string): number;
   /** getIdFromDesc maps names without checking existence. Check the winner too. */

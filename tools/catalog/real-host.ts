@@ -1,17 +1,18 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { closeSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from 'node:fs';
+import { closeSync, createReadStream, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { basename, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
-import { loadDomain, decodeFormKey } from '../../shared/record-catalog/src/index.ts';
+import { loadDomain, decodeFormKey, encodeFormKey } from '../../shared/record-catalog/src/index.ts';
 import type { DomainData, PluginFingerprint } from '../../shared/record-catalog/src/types.ts';
 import { createFileHost } from './host.ts';
 import type { SkyMpCatalogApi } from './host.ts';
 
 interface NativeHost extends SkyMpCatalogApi { getDescFromId(id: number): string; tick(): void }
-interface Settings { port: number; maxPlayers: number; dataDir: string; loadOrder: string[]; npcEnabled: boolean; logLevel: string; reloot: object }
+interface Settings { port: number; listenHost: string; maxPlayers: number; dataDir: string; loadOrder: string[]; npcEnabled: boolean; logLevel: string; reloot: object }
 interface Snapshot { domains: { domain: string; signature: string; entries: { key: string; runtimeFormId: number; descriptor: string; type: string; winner: string; data: object }[] }[]; lightProbe: { key: string; runtimeFormId: number }[] }
 
 // Reads only TES4/MAST, not record content; protects master-before-dependent validity.
@@ -24,10 +25,14 @@ export function masters(file: string): string[] {
     const payload = Buffer.alloc(head.readUInt32LE(4));
     assert.equal(readSync(fd, payload, 0, payload.length, head.length), payload.length);
     const result: string[] = [];
+    let extendedSize: number | undefined;
     for (let offset = 0; offset < payload.length;) {
+      assert.ok(offset + 6 <= payload.length, `Malformed TES4 header: ${basename(file)}`);
       const type = payload.toString('latin1', offset, offset + 4);
-      const size = payload.readUInt16LE(offset + 4);
-      assert.ok(offset + 6 + size <= payload.length, 'Malformed TES4 subrecord');
+      const size = extendedSize ?? payload.readUInt16LE(offset + 4);
+      extendedSize = undefined;
+      assert.ok(offset + 6 + size <= payload.length, `Malformed TES4 subrecord ${type}: ${basename(file)}`);
+      if (type === 'XXXX') { assert.equal(size, 4); extendedSize = payload.readUInt32LE(offset + 6); }
       if (type === 'MAST') result.push(payload.toString('utf8', offset + 6, offset + 6 + size - 1));
       offset += size + 6;
     }
@@ -46,7 +51,7 @@ function swapped(order: string[], a: string, b: string): string[] {
   // Replace by filename; callers never supply or receive plugin indices.
   return order.map(name => name === a ? b : name === b ? a : name);
 }
-function reorder(order: string[], metadata: PluginFingerprint[], dependencies: Map<string, string[]>): { order: string[]; moved: string[] } {
+function reorder(order: string[], metadata: PluginFingerprint[], dependencies: Map<string, string[]>, probes: Map<string, string>): { order: string[]; moved: string[] } {
   const relevant = ['Mundus.esp', 'Aetherius.esp'];
   let result: string[] | undefined;
   let moved: string[] = [];
@@ -58,7 +63,7 @@ function reorder(order: string[], metadata: PluginFingerprint[], dependencies: M
     if (result) break;
   }
   assert.ok(result, 'No valid move for a relevant plugin');
-  const light = metadata.filter(p => p.isLight && order.includes(p.filename));
+  const light = metadata.filter(p => p.isLight && order.includes(p.filename) && probes.has(p.filename.toLowerCase()));
   for (const a of light) for (const b of light.filter(p => p.filename !== a.filename)) {
     const candidate = swapped(result, a.filename, b.filename);
     try { checkOrder(candidate, dependencies); return { order: candidate, moved: [...moved, a.filename, b.filename] }; } catch { /* another valid swap */ }
@@ -88,7 +93,8 @@ function child(workspace: string, evidence: string, configFile: string): void {
         type: record.definition.recordType, winner: record.winnerPlugin, data: record.data };
     }) })), lightProbe: [] };
   // Real light records from their own defining files, addressed only by filename/local id.
-  for (const descriptor of ['800:TrueHUD.esl', '800:SmoothCam.esl']) {
+  const plan = JSON.parse(readFileSync(join(evidence, 'reorder-plan.json'), 'utf8')) as { lightProbes: string[] };
+  for (const descriptor of plan.lightProbes) {
     const id = mp.getIdFromDesc(descriptor);
     assert.ok(mp.lookupEspmRecordById(id).record, `Light probe does not exist: ${descriptor}`);
     assert.equal(decodeFormKey(mp.getDescFromId(id), 'skymp', 'LIGHT'), decodeFormKey(descriptor, 'skymp', 'LIGHT'));
@@ -96,9 +102,9 @@ function child(workspace: string, evidence: string, configFile: string): void {
   }
   writeFileSync(join(evidence, `${basename(configFile, '.json')}.resolution.json`), JSON.stringify(snapshot, null, 2));
   console.log(JSON.stringify({ result: 'PASSED', domains: catalogs.map(c => ({ domain: c.domain, records: c.records.length })), fingerprintBootMs: hostCost,
-    fingerprintBytes: host.plugins().reduce((sum, p) => sum + p.size, 0), totalBootMs: performance.now() - start }));
+    fingerprintBytes: host.plugins().reduce((sum, p) => sum + ('size' in p ? p.size : 0), 0), totalBootMs: performance.now() - start }));
 }
-function main(): void {
+async function main(): Promise<void> {
   const [workspaceArg, evidenceArg, mode, config] = process.argv.slice(2);
   assert.ok(workspaceArg && evidenceArg, 'Usage: real-host.ts <workspace> <evidence-dir> [child <config>]');
   const workspace = resolve(workspaceArg), evidence = resolve(evidenceArg);
@@ -107,13 +113,25 @@ function main(): void {
   const manifest = JSON.parse(readFileSync(join(serverData, 'aetherius-loadorder.json'), 'utf8')) as { loadOrder: string[]; plugins: PluginFingerprint[] };
   const dependencies = new Map(manifest.loadOrder.map(name => [name.toLowerCase(), masters(join(serverData, name))]));
   checkOrder(manifest.loadOrder, dependencies);
-  const changed = reorder(manifest.loadOrder, manifest.plugins, dependencies);
+  const probes = new Map<string, string>();
+  const lightNames = new Set(manifest.plugins.filter(p => p.isLight).map(p => p.filename.toLowerCase()));
+  const rows = createInterface({ input: createReadStream(join(workspace, '_work/exports/SPEL.jsonl'), 'utf8'), crlfDelay: Infinity });
+  for await (const line of rows) {
+    const row = JSON.parse(line) as { formid?: string };
+    if (!row.formid) continue;
+    const filename = row.formid.slice(row.formid.indexOf(':') + 1);
+    if (lightNames.has(filename.toLowerCase()) && !probes.has(filename.toLowerCase())) {
+      probes.set(filename.toLowerCase(), encodeFormKey(decodeFormKey(row.formid, 'housecarl', 'LIGHT'), 'skymp', 'LIGHT', filename));
+    }
+  }
+  const changed = reorder(manifest.loadOrder, manifest.plugins, dependencies, probes);
   mkdirSync(evidence, { recursive: true });
-  writeFileSync(join(evidence, 'reorder-plan.json'), JSON.stringify({ movedPlugins: changed.moved, mastersValidated: true }, null, 2));
+  writeFileSync(join(evidence, 'reorder-plan.json'), JSON.stringify({ movedPlugins: changed.moved, mastersValidated: true,
+    lightProbes: changed.moved.slice(2).map(name => probes.get(name.toLowerCase())) }, null, 2));
   const files = ['original', 'reordered'].map(name => join(evidence, `${name}.settings.json`));
   for (const [name, loadOrder] of [['original', manifest.loadOrder], ['reordered', changed.order]] as const) {
     // Deliberately omit account, credentials, saves, gamemode, damage and bundle settings.
-    const settings: Settings = { port: 7777, maxPlayers: 1, dataDir: serverData, loadOrder: [...loadOrder], npcEnabled: false, logLevel: 'warn', reloot: {} };
+    const settings: Settings = { port: 7777, listenHost: '127.0.0.1', maxPlayers: 1, dataDir: serverData, loadOrder: [...loadOrder], npcEnabled: false, logLevel: 'warn', reloot: {} };
     writeFileSync(join(evidence, `${name}.settings.json`), JSON.stringify(settings, null, 2));
   }
   for (const file of files) {
@@ -132,4 +150,4 @@ function main(): void {
   assert.ok(snapshots[0]!.lightProbe.some(p => snapshots[1]!.lightProbe.find(other => other.key === p.key)!.runtimeFormId !== p.runtimeFormId), 'A light probe must change its runtime id');
   console.log(JSON.stringify({ result: 'PASSED', movedPlugins: changed.moved, changedRelevantRecords: altered.length, equivalentDomains: snapshots[0]!.domains.map(d => d.domain) }));
 }
-main();
+main().catch(error => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });
