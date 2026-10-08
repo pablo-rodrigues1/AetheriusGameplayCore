@@ -11,6 +11,11 @@ import { Actors } from './actors.js';
 import { Hooks, Scope } from './scope.js';
 import type { Hook, HostContext } from './host.js';
 import { SpellProjection } from './projection/index.js';
+import { ActorComposition } from './composition.ts';
+import { StandingStoneSystem } from './standing-stones.ts';
+import type { ChoiceIntent } from '../../modules/standing-stone-system/src/index.ts';
+export { standingStoneGrants, createStandingStoneCommands } from '../../modules/standing-stone-system/src/index.ts';
+export { ActorComposition } from './composition.ts';
 export { SpellProjection } from './projection/index.js';
 export type { ProjectionResult, ProjectionOutcome, ProjectionItem } from './projection/index.js';
 export type { HostContext, RuntimeMp } from './host.js';
@@ -26,6 +31,7 @@ export interface SystemContext {
   readonly persistence: { readonly pool: PoolPort; readonly withTransaction: typeof withTransaction; readonly executeCommand: typeof executeCommand } | undefined;
   readonly identity: Actors;
   readonly projection: Pick<SpellProjection, 'publish' | 'onAck' | 'capability'>;
+  readonly composition: Pick<ActorComposition, 'register' | 'recompose'>;
   readonly actors: Pick<Actors, 'onReady' | 'onUnbound'>;
   readonly hooks: { register(name: `on${string}`, listener: Hook): () => void };
   readonly log: HostContext['log'];
@@ -36,6 +42,8 @@ export interface SystemRegistration {
   readonly id: string;
   readonly domain?: string;
   readonly requiresDatabase?: boolean;
+  /** A dependency failure still needs an observer/veto; it never authorizes mutation. */
+  readonly observeUnavailable?: boolean;
   start(context: SystemContext): void | (() => void | Promise<void>) | Promise<void | (() => void | Promise<void>)>;
 }
 interface SystemSpec { id: string; domain?: string; requiresDatabase: boolean }
@@ -79,6 +87,14 @@ export function createGameplayCore(host: HostContext) {
   const failures = new Map<string, string>();
   let spike: ReturnType<typeof createStandingStoneSpike> | undefined;
   let projection: SpellProjection | undefined;
+  let composition: ActorComposition | undefined;
+  let standingStones: StandingStoneSystem | undefined;
+  registrations.set('standing-stones', { id: 'standing-stones', domain: 'standing-stones', requiresDatabase: true,
+    observeUnavailable: true, start(context) {
+      const data = BUILD_DOMAINS.find(domain => domain.domain === 'standing-stones')!;
+      standingStones = new StandingStoneSystem(context, host.mp, data, env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public');
+      standingStones.start(); return () => standingStones!.shutdown();
+    } });
   function warn(message: string) { host.log.info(`[gameplay-core] ${message}`); }
   function mode(id: string): FeatureMode {
     let value = featureModes.get(id);
@@ -98,7 +114,11 @@ export function createGameplayCore(host: HostContext) {
       ...(failures.has(spec.id) ? [failures.get(spec.id)!] : [])];
     return Object.freeze({ id: spec.id, mode: mode(spec.id), status: missing.length ? 'UNSUPPORTED' as const : 'SUPPORTED' as const,
       catalog: Object.freeze({ domain: spec.domain ?? null, status: catalog?.status ?? 'UNSUPPORTED', limitations: catalog?.unsupported ?? [] }),
-      missing: Object.freeze(missing), proof: Object.freeze(['runtime/tests/runtime.test.mjs', 'runtime/tests/database.test.mjs']),
+      missing: Object.freeze(missing), proof: Object.freeze(['runtime/tests/runtime.test.mjs', 'runtime/tests/database.test.mjs',
+        ...(spec.id === 'standing-stones' ? ['modules/standing-stone-system/tests/provider.test.mjs', 'runtime/tests/standing-stones.test.mjs'] : [])]),
+      ...(spec.id === 'standing-stones' ? { ownership: Object.freeze({ grants: 'AETHERIUS_SERVER', results: 'NATIVE_CLIENT' }),
+        playerFeedback: Object.freeze({ status: host.mp?.makeProperty && host.mp.set ? 'PARTIAL' : 'UNSUPPORTED',
+          channel: 'OWNER_PROPERTY_DEBUG_NOTIFICATION', delivery: 'UNCONFIRMED', proof: ['runtime/tests/standing-stones.test.mjs'] }) } : {}),
       registered: registrations.has(spec.id), started: initialized && registrations.has(spec.id) && mode(spec.id) !== 'off' && !missing.length });
   }
   function report() {
@@ -110,8 +130,9 @@ export function createGameplayCore(host: HostContext) {
   }
   function disposeNow() { wanted = false; initialized = false; controller.abort(); spike?.shutdown(); spike = undefined; scope.close(); }
   async function stopSystems() {
-    await projection?.shutdown(); projection = undefined;
     for (const stop of stops.splice(0).reverse()) { try { await stop(); } catch { warn('system shutdown failed'); } }
+    await composition?.shutdown(); composition = undefined; standingStones = undefined;
+    await projection?.shutdown(); projection = undefined;
   }
   async function boot(ticket: number) {
     const current = () => wanted && generation === ticket;
@@ -126,6 +147,10 @@ export function createGameplayCore(host: HostContext) {
     hooks = new Hooks(host.mp, scope, warn);
     catalogs.clear(); catalogFailures.clear(); failures.clear(); pool = undefined;
     for (const spec of specs.values()) mode(spec.id);
+    if (env.ENABLE_STANDING_STONE_SPIKE === 'true' && ['canary', 'active'].includes(mode('standing-stones'))) {
+      failures.set('standing-stones', 'STANDING_STONE_SPIKE_CONFLICT: disable ENABLE_STANDING_STONE_SPIKE before canary/active');
+      warn(failures.get('standing-stones')!);
+    }
     try {
       const mp = host.mp;
       if (!mp) throw new Error('host unavailable');
@@ -154,16 +179,22 @@ export function createGameplayCore(host: HostContext) {
       canProject: binding => current() && [...registrations.values()].some(system => !failures.has(system.id)
         && capability(specs.get(system.id)!).status === 'SUPPORTED'
         && (mode(system.id) === 'active' || (mode(system.id) === 'canary' && canary.has(binding.characterKey)))) });
+    const commonProjection = projection;
+    composition = new ActorComposition({ pool: db.status === 'SUPPORTED' ? pool : undefined,
+      schema: env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public',
+      check: binding => { if (!current() || !actors.isCurrent(binding)) throw Object.assign(Error('STALE_BINDING'), { code: 'STALE_BINDING' }); },
+      publish: (binding, set) => commonProjection.publish({ binding, set }) });
     actors.start();
     const health = (reply: (healthy: boolean) => void) => reply(initialized);
     process.on(healthEvent, health); scope.add(() => process.removeListener(healthEvent, health));
     for (const system of registrations.values()) {
       const spec = specs.get(system.id)!;
       const m = mode(system.id);
-      if (m === 'off' || capability(spec).status !== 'SUPPORTED') continue;
+      if (m === 'off' || failures.has(system.id) || (capability(spec).status !== 'SUPPORTED' && !system.observeUnavailable)) continue;
       const systemScope = new Scope(); scope.add(() => systemScope.close());
       let systemActive = true; systemScope.add(() => { systemActive = false; });
       const systemProjection = projection;
+      const systemComposition = composition;
       const context: SystemContext = Object.freeze({ id: system.id, mode: m, catalog: spec.domain ? catalogs.get(spec.domain) : undefined,
         persistence: pool && db.status === 'SUPPORTED' ? Object.freeze({ pool, withTransaction, executeCommand }) : undefined,
         identity: actors, projection: Object.freeze({
@@ -173,7 +204,12 @@ export function createGameplayCore(host: HostContext) {
               reason: 'FEATURE_MODE_OR_BINDING_REFUSED', state: 'REJECTED' as const, items: [] });
             return systemProjection.publish(input);
           }
-        }), actors: Object.freeze({ onReady: (fn: Parameters<Actors['onReady']>[0]) => systemScope.add(actors.onReady(fn)),
+        }), composition: Object.freeze({ register: (provider: Parameters<ActorComposition['register']>[0]) => systemScope.add(systemComposition.register(provider)),
+          recompose: (binding: SessionBinding) => {
+            if (!systemActive || !context.canMutate(binding)) return Promise.resolve({ status: 'UNSUPPORTED' as const,
+              reason: 'FEATURE_MODE_OR_BINDING_REFUSED', state: 'REJECTED' as const, items: [] });
+            return systemComposition.recompose(binding);
+          } }), actors: Object.freeze({ onReady: (fn: Parameters<Actors['onReady']>[0]) => systemScope.add(actors.onReady(fn)),
           onUnbound: (fn: Parameters<Actors['onUnbound']>[0]) => systemScope.add(actors.onUnbound(fn)) }),
         hooks: Object.freeze({ register: (name: `on${string}`, fn: Hook) => systemScope.add(hooks.register(name, fn)) }),
         signal: controller.signal, log: host.log,
@@ -228,6 +264,8 @@ export function createGameplayCore(host: HostContext) {
       specs.set(system.id, { id: system.id, ...(domain ? { domain } : {}), requiresDatabase: system.requiresDatabase ?? prior?.requiresDatabase ?? true });
     },
     mode,
+    chooseStandingStone: (intent: ChoiceIntent) => standingStones?.choose(intent) ?? Promise.resolve({ status: 'UNSUPPORTED' as const,
+      reason: failures.get('standing-stones') ?? 'STANDING_STONES_NOT_STARTED', committed: false }),
     get identity() { return actors; },
     get actorEvents() { return actors; },
     capabilityReport: report,

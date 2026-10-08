@@ -9,6 +9,8 @@ export interface RuntimeMp extends SkyMpCatalogApi {
   getUserByActor?(actorId: number): number;
   on?(event: string, listener: (...args: number[]) => void): unknown;
   getDescFromId(id: number): string;
+  makeProperty?(name: string, options: { isVisibleByOwner: boolean; isVisibleByNeighbors: boolean; updateOwner: string; updateNeighbor: string }): void;
+  set?(id: number, property: string, value: unknown): void;
   callPapyrusFunction(type: string, cls: string, method: string, self: { type: 'form'; desc: string }, args: unknown[]): unknown;
 }
 export interface HostContext {

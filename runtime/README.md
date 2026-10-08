@@ -4,6 +4,14 @@ Este documento substitui as instruções de ciclo de vida do README A6-S1. O spi
 A6-S2 continua em `spike-standing-stone/`, até C1. Os ADRs D1–D4 e D6 permanecem
 as fontes de arquitetura; esta ordem não certifica resultados de efeitos.
 
+**Atualização C1 (08/10/2026):** pedras estão registradas por padrão na factory e
+continuam off por padrão. O caminho recomendado usa `modules/standing-stone-system`,
+`ActorComposition`, migration 0004 e o port B5a; o spike permanece intacto como
+opção legada de desenvolvimento. C1 canary/active recusa iniciar com o spike ligado.
+Operação local, adoção, ownership, falhas, feedback privado e roteiro humano:
+[`../modules/standing-stone-system/README.md`](../modules/standing-stone-system/README.md).
+Essa documentação supersede abaixo as referências a C1 como implementação futura.
+
 Na raiz do Core, com Node >=22.14 e npm 10:
 
 ```powershell
@@ -29,8 +37,10 @@ JSONL originais em `_work/exports` e dos plugins reais e manifesto no Data do ho
 Esses artefatos não são substituídos por records fabricados. Caminhos alternativos:
 `GAMEPLAY_CORE_TEST_EXPORTS` e `GAMEPLAY_CORE_TEST_DATA_DIR`. As junções de fixtures
 são somente para leitura pelos testes B2. O teste `npm test` completo contém um caso
-B3 que abre brevemente um socket local, e portanto é executado pelo revisor fora do
-sandbox. `npm test -- --unit` exclui explicitamente a integração B3; a integração B1
+B3 que abre brevemente um socket local. Por padrão esse caso executa; somente
+`GAMEPLAY_CORE_SKIP_LOCAL_SOCKET_PROBE=1` o pula no sandbox, preservando todos os
+demais testes de integração PostgreSQL. O revisor executa sem essa variável.
+`npm test -- --unit` exclui explicitamente a integração B3; a integração B1
 contra PostgreSQL continua obrigatória, assim como os 12 casos do spike. O subconjunto
 `npm run test:foundation` executa shared/tools/runtime, sem os módulos históricos.
 Nenhum destes subconjuntos equivale à suíte completa.

@@ -50,9 +50,9 @@ async function rows(binding) { return (await pool.query(`SELECT * FROM ${table('
 before(async () => {
   await pool.query(`CREATE SCHEMA "${schema}"`);
   const files=await persistence.readMigrations(fileURLToPath(new URL('../../database/migrations/',import.meta.url)));
-  const applied=await persistence.applyMigrations(pool,files,schema); assert.equal(applied.applied.length,3);
-  assert.equal((await persistence.applyMigrations(pool,files,schema)).unchanged,3);
-  assert.equal((await persistence.migrationStatus(pool,files,schema)).length,3);
+  const applied=await persistence.applyMigrations(pool,files,schema); assert.equal(applied.applied.length,files.length);
+  assert.equal((await persistence.applyMigrations(pool,files,schema)).unchanged,files.length);
+  assert.equal((await persistence.migrationStatus(pool,files,schema)).length,files.length);
 });
 after(async () => { await Promise.all(ports.map(p => p.shutdown())); await pool.query(`DROP SCHEMA "${schema}" CASCADE`); await pool.end(); });
 

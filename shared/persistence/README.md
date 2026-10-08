@@ -142,7 +142,9 @@ jogo; nele se usam diretamente as funções exportadas e não se fecha o pool.
 
 `apply` retorna os arquivos aplicados e a contagem dos anteriores. `status` compara
 os arquivos entregues com o ledger e retorna versão, hash e data. Nesta fundação
-são duas linhas. Aplicação repetida retorna `applied: []`, `unchanged: 2`.
+o número de linhas acompanha os arquivos entregues (quatro com C1: controle,
+comandos, projeção SPEL e escolha de pedra). Aplicação repetida retorna
+`applied: []` e `unchanged` igual ao número de migrations entregues.
 Também é possível conferir no schema escolhido:
 
 ```sql

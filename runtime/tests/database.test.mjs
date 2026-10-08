@@ -28,7 +28,9 @@ test('real PostgreSQL: pending migrations do not apply; development opt-in appli
     await runtime.shutdown();
     runtime = core({ GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV: 'true' }); await runtime.initialize();
     assert.equal(runtime.capabilityReport().database.status, 'SUPPORTED');
-    assert.equal((await pool.query(`SELECT count(*)::int AS n FROM "${schema}".gc_schema_migrations`)).rows[0].n, 3);
+    const { readdir } = await import('node:fs/promises');
+    const delivered = (await readdir(new URL('../../database/migrations/', import.meta.url))).filter(name => name.endsWith('.sql')).length;
+    assert.equal((await pool.query(`SELECT count(*)::int AS n FROM "${schema}".gc_schema_migrations`)).rows[0].n, delivered);
     await runtime.shutdown();
     runtime = core({}); await runtime.initialize(); assert.equal(runtime.capabilityReport().database.status, 'SUPPORTED'); await runtime.shutdown();
     await pool.query(`UPDATE "${schema}".gc_schema_migrations SET sha256='changed' WHERE version='0002_gc_commands.sql'`);

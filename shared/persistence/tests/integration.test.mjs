@@ -20,7 +20,7 @@ const schema = `gc_b3_${process.pid}_${randomBytes(5).toString('hex')}`;
 // Exactly one Pool, constructed here in the gamemode's role.
 const pool = new Pool({ connectionString: databaseUrl, max: 6, connectionTimeoutMillis: 2000,
   options: `-c search_path=${schema},pg_catalog` });
-const networkProbeEnabled = process.env.GAMEPLAY_CORE_ALLOW_LOCAL_SOCKET_PROBE === '1';
+const networkProbeEnabled = process.env.GAMEPLAY_CORE_SKIP_LOCAL_SOCKET_PROBE !== '1';
 pool.on('error', () => {});
 const originalLoad = Module._load;
 Module._load = function(specifier, ...args) {
