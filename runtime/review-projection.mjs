@@ -86,8 +86,16 @@ try {
   const result={result:'FAILED',reason:/^[A-Z0-9_]+$/.test(error?.code)?error.code:'ASSERTION_OR_NATIVE_HOST_FAILURE'};
   writeFileSync(path.join(evidence,'result.json'),JSON.stringify(result)); console.error(result.reason); process.exitCode=1;
 } finally {
-  await projection?.shutdown();
-  if(actorId!==undefined)mp.destroyActor(actorId);
-  if(schemaCreated)await pg.init().query(`DROP SCHEMA "${schema}" CASCADE`);
-  await pg.close(); process.chdir(previousCwd);
+  try {
+    await projection?.shutdown();
+  } finally {
+    try {
+      if(schemaCreated)await pg.init().query(`DROP SCHEMA "${schema}" CASCADE`);
+    } finally {
+      try { await pg.close(); }
+      finally { process.chdir(previousCwd); }
+    }
+  }
+  // destroyActor aborts Node in the native addon instead of returning a capturable error.
+  // The isolated actor dies with this reviewer-only server process.
 }

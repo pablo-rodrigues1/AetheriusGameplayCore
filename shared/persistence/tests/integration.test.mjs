@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import Module from 'node:module';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -20,6 +20,7 @@ const schema = `gc_b3_${process.pid}_${randomBytes(5).toString('hex')}`;
 // Exactly one Pool, constructed here in the gamemode's role.
 const pool = new Pool({ connectionString: databaseUrl, max: 6, connectionTimeoutMillis: 2000,
   options: `-c search_path=${schema},pg_catalog` });
+const networkProbeEnabled = process.env.GAMEPLAY_CORE_ALLOW_LOCAL_SOCKET_PROBE === '1';
 pool.on('error', () => {});
 const originalLoad = Module._load;
 Module._load = function(specifier, ...args) {
@@ -30,8 +31,25 @@ Module._load = function(specifier, ...args) {
 };
 const { executeCommand, withTransaction, poolFromGamemode, applyMigrations, readMigrations,
   migrationStatus, lockCharacter } = await import('../build/persistence/src/index.js');
-let migrations;
+let fixtureMigrations;
 let schemaCreated = false;
+const fixtureDirectory = fileURLToPath(new URL('../build/test-fixtures/executor-migrations/', import.meta.url));
+const fixtureSql = [
+  ['0001_gc_schema_migrations.sql', `CREATE TABLE gc_schema_migrations (
+    version text PRIMARY KEY,
+    sha256 text NOT NULL,
+    applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );`],
+  ['0002_gc_commands.sql', `CREATE TABLE gc_commands (
+    request_id text PRIMARY KEY,
+    character_key text NOT NULL,
+    command_type text NOT NULL,
+    content_sha256 text NOT NULL,
+    result jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX gc_commands_character_idx ON gc_commands (character_key);`]
+];
 
 const deferred = () => {
   let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve };
@@ -74,7 +92,10 @@ function faultPool(position) {
 before(async () => {
   assert.equal((await pool.query('SELECT current_database() AS name')).rows[0].name, 'aetherius_test');
   await pool.query(`CREATE SCHEMA "${schema}"`); schemaCreated = true;
-  migrations = await readMigrations(fileURLToPath(new URL('../../../database/migrations/', import.meta.url)));
+  await mkdir(fixtureDirectory, { recursive: true });
+  const fixtureUrl = new URL('../build/test-fixtures/executor-migrations/', import.meta.url);
+  for (const [version, sql] of fixtureSql) await writeFile(new URL(version, fixtureUrl), sql);
+  fixtureMigrations = await readMigrations(fixtureDirectory);
 });
 after(async () => {
   try { if (schemaCreated) await pool.query(`DROP SCHEMA "${schema}" CASCADE`); }
@@ -82,19 +103,52 @@ after(async () => {
   console.log(`B3 isolated schema removed; single pool closed; schema=${schema}`);
 });
 
-test('real PostgreSQL: empty schema, ordered migrations, repeated application and hash verification', async () => {
-  assert.deepEqual(await applyMigrations(pool, [...migrations].reverse(), schema), {
-    applied: ['0001_gc_schema_migrations.sql', '0002_gc_commands.sql'], unchanged: 0
+test('real migration folder: any count applies from empty and is unchanged on repeat', async () => {
+  const realSchema = `gc_b3_real_${process.pid}_${randomBytes(4).toString('hex')}`;
+  await pool.query(`CREATE SCHEMA "${realSchema}"`);
+  try {
+    const directory = process.env.GAMEPLAY_CORE_TEST_MIGRATIONS ??
+      fileURLToPath(new URL('../../../database/migrations/', import.meta.url));
+    const realMigrations = await readMigrations(directory);
+    assert(realMigrations.length > 0);
+    const firstApply = await applyMigrations(pool, realMigrations, realSchema);
+    assert.deepEqual(firstApply, { applied: realMigrations.map(m => m.version).sort(), unchanged: 0 });
+    const firstStatus = await migrationStatus(pool, realMigrations, realSchema);
+    assert.deepEqual(await applyMigrations(pool, realMigrations, realSchema), {
+      applied: [], unchanged: realMigrations.length
+    });
+    assert.deepEqual(await migrationStatus(pool, realMigrations, realSchema), firstStatus);
+    const tables = await pool.query('SELECT tablename FROM pg_tables WHERE schemaname = $1 ORDER BY tablename', [realSchema]);
+    assert(tables.rows.length > 0);
+    assert(tables.rows.every(row => row.tablename.startsWith('gc_')), 'all created tables have the gc_ prefix');
+    console.log(`real migrations=${realMigrations.length}; repeat applied=0; all tables use gc_`);
+  } finally {
+    await pool.query(`DROP SCHEMA "${realSchema}" CASCADE`);
+  }
+});
+
+test('executor fixtures: empty schema, order, repeat application and hash verification', async () => {
+  assert.deepEqual(await applyMigrations(pool, [...fixtureMigrations].reverse(), schema), {
+    applied: fixtureMigrations.map(m => m.version).sort(), unchanged: 0
   });
-  const first = await migrationStatus(pool, migrations, schema);
-  assert.deepEqual(await applyMigrations(pool, migrations, schema), { applied: [], unchanged: 2 });
-  assert.deepEqual(await migrationStatus(pool, migrations, schema), first);
-  console.log('migrations=2; repeat applied=0; ledger timestamps and hashes unchanged');
+  const first = await migrationStatus(pool, fixtureMigrations, schema);
+  assert.deepEqual(await applyMigrations(pool, fixtureMigrations, schema), { applied: [], unchanged: fixtureMigrations.length });
+  assert.deepEqual(await migrationStatus(pool, fixtureMigrations, schema), first);
+  console.log(`fixture migrations=${fixtureMigrations.length}; repeat applied=0; ledger timestamps and hashes unchanged`);
 });
 
 test('maintenance CLI applies and verifies real migrations using the same injected gamemode pool', async () => {
-  const fixture = new URL('../build/test-fixtures/', import.meta.url);
-  await mkdir(fixture, { recursive: true });
+  const fixture = new URL('../build/test-fixtures/cli/', import.meta.url);
+  const cliRoot = new URL('persistence-cli/', fixture);
+  const cliPersistence = new URL('shared/persistence/', cliRoot);
+  const cliBuild = new URL('build/persistence/', cliPersistence);
+  const cliMigrations = new URL('database/migrations/', cliRoot);
+  await mkdir(cliPersistence, { recursive: true });
+  await cp(new URL('../migrate.mjs', import.meta.url), new URL('migrate.mjs', cliPersistence));
+  await mkdir(cliBuild, { recursive: true });
+  await cp(new URL('../build/persistence/src/', import.meta.url), new URL('src/', cliBuild), { recursive: true });
+  await mkdir(cliMigrations, { recursive: true });
+  for (const m of fixtureMigrations) await writeFile(new URL(m.version, cliMigrations), m.sql);
   const pgModule = new URL('cli-pg.cjs', fixture);
   await writeFile(pgModule, 'module.exports = globalThis.__b3CliPg;\n');
   let closes = 0;
@@ -106,12 +160,12 @@ test('maintenance CLI applies and verifies real migrations using the same inject
   console.log = value => output.push(JSON.parse(value));
   try {
     for (const operation of ['apply', 'status']) {
-      process.argv = [process.execPath, fileURLToPath(new URL('../migrate.mjs', import.meta.url)),
+      process.argv = [process.execPath, fileURLToPath(new URL('migrate.mjs', cliPersistence)),
         operation, fileURLToPath(pgModule), schema];
-      await import(new URL(`../migrate.mjs?integration=${operation}`, import.meta.url));
+      await import(new URL(`migrate.mjs?integration=${operation}`, cliPersistence));
     }
-    assert.deepEqual(output[0], { applied: [], unchanged: 2 });
-    assert.equal(output[1].length, 2);
+    assert.deepEqual(output[0], { applied: [], unchanged: fixtureMigrations.length });
+    assert.equal(output[1].length, fixtureMigrations.length);
     assert.equal(closes, 2);
     assert.equal(process.exitCode, undefined);
     released();
@@ -120,35 +174,35 @@ test('maintenance CLI applies and verifies real migrations using the same inject
     process.argv = previousArgs;
     delete globalThis.__b3CliPg;
   }
-  console.log('CLI apply/status: real database, same single caller-owned pool, 2 hashes verified');
+  console.log(`CLI apply/status: test fixture migrations=${fixtureMigrations.length}, same single caller-owned pool`);
 });
 
 test('applied file modified on disk is refused, as is a foreign table migration before any DDL', async () => {
   const fixture = new URL('../build/test-fixtures/', import.meta.url);
   await mkdir(fixture, { recursive: true });
-  for (const m of migrations) await writeFile(new URL(m.version, fixture), m.sql);
-  const second = new URL('0002_gc_commands.sql', fixture);
+  for (const m of fixtureMigrations) await writeFile(new URL(m.version, fixture), m.sql);
+  const second = new URL(fixtureMigrations[1].version, fixture);
   await writeFile(second, `${await readFile(second, 'utf8')}\n-- changed after application\n`);
   await assert.rejects(applyMigrations(pool, await readMigrations(fileURLToPath(fixture)), schema), { code: 'MIGRATION_HASH_MISMATCH' });
-  await assert.rejects(applyMigrations(pool, [...migrations, { version: '0003_gc_foreign.sql',
+  await assert.rejects(applyMigrations(pool, [...fixtureMigrations, { version: '0003_gc_foreign.sql',
     sql: 'CREATE TABLE other_table (id text)' }], schema), { code: 'MIGRATION_SQL_REJECTED' });
-  assert.equal((await migrationStatus(pool, migrations, schema)).length, 2); released();
+  assert.equal((await migrationStatus(pool, fixtureMigrations, schema)).length, fixtureMigrations.length); released();
 });
 
 test('bad DDL rolls the entire batch back; new files cannot be inserted before existing history', async () => {
   const bad = { version: '0003_gc_bad.sql', sql: 'CREATE TABLE gc_partial (id text); CREATE TABLE gc_commands (id text)' };
-  await assert.rejects(applyMigrations(pool, [...migrations, bad], schema), { code: '42P07' });
+  await assert.rejects(applyMigrations(pool, [...fixtureMigrations, bad], schema), { code: '42P07' });
   assert.equal((await pool.query("SELECT to_regclass('gc_partial') AS name")).rows[0].name, null);
   const extra = { version: '0004_gc_extra.sql', sql: 'CREATE TABLE gc_extra (id text)' };
-  await applyMigrations(pool, [...migrations, extra], schema);
-  await assert.rejects(applyMigrations(pool, [...migrations,
+  await applyMigrations(pool, [...fixtureMigrations, extra], schema);
+  await assert.rejects(applyMigrations(pool, [...fixtureMigrations,
     { version: '0003_gc_late.sql', sql: 'CREATE TABLE gc_late (id text)' }, extra], schema), { code: 'MIGRATION_ORDER_INVALID' });
-  await assert.rejects(applyMigrations(pool, migrations, schema), { code: 'MIGRATION_HASH_MISMATCH' });
+  await assert.rejects(applyMigrations(pool, fixtureMigrations, schema), { code: 'MIGRATION_HASH_MISMATCH' });
   released();
 });
 
 test('concurrent migration runners on the same schema apply a file once', async () => {
-  const all = [...migrations, { version: '0004_gc_extra.sql', sql: 'CREATE TABLE gc_extra (id text)' },
+  const all = [...fixtureMigrations, { version: '0004_gc_extra.sql', sql: 'CREATE TABLE gc_extra (id text)' },
     { version: '0005_gc_test_tables.sql', sql: `CREATE TABLE gc_test_state (character_key text PRIMARY KEY, value integer NOT NULL);
       CREATE TABLE gc_test_effects (request_id text PRIMARY KEY, character_key text NOT NULL)` }];
   const results = await Promise.all([applyMigrations(pool, all, schema), applyMigrations(pool, all, schema)]);
@@ -304,7 +358,7 @@ test('executor expires, lifecycle commands are rejected, and injected gamemode p
   assert.equal(pool.totalCount, baseline); released();
 });
 
-test('refused real connection yields DATABASE_UNAVAILABLE and never accepted; same pool recovers', async () => {
+test('refused real connection yields DATABASE_UNAVAILABLE and never accepted; same pool recovers', { skip: !networkProbeEnabled }, async () => {
   // Find a closed local TCP port without starting/stopping PostgreSQL or the game server.
   const socket = createServer();
   await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
