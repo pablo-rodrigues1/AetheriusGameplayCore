@@ -19,7 +19,6 @@ const STONE_FORM_IDS = Object.freeze(Object.fromEntries(
   Object.entries(STONES).map(([key, stone]) => [`${key.slice(key.lastIndexOf('|') + 1)}:Skyrim.esm`, key])
 ));
 const SOURCE = Object.freeze({ kind: 'STANDING_STONE', key: 'standing-stone-choice' });
-const ACTIVE_USER_LIMIT = 10;
 const ACTIVE_POLL_MS = 1000;
 const SPAWN_RESEND_GAP_MS = 3000;
 const CREATE_TABLES_SQL = `
@@ -94,7 +93,7 @@ function safeCall(log, fn) {
   }
 }
 
-export function createStandingStoneSpike({ mp, pg, log }) {
+export function createStandingStoneSpike({ mp, pg, log, actors }) {
   const pool = pg.init();
   const stoneRuntimeIds = new Map();
   const spellRuntimeIds = new Map();
@@ -105,6 +104,8 @@ export function createStandingStoneSpike({ mp, pg, log }) {
   let initialized = false;
   let polling = false;
   let requestSequence = 0;
+  const spawnTimers = new Set();
+  const subscriptions = [];
 
   function actorRef(actorId) {
     return { type: 'form', desc: mp.getDescFromId(actorId) };
@@ -222,8 +223,9 @@ export function createStandingStoneSpike({ mp, pg, log }) {
     });
   }
 
-  function resendAfterSpawn(characterKey, actorId) {
+  function resendAfterSpawn(characterKey, actorId, delay = SPAWN_RESEND_GAP_MS) {
     const timer = setTimeout(async () => {
+      spawnTimers.delete(timer);
       if (activeActors.get(actorId) !== characterKey) return;
       try {
         const client = await pool.connect();
@@ -237,7 +239,8 @@ export function createStandingStoneSpike({ mp, pg, log }) {
       } catch (error) {
         log.info(`[standing-stone] spawn resend failed for provisional character ${characterKey}: ${error instanceof Error ? error.message : String(error)}`);
       }
-    }, SPAWN_RESEND_GAP_MS);
+    }, delay);
+    spawnTimers.add(timer);
     if (typeof timer.unref === 'function') timer.unref();
   }
 
@@ -248,13 +251,13 @@ export function createStandingStoneSpike({ mp, pg, log }) {
   }
 
   async function scanActiveActors() {
-    if (polling || typeof mp.isConnected !== 'function' || typeof mp.getUserActor !== 'function') return;
+    if (polling || typeof mp.get !== 'function') return;
     polling = true;
     try {
       const seen = new Set();
-      for (let userId = 1; userId <= ACTIVE_USER_LIMIT; userId += 1) {
-        if (!mp.isConnected(userId)) continue;
-        const actorId = mp.getUserActor(userId);
+      // OnlinePlayersBinding.cpp returns actor IDs, including connection slot zero.
+      const online = mp.get(0, 'onlinePlayers');
+      for (const actorId of Array.isArray(online) ? online : []) {
         if (!Number.isSafeInteger(actorId) || actorId <= 0) continue;
         const characterKey = characterKeyForActor(actorId);
         if (!characterKey) continue;
@@ -335,14 +338,29 @@ export function createStandingStoneSpike({ mp, pg, log }) {
     previousOnActivate = mp.onActivate;
     activateHandler = activation;
     mp.onActivate = activateHandler;
-    pollTimer = setInterval(() => { void scanActiveActors(); }, ACTIVE_POLL_MS);
-    if (typeof pollTimer.unref === 'function') pollTimer.unref();
     initialized = true;
-    await scanActiveActors();
+    if (actors) {
+      subscriptions.push(actors.onReady(({ binding }) => {
+        const { actorId } = binding.actorRef;
+        const { characterKey } = binding;
+        activeActors.set(actorId, characterKey);
+        void rehydrate(characterKey, actorId).then(() => {
+          if (initialized && actors.isCurrent(binding)) resendAfterSpawn(characterKey, actorId, 0);
+        }).catch(() => log.info('[standing-stone] actor-ready rehydration failed'));
+      }));
+      subscriptions.push(actors.onUnbound(binding => activeActors.delete(binding.actorRef.actorId)));
+    } else {
+      pollTimer = setInterval(() => { void scanActiveActors(); }, ACTIVE_POLL_MS);
+      if (typeof pollTimer.unref === 'function') pollTimer.unref();
+      await scanActiveActors();
+    }
   }
 
   function shutdown() {
     if (pollTimer) clearInterval(pollTimer);
+    for (const timer of spawnTimers) clearTimeout(timer);
+    spawnTimers.clear();
+    for (const unsubscribe of subscriptions.splice(0)) unsubscribe();
     pollTimer = undefined;
     if (mp.onActivate === activateHandler) mp.onActivate = previousOnActivate;
     activeActors.clear();

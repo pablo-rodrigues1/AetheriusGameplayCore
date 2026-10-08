@@ -3,11 +3,12 @@ import { after, before, beforeEach, test } from 'node:test';
 import { createRequire } from 'node:module';
 import { composeStandingStoneGrants, createStandingStoneSpike, planGrantProjection, standingStoneDefinitions } from './index.mjs';
 
-const serverRequire = createRequire(new URL('../../../aetherius-server/build/dist/server/gamemode/core/pg.js', import.meta.url));
-const { Pool } = serverRequire('pg');
+const { Pool } = createRequire(import.meta.url)('pg');
 const { createGameplayCore } = createRequire(import.meta.url)('../../dist/aetherius-gameplay-core.cjs');
 const databaseUrl = process.env.AETHERIUS_TEST_DATABASE_URL;
 if (!databaseUrl) throw new Error('AETHERIUS_TEST_DATABASE_URL is required');
+const testUrl = new URL(databaseUrl);
+if (!['localhost', '127.0.0.1', '[::1]'].includes(testUrl.hostname) || testUrl.pathname !== '/aetherius_test') throw Error('Requires local aetherius_test');
 
 const pool = new Pool({ connectionString: databaseUrl, max: 4 });
 const logs = [];
@@ -41,6 +42,8 @@ function fakeMp({ activeActor = null, profileId = 7 } = {}) {
     },
     getDescFromId(id) { return descs.get(id) ?? `000000:Skyrim.esm`; },
     get(actorId, property) {
+      // Host: OnlinePlayersBinding.cpp, ProfileIdBinding.cpp; actors, not base IDs.
+      if (property === 'onlinePlayers') return activeActor === null ? [] : [activeActor];
       if (property === 'baseDesc') {
         if (throwingBaseReferences.has(actorId)) throw new Error('reference has no base');
         return referenceBases.get(actorId);
@@ -65,6 +68,7 @@ function fakeMp({ activeActor = null, profileId = 7 } = {}) {
     },
     isConnected(userId) { return activeActor !== null && userId === 1; },
     getUserActor(userId) { return activeActor !== null && userId === 1 ? activeActor : undefined; },
+    getServerSettings() { return { offlineMode: false }; },
   };
   return mp;
 }
@@ -130,7 +134,7 @@ test('bundle mantém o spike desligado por padrão e o liga só pela flag dedica
     log: { info: message => logs.push(message) } });
   await disabled.initialize();
   assert.equal(disabled.info().features.find(feature => feature.id === 'standing-stones').mode, 'off');
-  assert.equal(pgInitCalls, 0);
+  assert.equal(pgInitCalls, 1); // B1 checks migrations even with the spike disabled.
   await disabled.shutdown();
 
   const mp = fakeMp();
@@ -140,7 +144,7 @@ test('bundle mantém o spike desligado por padrão e o liga só pela flag dedica
     env: { ENABLE_STANDING_STONE_SPIKE: 'true' }, log: { info: message => logs.push(message) } });
   await enabled.initialize();
   assert.equal(enabled.info().features.find(feature => feature.id === 'standing-stones').mode, 'active');
-  assert.equal(pgInitCalls, 1);
+  assert.equal(pgInitCalls, 2); // One injected pool acquisition per lifecycle.
   await enabled.shutdown();
   assert.equal(mp.onActivate, original);
 });

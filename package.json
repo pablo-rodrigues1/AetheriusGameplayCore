@@ -2,11 +2,24 @@
   "name": "aetherius-gameplay-core",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["shared/*"],
+  "workspaces": ["runtime", "shared/*", "tools/catalog", "modules/*"],
   "scripts": {
-    "build": "node runtime/build.mjs",
-    "typecheck:runtime": "node runtime/node_modules/typescript/bin/tsc --noEmit -p runtime/tsconfig.json",
-    "typecheck": "npm run typecheck --workspace @aetherius/contracts",
-    "test": "npm test --workspace @aetherius/contracts"
-  }
+    "typecheck": "node runtime/packages.mjs typecheck",
+    "test": "node runtime/packages.mjs test",
+    "build": "node runtime/packages.mjs build",
+    "typecheck:foundation": "node runtime/packages.mjs typecheck --foundation",
+    "test:foundation": "node runtime/packages.mjs test --foundation --unit",
+    "build:foundation": "node runtime/packages.mjs build --foundation",
+    "typecheck:runtime": "npm run typecheck --workspace @aetherius/runtime",
+    "migrations:apply": "node runtime/migrations.mjs apply",
+    "migrations:status": "node runtime/migrations.mjs status"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "typescript": "5.9.3",
+    "esbuild": "0.28.1",
+    "pg": "8.23.0",
+    "ajv": "8.20.0"
+  },
+  "engines": { "node": ">=22.18.0" }
 }

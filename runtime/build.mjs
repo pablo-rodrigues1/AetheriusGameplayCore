@@ -1,5 +1,6 @@
 import { build } from 'esbuild';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
+import { builtinModules } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -17,11 +18,19 @@ const result = await build({
   platform: 'node',
   format: 'cjs',
   target: 'node22',
-  define: { BUNDLE_VERSION: JSON.stringify(version) },
+  define: {
+    BUNDLE_VERSION: JSON.stringify(version),
+    BUILD_DOMAINS: JSON.stringify(await Promise.all(['standing-stones', 'races'].map(name =>
+      readFile(path.join(root, 'catalog', `${name}.json`), 'utf8').then(JSON.parse)))),
+    BUILD_MIGRATIONS: JSON.stringify(await Promise.all((await readdir(path.join(root, 'database/migrations')))
+      .filter(name => name.endsWith('.sql')).sort().map(async name => ({ version: name,
+        sql: await readFile(path.join(root, 'database/migrations', name), 'utf8') }))))
+  },
   metafile: true,
   logLevel: 'info'
 });
-if (result.metafile.outputs['dist/aetherius-gameplay-core.cjs'].imports.length) {
-  throw new Error('Spike bundle unexpectedly contains external imports');
+const imports = result.metafile.outputs['dist/aetherius-gameplay-core.cjs'].imports;
+if (imports.some(item => !builtinModules.includes(item.path.replace(/^node:/, '')))) {
+  throw new Error('Bundle unexpectedly contains third-party external imports');
 }
-console.log(`Bundle ${version}: one CommonJS file, zero external imports.`);
+console.log(`Bundle ${version}: one CommonJS file, zero third-party imports; Node builtins=${imports.map(i => i.path).join(',')}.`);

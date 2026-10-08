@@ -1,1 +1,15 @@
-{ "name": "@aetherius/catalog-tools", "version": "0.1.0", "private": true, "type": "module" }
+{
+  "name": "@aetherius/catalog-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "build": "tsc -p ../../shared/record-catalog/tsconfig.build.json",
+    "test": "node --experimental-strip-types --test ../../shared/record-catalog/tests/*.test.ts",
+    "typecheck": "tsc --noEmit -p ../../shared/record-catalog/tsconfig.json"
+  }
+}

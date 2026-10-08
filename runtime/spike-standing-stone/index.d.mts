@@ -7,7 +7,7 @@ export interface StandingStoneMp {
   onActivate?: ((targetId: number, casterId: number) => unknown) | undefined;
   getIdFromDesc(desc: string): number;
   getDescFromId(formId: number): string;
-  get?(formId: number, property: 'profileId' | 'baseDesc'): number | string | undefined;
+  get?(formId: number, property: string): unknown;
   callPapyrusFunction(callType: string, className: string, functionName: string,
     self: { type: 'form'; desc: string }, args: unknown[]): unknown;
   isConnected?(userId: number): boolean;
@@ -23,6 +23,7 @@ export function createStandingStoneSpike(args: {
     release(): void;
   }> } };
   log: { info(message: string): void };
+  actors?: import('../src/actors.js').Actors;
 }): {
   initialize(): Promise<void>;
   shutdown(): void;
