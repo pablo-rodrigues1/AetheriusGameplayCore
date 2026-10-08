@@ -4,6 +4,8 @@
   "private": true,
   "workspaces": ["shared/*"],
   "scripts": {
+    "build": "node runtime/build.mjs",
+    "typecheck:runtime": "node runtime/node_modules/typescript/bin/tsc --noEmit -p runtime/tsconfig.json",
     "typecheck": "npm run typecheck --workspace @aetherius/contracts",
     "test": "npm test --workspace @aetherius/contracts"
   }

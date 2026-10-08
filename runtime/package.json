@@ -1,0 +1,14 @@
+{
+  "name": "aetherius-gameplay-core-runtime-spike",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@aetherius/contracts": "file:../shared/contracts",
+    "@types/node": "22.10.2",
+    "esbuild": "0.28.1",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "aetherius-gameplay-core-runtime-spike": "file:"
+  }
+}
