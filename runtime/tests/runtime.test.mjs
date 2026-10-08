@@ -85,7 +85,7 @@ test('mode default/invalid values, capability isolation, database failure is con
     assert(ctx.log.messages.some(s => s.includes('invalid mode for races')));
     const report = core.capabilityReport(); assert.equal(report.database.status, 'UNSUPPORTED');
     assert(report.systems.find(s => s.id === 'standing-stones').missing.some(s => s.includes('migrations:apply')));
-    assert(!report.systems.find(s => s.id === 'races').missing.some(s => s.includes('migrations:apply')));
+    assert(report.systems.find(s => s.id === 'races').missing.some(s => s.includes('migrations:apply')), 'C2 observations now require persistence');
     assert(!ctx.log.messages.join('\n').includes('private details'));
     assert.equal(core.healthCheck(), true);
   } finally { await core.shutdown(); }
@@ -114,13 +114,13 @@ test('shutdown while boot awaits database cancels all later hook and timer regis
 });
 
 test('real file adapter loads approved B2 domains; missing domain disables only its dependents', async () => {
-  const core = factory()(context({ GAMEPLAY_CORE_MODE_RACES: 'audit' }, fakeHost({ catalogAvailable: true })));
+  const core = factory()(context({ GAMEPLAY_CORE_MODE_RACES: 'audit', GAMEPLAY_CORE_MODE_RACE_PROBE: 'audit' }, fakeHost({ catalogAvailable: true })));
   let started = false;
-  core.register({ id: 'races', start(c) { started = true; assert.equal(c.catalog.status, 'SUPPORTED'); } });
+  core.register({ id: 'race-probe', domain: 'races', requiresDatabase: false, start(c) { started = true; assert.equal(c.catalog.status, 'SUPPORTED'); } });
   await core.initialize();
   try {
     const systems = core.capabilityReport().systems;
-    assert.equal(systems.find(s => s.id === 'races').status, 'SUPPORTED'); assert.equal(started, true);
+    assert.equal(systems.find(s => s.id === 'race-probe').status, 'SUPPORTED'); assert.equal(started, true);
     assert.equal(systems.find(s => s.id === 'classes').status, 'UNSUPPORTED');
     assert.equal(systems.find(s => s.id === 'standing-stones').catalog.status, 'SUPPORTED');
   } finally { await core.shutdown(); }

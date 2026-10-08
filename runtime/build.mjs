@@ -24,7 +24,8 @@ const result = await build({
       readFile(path.join(root, 'catalog', `${name}.json`), 'utf8').then(JSON.parse)))),
     BUILD_MIGRATIONS: JSON.stringify(await Promise.all((await readdir(path.join(root, 'database/migrations')))
       .filter(name => name.endsWith('.sql')).sort().map(async name => ({ version: name,
-        sql: await readFile(path.join(root, 'database/migrations', name), 'utf8') }))))
+        sql: await readFile(path.join(root, 'database/migrations', name), 'utf8') })))),
+    BUILD_RACE_OWNERSHIP: JSON.stringify(JSON.parse(await readFile(path.join(root, 'modules/race-system/ownership.json'), 'utf8')))
   },
   metafile: true,
   logLevel: 'info'

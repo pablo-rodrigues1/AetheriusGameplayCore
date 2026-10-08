@@ -1,0 +1,1260 @@
+[
+  {
+    "raceKey": "skyrim.esm|013740",
+    "raceEditorId": "ArgonianRace",
+    "stableFormKey": "aetherius.esp|00080B",
+    "editorId": "MAG_ArgonianRacialPerk01",
+    "recordType": "PERK",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ModSpellDuration",
+    "resultStatus": "PERK_ENTRY_POINTS_UNVERIFIED",
+    "classification": null,
+    "appliedBy": [
+      "aetherius.esp|000809"
+    ],
+    "details": [
+      {
+        "family": "ModSpellDuration",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModSpellDuration",
+        "modification": "Multiply",
+        "value": "1.5",
+        "rank": "0",
+        "priority": "0",
+        "conditionEvidence": "{\"Effects[0].Conditions\":\"[list: 2 item(s)]\",\"Effects[0].Conditions[0]\":\"[PerkCondition]\",\"Effects[0].Conditions[0].Conditions\":\"[list: 1 item(s)]\",\"Effects[0].Conditions[1]\":\"[PerkCondition]\",\"Effects[0].Conditions[1].Conditions\":\"[list: 2 item(s)]\",\"Effects[0].Conditions[0].RunOnTabIndex\":\"0\",\"Effects[0].Conditions[1].RunOnTabIndex\":\"1\"}"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013740",
+    "raceEditorId": "ArgonianRace",
+    "stableFormKey": "aetherius.esp|000828",
+    "editorId": "MAG_ArgonianRacialAdjuster",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=PeakValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000847",
+        "family": "PeakValueModifier/Illusion",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013740",
+    "raceEditorId": "ArgonianRace",
+    "stableFormKey": "aetherius.esp|000837",
+    "editorId": "MAG_ArgonianRaceMonitor",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "CLIENT_SCRIPT_REQUIRED_UNVERIFIED",
+    "classification": {
+      "class": "PAPYRUS_REQUIRED",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado lista scripts em VirtualMachineAdapter.Scripts",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000835",
+        "family": "ValueModifier/ResistMagic",
+        "mechanism": "CLIENT_SCRIPT_REQUIRED",
+        "scripts": [
+          "MAG_RaceMonitor_Script"
+        ]
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013740",
+    "raceEditorId": "ArgonianRace",
+    "stableFormKey": "skyrim.esm|0AA01B",
+    "editorId": "MAG_ArgonianRacialSpell03",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=PeakValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000816",
+        "family": "PeakValueModifier/WaterBreathing",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013740",
+    "raceEditorId": "ArgonianRace",
+    "stableFormKey": "skyrim.esm|0E40D5",
+    "editorId": "MAG_ArgonianRacialSpell01",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "Script/Ability/ConstantEffect/Self",
+    "resultStatus": "MARKER_OR_EXTERNAL_SEMANTICS_UNVERIFIED",
+    "classification": {
+      "class": "EXTERNAL_DLL_SEMANTICS",
+      "family": "Script/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado usa Archetype.Type=Script sem VirtualMachineAdapter.Scripts",
+      "confidence": "low"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000809",
+        "family": "Script/None",
+        "mechanism": "MARKER_SEMANTICS_UNVERIFIED",
+        "perkToApply": "aetherius.esp|00080B"
+      },
+      {
+        "key": "aetherius.esp|000823",
+        "family": "ValueModifier/AlchemySkillAdvance",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013740",
+    "raceEditorId": "ArgonianRace",
+    "stableFormKey": "skyrim.esm|104ACF",
+    "editorId": "MAG_ArgonianRacialSpell02",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=ValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000812",
+        "family": "ValueModifier/ResistDisease",
+        "mechanism": "NATIVE_ENGINE"
+      },
+      {
+        "key": "aetherius.esp|00080E",
+        "family": "ValueModifier/PoisonResist",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013741",
+    "raceEditorId": "BretonRace",
+    "stableFormKey": "aetherius.esp|000834",
+    "editorId": "MAG_BretonRaceMonitor",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "CLIENT_SCRIPT_REQUIRED_UNVERIFIED",
+    "classification": {
+      "class": "PAPYRUS_REQUIRED",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado lista scripts em VirtualMachineAdapter.Scripts",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000825",
+        "family": "ValueModifier/ResistMagic",
+        "mechanism": "CLIENT_SCRIPT_REQUIRED",
+        "scripts": [
+          "MAG_RaceMonitor_Script"
+        ]
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013741",
+    "raceEditorId": "BretonRace",
+    "stableFormKey": "skyrim.esm|0AA01F",
+    "editorId": "MAG_BretonRacialSpell01",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=ValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000819",
+        "family": "ValueModifier/ResistMagic",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013741",
+    "raceEditorId": "BretonRace",
+    "stableFormKey": "skyrim.esm|0AA022",
+    "editorId": "MAG_BretonRacialSpell02",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=PeakValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|00082C",
+        "family": "PeakValueModifier/AbsorbChance",
+        "mechanism": "NATIVE_ENGINE"
+      },
+      {
+        "key": "aetherius.esp|00082F",
+        "family": "ValueModifier/ResistMagic",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013742",
+    "raceEditorId": "DarkElfRace",
+    "stableFormKey": "aetherius.esp|000800",
+    "editorId": "MAG_DarkElfRacialPerk01",
+    "recordType": "PERK",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ModSpellCost",
+    "resultStatus": "PERK_ENTRY_POINTS_UNVERIFIED",
+    "classification": null,
+    "appliedBy": [
+      "aetherius.esp|00081A"
+    ],
+    "details": [
+      {
+        "family": "ModSpellCost",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModSpellCost",
+        "modification": "Multiply",
+        "value": "0.9",
+        "rank": "0",
+        "priority": "5",
+        "conditionEvidence": "{\"Effects[0].Conditions\":\"[list: 1 item(s)]\",\"Effects[0].Conditions[0]\":\"[PerkCondition]\",\"Effects[0].Conditions[0].Conditions\":\"[list: 5 item(s)]\",\"Effects[0].Conditions[0].RunOnTabIndex\":\"1\"}"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013742",
+    "raceEditorId": "DarkElfRace",
+    "stableFormKey": "aetherius.esp|000829",
+    "editorId": "MAG_DarkElfRacialAdjuster",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=PeakValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000848",
+        "family": "PeakValueModifier/Conjuration",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013742",
+    "raceEditorId": "DarkElfRace",
+    "stableFormKey": "aetherius.esp|00083F",
+    "editorId": "MAG_DarkElfRaceMonitor",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "CLIENT_SCRIPT_REQUIRED_UNVERIFIED",
+    "classification": {
+      "class": "PAPYRUS_REQUIRED",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado lista scripts em VirtualMachineAdapter.Scripts",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000836",
+        "family": "ValueModifier/ResistMagic",
+        "mechanism": "CLIENT_SCRIPT_REQUIRED",
+        "scripts": [
+          "MAG_RaceMonitor_Script"
+        ]
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013742",
+    "raceEditorId": "DarkElfRace",
+    "stableFormKey": "skyrim.esm|0AA021",
+    "editorId": "MAG_DarkElfRacialSpell01",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=ValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|00081A",
+        "family": "ValueModifier/ResistFire",
+        "mechanism": "NATIVE_ENGINE",
+        "perkToApply": "aetherius.esp|000800"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013742",
+    "raceEditorId": "DarkElfRace",
+    "stableFormKey": "skyrim.esm|0E40D4",
+    "editorId": "MAG_DarkElfRacialSpell02",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "Script/Ability/ConstantEffect/Self",
+    "resultStatus": "MARKER_OR_EXTERNAL_SEMANTICS_UNVERIFIED",
+    "classification": {
+      "class": "EXTERNAL_DLL_SEMANTICS",
+      "family": "Script/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado usa Archetype.Type=Script sem VirtualMachineAdapter.Scripts",
+      "confidence": "low"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000801",
+        "family": "Script/None",
+        "mechanism": "MARKER_SEMANTICS_UNVERIFIED"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013743",
+    "raceEditorId": "HighElfRace",
+    "stableFormKey": "aetherius.esp|00082B",
+    "editorId": "MAG_HighElfRacialAdjuster",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=PeakValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000817",
+        "family": "PeakValueModifier/Illusion",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013743",
+    "raceEditorId": "HighElfRace",
+    "stableFormKey": "aetherius.esp|000840",
+    "editorId": "MAG_HighElfRaceMonitor",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "CLIENT_SCRIPT_REQUIRED_UNVERIFIED",
+    "classification": {
+      "class": "PAPYRUS_REQUIRED",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado lista scripts em VirtualMachineAdapter.Scripts",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000838",
+        "family": "ValueModifier/ResistMagic",
+        "mechanism": "CLIENT_SCRIPT_REQUIRED",
+        "scripts": [
+          "MAG_RaceMonitor_Script"
+        ]
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013743",
+    "raceEditorId": "HighElfRace",
+    "stableFormKey": "skyrim.esm|0E40C8",
+    "editorId": "MAG_HighElfRacialSpell02",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=PeakValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000802",
+        "family": "PeakValueModifier/MagickaRateMult",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013743",
+    "raceEditorId": "HighElfRace",
+    "stableFormKey": "skyrim.esm|105F16",
+    "editorId": "MAG_HighElfRacialSpell01",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "Script/Ability/ConstantEffect/Self",
+    "resultStatus": "MARKER_OR_EXTERNAL_SEMANTICS_UNVERIFIED",
+    "classification": {
+      "class": "EXTERNAL_DLL_SEMANTICS",
+      "family": "Script/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado usa Archetype.Type=Script sem VirtualMachineAdapter.Scripts",
+      "confidence": "low"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000813",
+        "family": "Script/None",
+        "mechanism": "MARKER_SEMANTICS_UNVERIFIED"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013744",
+    "raceEditorId": "ImperialRace",
+    "stableFormKey": "aetherius.esp|000808",
+    "editorId": "MAG_ImperialRacialPerk01",
+    "recordType": "PERK",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "[PerkQuestEffect] Quest=05F596:Skyrim.esm;ModIngredientsHarvested;ModBuyPrices;ModSellPrices",
+    "resultStatus": "CLIENT_QUEST_OR_SCRIPT_REQUIRED_UNVERIFIED",
+    "classification": null,
+    "appliedBy": [
+      "aetherius.esp|00081C"
+    ],
+    "details": [
+      {
+        "family": "[PerkQuestEffect] Quest=05F596:Skyrim.esm",
+        "mechanism": "CLIENT_QUEST_OR_SCRIPT_REQUIRED",
+        "rank": "0",
+        "priority": "0",
+        "conditionEvidence": "{\"Effects[0].Conditions\":\"[list: 0 item(s)]\"}"
+      },
+      {
+        "family": "ModIngredientsHarvested",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModIngredientsHarvested",
+        "modification": "Add",
+        "value": "1",
+        "rank": "0",
+        "priority": "0",
+        "conditionEvidence": "{\"Effects[1].Conditions\":\"[list: 1 item(s)]\",\"Effects[1].Conditions[0]\":\"[PerkCondition]\",\"Effects[1].Conditions[0].Conditions\":\"[list: 6 item(s)]\",\"Effects[1].Conditions[0].RunOnTabIndex\":\"1\"}"
+      },
+      {
+        "family": "ModBuyPrices",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModBuyPrices",
+        "modification": "Multiply",
+        "value": "0.9",
+        "rank": "0",
+        "priority": "0",
+        "conditionEvidence": "{\"Effects[2].Conditions\":\"[list: 0 item(s)]\"}"
+      },
+      {
+        "family": "ModSellPrices",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModSellPrices",
+        "modification": "Multiply",
+        "value": "1.1",
+        "rank": "0",
+        "priority": "0",
+        "conditionEvidence": "{\"Effects[3].Conditions\":\"[list: 0 item(s)]\"}"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013744",
+    "raceEditorId": "ImperialRace",
+    "stableFormKey": "aetherius.esp|00082D",
+    "editorId": "MAG_ImperialRacialAdjuster",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=PeakValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000811",
+        "family": "PeakValueModifier/Destruction",
+        "mechanism": "NATIVE_ENGINE"
+      },
+      {
+        "key": "aetherius.esp|00081B",
+        "family": "PeakValueModifier/Restoration",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013744",
+    "raceEditorId": "ImperialRace",
+    "stableFormKey": "aetherius.esp|000841",
+    "editorId": "MAG_ImperialRaceMonitor",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "CLIENT_SCRIPT_REQUIRED_UNVERIFIED",
+    "classification": {
+      "class": "PAPYRUS_REQUIRED",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado lista scripts em VirtualMachineAdapter.Scripts",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000839",
+        "family": "ValueModifier/ResistMagic",
+        "mechanism": "CLIENT_SCRIPT_REQUIRED",
+        "scripts": [
+          "MAG_RaceMonitor_Script"
+        ]
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013744",
+    "raceEditorId": "ImperialRace",
+    "stableFormKey": "skyrim.esm|0E40CA",
+    "editorId": "MAG_ImperialRacialSpell02",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "Script/Ability/ConstantEffect/Self",
+    "resultStatus": "MARKER_OR_EXTERNAL_SEMANTICS_UNVERIFIED",
+    "classification": {
+      "class": "EXTERNAL_DLL_SEMANTICS",
+      "family": "Script/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado usa Archetype.Type=Script sem VirtualMachineAdapter.Scripts",
+      "confidence": "low"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000807",
+        "family": "Script/None",
+        "mechanism": "MARKER_SEMANTICS_UNVERIFIED"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013744",
+    "raceEditorId": "ImperialRace",
+    "stableFormKey": "skyrim.esm|0EB7EB",
+    "editorId": "MAG_ImperialRacialSpell01",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "Script/Ability/ConstantEffect/Self",
+    "resultStatus": "MARKER_OR_EXTERNAL_SEMANTICS_UNVERIFIED",
+    "classification": {
+      "class": "EXTERNAL_DLL_SEMANTICS",
+      "family": "Script/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado usa Archetype.Type=Script sem VirtualMachineAdapter.Scripts",
+      "confidence": "low"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|00081C",
+        "family": "Script/None",
+        "mechanism": "MARKER_SEMANTICS_UNVERIFIED",
+        "perkToApply": "aetherius.esp|000808"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013745",
+    "raceEditorId": "KhajiitRace",
+    "stableFormKey": "aetherius.esp|000806",
+    "editorId": "MAG_KhajiitRacialPerk01",
+    "recordType": "PERK",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ModPowerAttackStamina;ModIncomingSpellMagnitude;ModIncomingSpellMagnitude",
+    "resultStatus": "NOT_VERIFIED_MULTIPLAYER_SERVER_HIT_DAMAGE",
+    "classification": null,
+    "appliedBy": [
+      "aetherius.esp|000820"
+    ],
+    "details": [
+      {
+        "family": "ModPowerAttackStamina",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModPowerAttackStamina",
+        "modification": "Multiply",
+        "value": "0.8",
+        "rank": "0",
+        "priority": "4",
+        "conditionEvidence": "{\"Effects[0].Conditions\":\"[list: 0 item(s)]\"}"
+      },
+      {
+        "family": "ModIncomingSpellMagnitude",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModIncomingSpellMagnitude",
+        "modification": "Multiply",
+        "value": "0.8",
+        "rank": "0",
+        "priority": "3",
+        "conditionEvidence": "{\"Effects[1].Conditions\":\"[list: 1 item(s)]\",\"Effects[1].Conditions[0]\":\"[PerkCondition]\",\"Effects[1].Conditions[0].Conditions\":\"[list: 1 item(s)]\",\"Effects[1].Conditions[0].RunOnTabIndex\":\"1\"}"
+      },
+      {
+        "family": "ModIncomingSpellMagnitude",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModIncomingSpellMagnitude",
+        "modification": "Multiply",
+        "value": "0.5",
+        "rank": "0",
+        "priority": "2",
+        "conditionEvidence": "{\"Effects[2].Conditions\":\"[list: 1 item(s)]\",\"Effects[2].Conditions[0]\":\"[PerkCondition]\",\"Effects[2].Conditions[0].Conditions\":\"[list: 2 item(s)]\",\"Effects[2].Conditions[0].RunOnTabIndex\":\"1\"}"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013745",
+    "raceEditorId": "KhajiitRace",
+    "stableFormKey": "aetherius.esp|00080D",
+    "editorId": "MAG_KhajiitRacialSpell02",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "SERVER_ADAPTER_REQUIRED_UNVERIFIED",
+    "classification": {
+      "class": "SERVER_ADAPTER_REQUIRED",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "condition function/RunOn de SPEL ou MGEF depende de alvo/contexto externo",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|00082A",
+        "family": "ValueModifier/Stamina",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013745",
+    "raceEditorId": "KhajiitRace",
+    "stableFormKey": "aetherius.esp|000842",
+    "editorId": "MAG_KhajiitRaceMonitor",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "CLIENT_SCRIPT_REQUIRED_UNVERIFIED",
+    "classification": {
+      "class": "PAPYRUS_REQUIRED",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado lista scripts em VirtualMachineAdapter.Scripts",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|00083A",
+        "family": "ValueModifier/ResistMagic",
+        "mechanism": "CLIENT_SCRIPT_REQUIRED",
+        "scripts": [
+          "MAG_RaceMonitor_Script"
+        ]
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013745",
+    "raceEditorId": "KhajiitRace",
+    "stableFormKey": "skyrim.esm|0AA01D",
+    "editorId": "MAG_KhajiitRacialPower01",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "Script/LesserPower/FireAndForget/Self",
+    "resultStatus": "CLIENT_SCRIPT_REQUIRED_UNVERIFIED",
+    "classification": {
+      "class": "PAPYRUS_REQUIRED",
+      "family": "Script/LesserPower/FireAndForget/Self",
+      "reason": "MGEF alcançado lista scripts em VirtualMachineAdapter.Scripts",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000830",
+        "family": "Script/None",
+        "mechanism": "CLIENT_SCRIPT_REQUIRED",
+        "scripts": [
+          "MAG_NightEyePower_Script"
+        ]
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013745",
+    "raceEditorId": "KhajiitRace",
+    "stableFormKey": "skyrim.esm|0AA01E",
+    "editorId": "MAG_KhajiitRacialSpell01",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "Script/Ability/ConstantEffect/Self",
+    "resultStatus": "MARKER_OR_EXTERNAL_SEMANTICS_UNVERIFIED",
+    "classification": {
+      "class": "EXTERNAL_DLL_SEMANTICS",
+      "family": "Script/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado usa Archetype.Type=Script sem VirtualMachineAdapter.Scripts",
+      "confidence": "low"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "update.esm|ADA201",
+        "family": "Script/None",
+        "mechanism": "MARKER_SEMANTICS_UNVERIFIED"
+      },
+      {
+        "key": "aetherius.esp|000820",
+        "family": "Script/None",
+        "mechanism": "MARKER_SEMANTICS_UNVERIFIED",
+        "perkToApply": "aetherius.esp|000806"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013746",
+    "raceEditorId": "NordRace",
+    "stableFormKey": "aetherius.esp|000805",
+    "editorId": "MAG_NordRacialPerk01",
+    "recordType": "PERK",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ModIncomingDamage;ModIncomingSpellMagnitude;ModIncomingDamage;ModIncomingSpellMagnitude",
+    "resultStatus": "NOT_VERIFIED_MULTIPLAYER_SERVER_HIT_DAMAGE",
+    "classification": null,
+    "appliedBy": [
+      "aetherius.esp|00081D"
+    ],
+    "details": [
+      {
+        "family": "ModIncomingDamage",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModIncomingDamage",
+        "modification": "Multiply",
+        "value": "0.75",
+        "rank": "0",
+        "priority": "4",
+        "conditionEvidence": "{\"Effects[0].Conditions\":\"[list: 1 item(s)]\",\"Effects[0].Conditions[0]\":\"[PerkCondition]\",\"Effects[0].Conditions[0].Conditions\":\"[list: 3 item(s)]\",\"Effects[0].Conditions[0].RunOnTabIndex\":\"0\"}"
+      },
+      {
+        "family": "ModIncomingSpellMagnitude",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModIncomingSpellMagnitude",
+        "modification": "Multiply",
+        "value": "0.75",
+        "rank": "0",
+        "priority": "2",
+        "conditionEvidence": "{\"Effects[1].Conditions\":\"[list: 2 item(s)]\",\"Effects[1].Conditions[0]\":\"[PerkCondition]\",\"Effects[1].Conditions[0].Conditions\":\"[list: 3 item(s)]\",\"Effects[1].Conditions[1]\":\"[PerkCondition]\",\"Effects[1].Conditions[1].Conditions\":\"[list: 8 item(s)]\",\"Effects[1].Conditions[0].RunOnTabIndex\":\"0\",\"Effects[1].Conditions[1].RunOnTabIndex\":\"1\"}"
+      },
+      {
+        "family": "ModIncomingDamage",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModIncomingDamage",
+        "modification": "Multiply",
+        "value": "0.75",
+        "rank": "0",
+        "priority": "2",
+        "conditionEvidence": "{\"Effects[2].Conditions\":\"[list: 1 item(s)]\",\"Effects[2].Conditions[0]\":\"[PerkCondition]\",\"Effects[2].Conditions[0].Conditions\":\"[list: 4 item(s)]\",\"Effects[2].Conditions[0].RunOnTabIndex\":\"0\"}"
+      },
+      {
+        "family": "ModIncomingSpellMagnitude",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModIncomingSpellMagnitude",
+        "modification": "Multiply",
+        "value": "0.75",
+        "rank": "0",
+        "priority": "1",
+        "conditionEvidence": "{\"Effects[3].Conditions\":\"[list: 2 item(s)]\",\"Effects[3].Conditions[0]\":\"[PerkCondition]\",\"Effects[3].Conditions[0].Conditions\":\"[list: 4 item(s)]\",\"Effects[3].Conditions[1]\":\"[PerkCondition]\",\"Effects[3].Conditions[1].Conditions\":\"[list: 8 item(s)]\",\"Effects[3].Conditions[0].RunOnTabIndex\":\"0\",\"Effects[3].Conditions[1].RunOnTabIndex\":\"1\"}"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013746",
+    "raceEditorId": "NordRace",
+    "stableFormKey": "aetherius.esp|000843",
+    "editorId": "MAG_NordRaceMonitor",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "CLIENT_SCRIPT_REQUIRED_UNVERIFIED",
+    "classification": {
+      "class": "PAPYRUS_REQUIRED",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado lista scripts em VirtualMachineAdapter.Scripts",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|00083B",
+        "family": "ValueModifier/ResistMagic",
+        "mechanism": "CLIENT_SCRIPT_REQUIRED",
+        "scripts": [
+          "MAG_RaceMonitor_Script"
+        ]
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013746",
+    "raceEditorId": "NordRace",
+    "stableFormKey": "skyrim.esm|0AA020",
+    "editorId": "MAG_NordRacialSpell01",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=ValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|00081D",
+        "family": "ValueModifier/ResistFrost",
+        "mechanism": "NATIVE_ENGINE",
+        "perkToApply": "aetherius.esp|000805"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013746",
+    "raceEditorId": "NordRace",
+    "stableFormKey": "skyrim.esm|0E40C3",
+    "editorId": "MAG_NordRacialSpell02",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "Script/Ability/ConstantEffect/Self",
+    "resultStatus": "MARKER_OR_EXTERNAL_SEMANTICS_UNVERIFIED",
+    "classification": {
+      "class": "EXTERNAL_DLL_SEMANTICS",
+      "family": "Script/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado usa Archetype.Type=Script sem VirtualMachineAdapter.Scripts",
+      "confidence": "low"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|00081E",
+        "family": "Script/None",
+        "mechanism": "MARKER_SEMANTICS_UNVERIFIED"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013747",
+    "raceEditorId": "OrcRace",
+    "stableFormKey": "aetherius.esp|00080A",
+    "editorId": "MAG_OrcRacialSpell01",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "Script/Ability/ConstantEffect/Self",
+    "resultStatus": "MARKER_OR_EXTERNAL_SEMANTICS_UNVERIFIED",
+    "classification": {
+      "class": "EXTERNAL_DLL_SEMANTICS",
+      "family": "Script/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado usa Archetype.Type=Script sem VirtualMachineAdapter.Scripts",
+      "confidence": "low"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000821",
+        "family": "Script/None",
+        "mechanism": "MARKER_SEMANTICS_UNVERIFIED"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013747",
+    "raceEditorId": "OrcRace",
+    "stableFormKey": "aetherius.esp|000844",
+    "editorId": "MAG_OrcRaceMonitor",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "CLIENT_SCRIPT_REQUIRED_UNVERIFIED",
+    "classification": {
+      "class": "PAPYRUS_REQUIRED",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado lista scripts em VirtualMachineAdapter.Scripts",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|00083C",
+        "family": "ValueModifier/ResistMagic",
+        "mechanism": "CLIENT_SCRIPT_REQUIRED",
+        "scripts": [
+          "MAG_RaceMonitor_Script"
+        ]
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013747",
+    "raceEditorId": "OrcRace",
+    "stableFormKey": "skyrim.esm|0AA026",
+    "editorId": "MAG_OrcRacialSpell02",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=ValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|00080C",
+        "family": "ValueModifier/HealRateMult",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013748",
+    "raceEditorId": "RedguardRace",
+    "stableFormKey": "aetherius.esp|00082E",
+    "editorId": "MAG_RedguardRacialAdjuster",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=PeakValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000814",
+        "family": "PeakValueModifier/Alteration",
+        "mechanism": "NATIVE_ENGINE"
+      },
+      {
+        "key": "aetherius.esp|000811",
+        "family": "PeakValueModifier/Destruction",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013748",
+    "raceEditorId": "RedguardRace",
+    "stableFormKey": "aetherius.esp|000846",
+    "editorId": "MAG_RedguardRaceMonitor",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "CLIENT_SCRIPT_REQUIRED_UNVERIFIED",
+    "classification": {
+      "class": "PAPYRUS_REQUIRED",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado lista scripts em VirtualMachineAdapter.Scripts",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|00083E",
+        "family": "ValueModifier/ResistMagic",
+        "mechanism": "CLIENT_SCRIPT_REQUIRED",
+        "scripts": [
+          "MAG_RaceMonitor_Script"
+        ]
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013748",
+    "raceEditorId": "RedguardRace",
+    "stableFormKey": "skyrim.esm|0AA023",
+    "editorId": "MAG_RedguardRacialSpell01",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "Script/Ability/ConstantEffect/Self",
+    "resultStatus": "MARKER_OR_EXTERNAL_SEMANTICS_UNVERIFIED",
+    "classification": {
+      "class": "EXTERNAL_DLL_SEMANTICS",
+      "family": "Script/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado usa Archetype.Type=Script sem VirtualMachineAdapter.Scripts",
+      "confidence": "low"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000822",
+        "family": "Script/None",
+        "mechanism": "MARKER_SEMANTICS_UNVERIFIED"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013748",
+    "raceEditorId": "RedguardRace",
+    "stableFormKey": "skyrim.esm|0E40CE",
+    "editorId": "MAG_RedguardRacialSpell02",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "PeakValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=PeakValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000826",
+        "family": "PeakValueModifier/StaminaRateMult",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013749",
+    "raceEditorId": "WoodElfRace",
+    "stableFormKey": "aetherius.esp|00080F",
+    "editorId": "MAG_WoodElfRacialSpell01",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "Script/Ability/ConstantEffect/Self",
+    "resultStatus": "MARKER_OR_EXTERNAL_SEMANTICS_UNVERIFIED",
+    "classification": {
+      "class": "EXTERNAL_DLL_SEMANTICS",
+      "family": "Script/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado usa Archetype.Type=Script sem VirtualMachineAdapter.Scripts",
+      "confidence": "low"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000824",
+        "family": "Script/None",
+        "mechanism": "MARKER_SEMANTICS_UNVERIFIED",
+        "perkToApply": "aetherius.esp|000827"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013749",
+    "raceEditorId": "WoodElfRace",
+    "stableFormKey": "aetherius.esp|000818",
+    "editorId": "MAG_WoodElfRacialSpell02",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "NATIVE_ENGINE_NOT_MULTIPLAYER_CERTIFIED",
+    "classification": {
+      "class": "NATIVE_ENGINE",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF.Archetype.Type=ValueModifier sem script ou dependência de contexto identificada",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|000804",
+        "family": "ValueModifier/SpeedMult",
+        "mechanism": "NATIVE_ENGINE"
+      },
+      {
+        "key": "aetherius.esp|000833",
+        "family": "ValueModifier/SneakingSkillAdvance",
+        "mechanism": "NATIVE_ENGINE"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013749",
+    "raceEditorId": "WoodElfRace",
+    "stableFormKey": "aetherius.esp|000827",
+    "editorId": "MAG_WoodElfRacialPerk01",
+    "recordType": "PERK",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ModSneakAttackMult;ModSpellMagnitude;ModFallingDamage",
+    "resultStatus": "NOT_VERIFIED_MULTIPLAYER_SERVER_HIT_DAMAGE",
+    "classification": null,
+    "appliedBy": [
+      "aetherius.esp|000824"
+    ],
+    "details": [
+      {
+        "family": "ModSneakAttackMult",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModSneakAttackMult",
+        "modification": "Multiply",
+        "value": "1.25",
+        "rank": "0",
+        "priority": "4",
+        "conditionEvidence": "{\"Effects[0].Conditions\":\"[list: 1 item(s)]\",\"Effects[0].Conditions[0]\":\"[PerkCondition]\",\"Effects[0].Conditions[0].Conditions\":\"[list: 1 item(s)]\",\"Effects[0].Conditions[0].RunOnTabIndex\":\"0\"}"
+      },
+      {
+        "family": "ModSpellMagnitude",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModSpellMagnitude",
+        "modification": "Multiply",
+        "value": "1.25",
+        "rank": "0",
+        "priority": "3",
+        "conditionEvidence": "{\"Effects[1].Conditions\":\"[list: 3 item(s)]\",\"Effects[1].Conditions[0]\":\"[PerkCondition]\",\"Effects[1].Conditions[0].Conditions\":\"[list: 2 item(s)]\",\"Effects[1].Conditions[1]\":\"[PerkCondition]\",\"Effects[1].Conditions[1].Conditions\":\"[list: 6 item(s)]\",\"Effects[1].Conditions[2]\":\"[PerkCondition]\",\"Effects[1].Conditions[2].Conditions\":\"[list: 1 item(s)]\",\"Effects[1].Conditions[0].RunOnTabIndex\":\"0\",\"Effects[1].Conditions[1].RunOnTabIndex\":\"1\",\"Effects[1].Conditions[2].RunOnTabIndex\":\"2\"}"
+      },
+      {
+        "family": "ModFallingDamage",
+        "mechanism": "PERK_ENTRY_POINT",
+        "entryPoint": "ModFallingDamage",
+        "modification": "Multiply",
+        "value": "0.5",
+        "rank": "0",
+        "priority": "0",
+        "conditionEvidence": "{\"Effects[2].Conditions\":\"[list: 0 item(s)]\"}"
+      }
+    ]
+  },
+  {
+    "raceKey": "skyrim.esm|013749",
+    "raceEditorId": "WoodElfRace",
+    "stableFormKey": "aetherius.esp|000845",
+    "editorId": "MAG_WoodElfRaceMonitor",
+    "recordType": "SPEL",
+    "grantOwner": "NATIVE_CLIENT",
+    "resultOwner": "NATIVE_CLIENT",
+    "family": "ValueModifier/Ability/ConstantEffect/Self",
+    "resultStatus": "CLIENT_SCRIPT_REQUIRED_UNVERIFIED",
+    "classification": {
+      "class": "PAPYRUS_REQUIRED",
+      "family": "ValueModifier/Ability/ConstantEffect/Self",
+      "reason": "MGEF alcançado lista scripts em VirtualMachineAdapter.Scripts",
+      "confidence": "high"
+    },
+    "appliedBy": [],
+    "details": [
+      {
+        "key": "aetherius.esp|00083D",
+        "family": "ValueModifier/ResistMagic",
+        "mechanism": "CLIENT_SCRIPT_REQUIRED",
+        "scripts": [
+          "MAG_RaceMonitor_Script"
+        ]
+      }
+    ]
+  }
+]

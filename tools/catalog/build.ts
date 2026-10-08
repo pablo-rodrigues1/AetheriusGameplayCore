@@ -38,11 +38,11 @@ async function readExport(file: string): Promise<ExportFile> {
   return { manifest, rows };
 }
 const value = (row: ExportRow, path: string): string | undefined => row.fields.find(f => f.path === path)?.value;
-const recordTypes: Readonly<Record<string, RecordType>> = { Activator: 'ACTI', Race: 'RACE', Spell: 'SPEL', MagicEffect: 'MGEF' };
+const recordTypes: Readonly<Record<string, RecordType>> = { Activator: 'ACTI', Race: 'RACE', Spell: 'SPEL', MagicEffect: 'MGEF', Perk: 'PERK' };
 
 /** Manifest fingerprints are explicit input; exports alone do not contain TES4 metadata or CRCs. */
 export async function buildDomains(exportsDir: string, fingerprints: readonly PluginFingerprint[]): Promise<readonly DomainData[]> {
-  const files = await Promise.all(['STONE_ACTIVATORS', 'RACE', 'SPEL', 'MGEF', 'MUNDUS'].map(name => readExport(join(exportsDir, `${name}.jsonl`))));
+  const files = await Promise.all(['STONE_ACTIVATORS', 'RACE', 'SPEL', 'MGEF', 'MUNDUS', 'PERK'].map(name => readExport(join(exportsDir, `${name}.jsonl`))));
   const [activators, races, spells, effects, mundus] = files as [ExportFile, ExportFile, ExportFile, ExportFile, ExportFile];
   const epoch = activators.manifest.epoch;
   if (files.some(f => f.manifest.epoch !== epoch)) throw new TypeError('Exports have different epochs');
@@ -64,6 +64,7 @@ export async function buildDomains(exportsDir: string, fingerprints: readonly Pl
   // Only index the two exported record families this order follows.
   const spellMap = new Map(spells.rows.map(row => [row.formid.toLowerCase(), row]));
   const effectMap = new Map(effects.rows.map(row => [row.formid.toLowerCase(), row]));
+  const perkMap = new Map(files[5]!.rows.map(row => [row.formid.toLowerCase(), row]));
   const exportAddress = (stableFormKey: StableFormKey): string => {
     const p = plugin(stableFormKey.split('|')[0]!);
     return encodeFormKey(stableFormKey, 'housecarl', p.isLight ? 'LIGHT' : 'FULL').toLowerCase();
@@ -98,12 +99,24 @@ export async function buildDomains(exportsDir: string, fingerprints: readonly Pl
       records.set(stableFormKey, { ...record, signature: recordSignature(record, definingPlugin) });
       return stableFormKey;
     }
+    function addPerk(stableFormKey: StableFormKey): void {
+      if (records.has(stableFormKey)) return;
+      const row = perkMap.get(exportAddress(stableFormKey));
+      if (!row) { unsupported.push({ status: 'UNSUPPORTED', stableFormKey, reason: 'PERK absent from exports' }); return; }
+      // Keep all exported entry values and the depth-limited condition evidence.
+      // Notes describe missing inner fields; they are not invented conditions.
+      put(row, { editorId: row.editorid, fields: fields(row, /^(NumRanks$|NextPerk$|Conditions\[|Effects\[|VirtualMachineAdapter\.)/),
+        exportNotes: Object.fromEntries(row.fields.filter(f => /^(Effects\[|Conditions|VirtualMachineAdapter)/.test(f.path) && f.note !== undefined)
+          .sort((a,b) => a.path.localeCompare(b.path, 'en')).map(f => [f.path, f.note!])) });
+    }
     function addEffect(stableFormKey: StableFormKey): void {
       if (records.has(stableFormKey)) return;
       const row = effectMap.get(exportAddress(stableFormKey));
       if (!row) { unsupported.push({ status: 'UNSUPPORTED', stableFormKey, reason: 'MGEF absent from exports' }); return; }
       put(row, { editorId: row.editorid, fields: fields(row, /^(Flags$|Archetype\.|BaseCost$|CastType$|TargetType$|MagicSkill$|ResistValue$|SecondActorValue|PerkToApply$|EquipAbility$|Conditions\[|VirtualMachineAdapter\.)/),
         semantics: 'UNSUPPORTED', reason: 'B2 records definitions only; effect, condition and script semantics are not certified' });
+      const perk = value(row, 'PerkToApply');
+      if (perk) addPerk(link(perk));
     }
     function addSpell(stableFormKey: StableFormKey): void {
       if (records.has(stableFormKey)) return;

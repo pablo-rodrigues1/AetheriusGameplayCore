@@ -7,6 +7,7 @@ import type { PoolPort, PoolClient } from '../../../shared/persistence/src/index
 import type { ActorReady, Actors } from '../actors.js';
 import type { RuntimeMp } from '../host.js';
 import { ProjectionError, SpellHost } from './host.js';
+import { nativeGrantKeys, portGrantSet } from '../composition.ts';
 
 export type ItemStatus = 'APPLIED_HOST' | 'REMOVED_HOST' | 'ALREADY_PRESENT' | 'ALREADY_ABSENT' | 'UNSUPPORTED' | 'FAILED' | 'PENDING';
 export interface ProjectionItem {
@@ -33,6 +34,7 @@ interface Options {
   readonly catalogs: readonly RecordCatalogPort[];
   readonly identity: IdentityPort;
   readonly canProject?: (binding: SessionBinding) => boolean;
+  readonly nativeRecords?: (binding: SessionBinding) => ReadonlySet<StableFormKey>;
   readonly actors: Pick<Actors, 'onReady' | 'onUnbound'>;
   readonly signal: AbortSignal;
   readonly warn: (message: string) => void;
@@ -132,9 +134,11 @@ export class SpellProjection implements GrantProjectionPort {
       const projection = { binding, set };
       if (head) this.acceptRevision(compose(head.grant_set.characterKey, [head.grant_set.grants], head.grant_set.revision), set);
       if (this.ready.get(binding.characterKey) !== binding.epoch) {
-        return this.receipt(projection, 'PENDING', effectiveSet(set).grants.map(g => ({ definition: g.definition, status: 'PENDING', reason: 'ACTOR_NOT_READY' })));
+        return this.receipt(projection, 'PENDING', effectiveSet(portGrantSet(set, head?.grant_set)).grants.map(g => ({ definition: g.definition, status: 'PENDING', reason: 'ACTOR_NOT_READY' })));
       }
-      const effective = effectiveSet(set);
+      const observed = this.options.nativeRecords?.(binding) ?? new Set<StableFormKey>();
+      const native = new Set([...nativeGrantKeys(set, head?.grant_set), ...observed]);
+      const effective = effectiveSet(portGrantSet(set, head?.grant_set, observed));
       const desired = new Map<StableFormKey, DefinitionRef>();
       for (const item of effective.grants) {
         if (!['spell', 'ability', 'power'].includes(item.kind) || item.definition.recordType !== 'SPEL') {
@@ -174,6 +178,13 @@ export class SpellProjection implements GrantProjectionPort {
         check();
         try {
           let status: ItemStatus = 'ALREADY_PRESENT', reason = 'EXTERNAL_SPELL_PRESERVED';
+          if (native.has(row.stable_form_key)) {
+            // Native delivery takes precedence even over an earlier Core-owned
+            // row. Relinquish bookkeeping ownership without touching the host.
+            await save({ ...row, owned: false, active: false }, false); check();
+            items.push({ definition: row.definition, status, reason: 'NATIVE_RACE_RECORD_PRESERVED' });
+            continue;
+          }
           if (row.owned) {
             const id = this.host.resolve(row.definition);
             if (actual.has(id)) {

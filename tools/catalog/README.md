@@ -1,5 +1,12 @@
 # Gerador e adapter do catálogo
 
+Atualização C2: `PERK.jsonl` é uma entrada obrigatória adicional, com manifesto e
+epoch conferidos. SPEL → MGEF → PerkToApply é seguido nos dois domínios. Os PERK
+alcançados conservam os valores dos campos exportados e notas de entry points e
+condições limitadas pela profundidade do export. Não há avaliação de condições,
+novo grant do provider de pedras ou autoridade de resultado certificada. Apenas
+records novos são acrescentados; assinaturas dos records inalterados são preservadas.
+
 Da raiz do workspace:
 
 ```powershell

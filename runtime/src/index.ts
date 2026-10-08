@@ -2,6 +2,7 @@ import type { FeatureMode } from '../../shared/contracts/src/capabilities.js';
 import type { SessionBinding } from '../../shared/contracts/src/identity.js';
 import { loadDomain } from '../../shared/record-catalog/src/index.ts';
 import type { DomainCatalog, DomainData } from '../../shared/record-catalog/src/types.ts';
+import { deepFreeze } from '../../shared/record-catalog/src/integrity.ts';
 import { createFileHost } from '../../tools/catalog/host.ts';
 import { applyMigrations, migrationStatus, executeCommand, withTransaction } from '../../shared/persistence/src/index.js';
 import type { Migration, PoolPort } from '../../shared/persistence/src/index.js';
@@ -13,9 +14,12 @@ import type { Hook, HostContext } from './host.js';
 import { SpellProjection } from './projection/index.js';
 import { ActorComposition } from './composition.ts';
 import { StandingStoneSystem } from './standing-stones.ts';
+import { RaceSystem } from './races.ts';
+import type { RaceOwnership } from '../../modules/race-system/src/ownership.ts';
 import type { ChoiceIntent } from '../../modules/standing-stone-system/src/index.ts';
 export { standingStoneGrants, createStandingStoneCommands } from '../../modules/standing-stone-system/src/index.ts';
 export { ActorComposition } from './composition.ts';
+export { raceGrants, initialRaceAttributes, readRace } from '../../modules/race-system/src/index.ts';
 export { SpellProjection } from './projection/index.js';
 export type { ProjectionResult, ProjectionOutcome, ProjectionItem } from './projection/index.js';
 export type { HostContext, RuntimeMp } from './host.js';
@@ -24,6 +28,7 @@ export type { ActorReady } from './actors.js';
 declare const BUNDLE_VERSION: string;
 declare const BUILD_DOMAINS: readonly DomainData[];
 declare const BUILD_MIGRATIONS: readonly Migration[];
+declare const BUILD_RACE_OWNERSHIP: readonly RaceOwnership[];
 export interface SystemContext {
   readonly id: string;
   readonly mode: FeatureMode;
@@ -31,7 +36,7 @@ export interface SystemContext {
   readonly persistence: { readonly pool: PoolPort; readonly withTransaction: typeof withTransaction; readonly executeCommand: typeof executeCommand } | undefined;
   readonly identity: Actors;
   readonly projection: Pick<SpellProjection, 'publish' | 'onAck' | 'capability'>;
-  readonly composition: Pick<ActorComposition, 'register' | 'recompose'>;
+  readonly composition: Pick<ActorComposition, 'register' | 'recompose' | 'inspect'>;
   readonly actors: Pick<Actors, 'onReady' | 'onUnbound'>;
   readonly hooks: { register(name: `on${string}`, listener: Hook): () => void };
   readonly log: HostContext['log'];
@@ -49,7 +54,7 @@ export interface SystemRegistration {
 interface SystemSpec { id: string; domain?: string; requiresDatabase: boolean }
 const defaults: readonly SystemSpec[] = [
   { id: 'standing-stones', domain: 'standing-stones', requiresDatabase: true },
-  { id: 'races', domain: 'races', requiresDatabase: false },
+  { id: 'races', domain: 'races', requiresDatabase: true },
   ...['classes', 'religion', 'spells', 'perks', 'damage'].map(id => ({ id, domain: id, requiresDatabase: true }))
 ];
 const coordinatorKey = Symbol.for('aetherius.runtime.coordinator.v1');
@@ -67,6 +72,7 @@ const safeCode = (error: unknown) => {
 /** Host descriptor contract is preserved; configuration is snapped per lifecycle. */
 export function createGameplayCore(host: HostContext) {
   const env = { ...host.env };
+  const raceOwnership = deepFreeze(JSON.parse(JSON.stringify(BUILD_RACE_OWNERSHIP)) as readonly RaceOwnership[]);
   const registrations = new Map<string, SystemRegistration>();
   const specs = new Map(defaults.map(spec => [spec.id, spec]));
   const featureModes = new Map<string, FeatureMode>();
@@ -89,6 +95,11 @@ export function createGameplayCore(host: HostContext) {
   let projection: SpellProjection | undefined;
   let composition: ActorComposition | undefined;
   let standingStones: StandingStoneSystem | undefined;
+  let races: RaceSystem | undefined;
+  registrations.set('races', { id:'races', domain:'races', requiresDatabase:true, observeUnavailable:true, start(context) {
+    races = new RaceSystem(context, host.mp, env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public');
+    races.start(); return () => races!.shutdown();
+  } });
   registrations.set('standing-stones', { id: 'standing-stones', domain: 'standing-stones', requiresDatabase: true,
     observeUnavailable: true, start(context) {
       const data = BUILD_DOMAINS.find(domain => domain.domain === 'standing-stones')!;
@@ -115,7 +126,11 @@ export function createGameplayCore(host: HostContext) {
     return Object.freeze({ id: spec.id, mode: mode(spec.id), status: missing.length ? 'UNSUPPORTED' as const : 'SUPPORTED' as const,
       catalog: Object.freeze({ domain: spec.domain ?? null, status: catalog?.status ?? 'UNSUPPORTED', limitations: catalog?.unsupported ?? [] }),
       missing: Object.freeze(missing), proof: Object.freeze(['runtime/tests/runtime.test.mjs', 'runtime/tests/database.test.mjs',
-        ...(spec.id === 'standing-stones' ? ['modules/standing-stone-system/tests/provider.test.mjs', 'runtime/tests/standing-stones.test.mjs'] : [])]),
+        ...(spec.id === 'standing-stones' ? ['modules/standing-stone-system/tests/provider.test.mjs', 'runtime/tests/standing-stones.test.mjs'] : []),
+        ...(spec.id === 'races' ? ['modules/race-system/tests/provider.test.mjs', 'runtime/tests/races.acceptance.mjs'] : [])]),
+      ...(spec.id === 'races' ? { ownership: raceOwnership,
+        observation: Object.freeze({ source:'mp.get(actorId, appearance).raceId', changeSignal:'onUpdateAppearanceAttempt',
+          resultAuthority:'NATIVE_CLIENT', hostMutations:0, limitations:['BASE_NPC_RACE_USED_BY_NATIVE_ADD_SPELL', 'MULTIPLAYER_RESULTS_UNVERIFIED'] }) } : {}),
       ...(spec.id === 'standing-stones' ? { ownership: Object.freeze({ grants: 'AETHERIUS_SERVER', results: 'NATIVE_CLIENT' }),
         playerFeedback: Object.freeze({ status: host.mp?.makeProperty && host.mp.set ? 'PARTIAL' : 'UNSUPPORTED',
           channel: 'OWNER_PROPERTY_DEBUG_NOTIFICATION', delivery: 'UNCONFIRMED', proof: ['runtime/tests/standing-stones.test.mjs'] }) } : {}),
@@ -131,7 +146,7 @@ export function createGameplayCore(host: HostContext) {
   function disposeNow() { wanted = false; initialized = false; controller.abort(); spike?.shutdown(); spike = undefined; scope.close(); }
   async function stopSystems() {
     for (const stop of stops.splice(0).reverse()) { try { await stop(); } catch { warn('system shutdown failed'); } }
-    await composition?.shutdown(); composition = undefined; standingStones = undefined;
+    await composition?.shutdown(); composition = undefined; standingStones = undefined; races = undefined;
     await projection?.shutdown(); projection = undefined;
   }
   async function boot(ticket: number) {
@@ -164,7 +179,13 @@ export function createGameplayCore(host: HostContext) {
       pool = host.pg.init();
       const schema = env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public';
       if (env.GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV === 'true') await applyMigrations(pool, BUILD_MIGRATIONS, schema);
-      await migrationStatus(pool, BUILD_MIGRATIONS, schema);
+      // C2 is optional. A missing race table disables races, while the approved
+      // standing-stone installation keeps using its already-applied foundation.
+      try { await migrationStatus(pool, BUILD_MIGRATIONS, schema); }
+      catch {
+        await migrationStatus(pool, BUILD_MIGRATIONS.filter(m => m.version !== '0005_gc_race_observation.sql'), schema);
+        failures.set('races', 'RACE_MIGRATION_UNAVAILABLE: apply 0005_gc_race_observation.sql through migrations:apply');
+      }
       db = { status: 'SUPPORTED', missing: Object.freeze([]) };
     } catch (error) {
       const code = safeCode(error);
@@ -176,6 +197,7 @@ export function createGameplayCore(host: HostContext) {
     projection = new SpellProjection({ pool: db.status === 'SUPPORTED' ? pool : undefined,
       unavailableReason: db.missing.join(' | '), mp: host.mp, schema: env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public',
       catalogs: [...catalogs.values()], identity: actors, actors, signal: controller.signal, warn,
+      nativeRecords: binding => races?.nativeKeys(binding) ?? new Set(),
       canProject: binding => current() && [...registrations.values()].some(system => !failures.has(system.id)
         && capability(specs.get(system.id)!).status === 'SUPPORTED'
         && (mode(system.id) === 'active' || (mode(system.id) === 'canary' && canary.has(binding.characterKey)))) });
@@ -190,13 +212,13 @@ export function createGameplayCore(host: HostContext) {
     for (const system of registrations.values()) {
       const spec = specs.get(system.id)!;
       const m = mode(system.id);
-      if (m === 'off' || failures.has(system.id) || (capability(spec).status !== 'SUPPORTED' && !system.observeUnavailable)) continue;
+      if (m === 'off' || (failures.has(system.id) && !system.observeUnavailable) || (capability(spec).status !== 'SUPPORTED' && !system.observeUnavailable)) continue;
       const systemScope = new Scope(); scope.add(() => systemScope.close());
       let systemActive = true; systemScope.add(() => { systemActive = false; });
       const systemProjection = projection;
       const systemComposition = composition;
       const context: SystemContext = Object.freeze({ id: system.id, mode: m, catalog: spec.domain ? catalogs.get(spec.domain) : undefined,
-        persistence: pool && db.status === 'SUPPORTED' ? Object.freeze({ pool, withTransaction, executeCommand }) : undefined,
+        persistence: pool && db.status === 'SUPPORTED' && !failures.has(system.id) ? Object.freeze({ pool, withTransaction, executeCommand }) : undefined,
         identity: actors, projection: Object.freeze({
           capability: () => systemProjection.capability(), onAck: (listener: Parameters<SpellProjection['onAck']>[0]) => systemProjection.onAck(listener),
           publish: (input: Parameters<SpellProjection['publish']>[0]) => {
@@ -205,6 +227,10 @@ export function createGameplayCore(host: HostContext) {
             return systemProjection.publish(input);
           }
         }), composition: Object.freeze({ register: (provider: Parameters<ActorComposition['register']>[0]) => systemScope.add(systemComposition.register(provider)),
+          inspect: (binding: SessionBinding) => {
+            if (!systemActive || !actors.isCurrent(binding)) return Promise.reject(Error('STALE_BINDING'));
+            return systemComposition.inspect(binding);
+          },
           recompose: (binding: SessionBinding) => {
             if (!systemActive || !context.canMutate(binding)) return Promise.resolve({ status: 'UNSUPPORTED' as const,
               reason: 'FEATURE_MODE_OR_BINDING_REFUSED', state: 'REJECTED' as const, items: [] });
@@ -266,6 +292,7 @@ export function createGameplayCore(host: HostContext) {
     mode,
     chooseStandingStone: (intent: ChoiceIntent) => standingStones?.choose(intent) ?? Promise.resolve({ status: 'UNSUPPORTED' as const,
       reason: failures.get('standing-stones') ?? 'STANDING_STONES_NOT_STARTED', committed: false }),
+    observeRace: (binding: SessionBinding) => races?.observe(binding) ?? Promise.resolve({status:'UNSUPPORTED' as const,raceKey:null,reason:'RACES_NOT_STARTED'}),
     get identity() { return actors; },
     get actorEvents() { return actors; },
     capabilityReport: report,

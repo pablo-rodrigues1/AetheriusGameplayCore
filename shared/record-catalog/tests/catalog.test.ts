@@ -87,6 +87,24 @@ test('every playable race and its grants match winner fields, without localized-
     assert.deepEqual(record.data.starting, Object.fromEntries(['Health', 'Magicka', 'Stamina'].map(stat => [stat, Number(row.fields.find(f => f.path === `Starting[${stat}]`)!.value)])));
   }
 });
+test('PerkToApply is followed in both domains; six racial perks retain exported entry values and condition evidence', () => {
+  const exported = readFileSync(new URL('PERK.jsonl', exportDir), 'utf8').trim().split(/\r?\n/).slice(1)
+    .map(line => JSON.parse(line) as {formid:string; fields:{path:string;value?:string;note?:string}[]});
+  assert.equal(races.records.filter(r => r.recordType === 'PERK').length, 6);
+  for (const domain of [stones,races]) for (const effect of domain.records.filter(r => r.recordType === 'MGEF')) {
+    const link = (effect.data.fields as Record<string,unknown>).PerkToApply;
+    if (typeof link !== 'string') continue;
+    const perk = domain.records.find(r => r.stableFormKey === link);
+    assert.ok(perk); assert.equal(perk.recordType,'PERK');
+    const address = encodeFormKey(perk.stableFormKey,'housecarl',perk.pluginKind).toLowerCase();
+    const row = exported.find(r => r.formid.toLowerCase() === address);
+    assert.ok(row);
+    for (const field of row.fields.filter(f => /^Effects\[\d+\]\.(EntryPoint|Value|Modification|Priority|Rank)$/.test(f.path))) {
+      assert.equal((perk.data.fields as Record<string,unknown>)[field.path],field.value);
+    }
+    assert.ok(perk.data.exportNotes, 'depth-limited conditions must retain notes rather than invent their contents');
+  }
+});
 for (const data of [stones, races]) test(`immutable boot-only lookup and port checks: ${data.domain}`, () => {
   const host = simulated(data);
   const catalog = loadDomain(data, host);

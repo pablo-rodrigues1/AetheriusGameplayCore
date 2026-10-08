@@ -119,3 +119,14 @@ B5b precisa de mudanças pequenas nestes pontos, mantendo contrato e feature fla
 - Client: reconciliador de perks/ranks e cutover dos writers `sweetTaffy*Perks` e
   `clientPerkApplier` somente quando o novo writer estiver ativo. B5b certifica
   entrega, nunca dano/cura/custo/resultado de efeitos.
+# Atualização C2
+
+Concessões RACE descrevem entrega pelo record e não geram AddSpell/RemoveSpell.
+O conjunto completo conserva suas origens; `portGrantSet` exclui os records
+nativos e todas as outras origens desses records. Records raciais da cabeça
+anterior também são preservados na transição. O runtime fornece os vínculos da
+aparência atual antes da reconciliação no reconnect, para proteger uma nova raça
+ainda não persistida. Bookkeeping anterior de autoria do Core é abandonado sem
+remover o spell quando ele passa a ter entrega racial. A observação racial usa
+`ActorComposition.inspect` e não solicita entrega ao port. Contratos e ActorState
+permanecem os da fundação. Detalhes em `modules/race-system/README.md`.

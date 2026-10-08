@@ -1,5 +1,21 @@
 # B1 — Runtime do GameplayCore
 
+**Atualização C2 (08/10/2026):** raças estão registradas na factory, off por padrão.
+O host fornece a raça pela aparência; o módulo grava uma observação na migration
+0005 e compõe grants RACE entregues pelo record. A observação usa `inspect`, sem
+publicação no port. A entrega normal protege records raciais, inclusive outras
+origens do mesmo record e a aparência atual durante reconnect. A ausência somente
+da migration racial desabilita races sem desabilitar pedras instaladas com 0001–0004.
+Ownership, ferramentas de explicação e ensaios reservados ao revisor estão em
+[`../modules/race-system/README.md`](../modules/race-system/README.md), que supersede
+as descrições anteriores de races como apenas um domínio sem persistência.
+O gerador agora precisa também de PERK.jsonl; a ownership usa classification/spells.jsonl.
+Typecheck/test/build copiam runtime/src para a staging dos testes do provider racial.
+O aceite C2 em `tests/races.acceptance.mjs` roda após as suítes históricas e o
+spike, no mesmo comando npm test, preservando todos os asserts e os ensaios de
+concorrência interna. Assim os boots repetidos com CRC dos plugins não competem
+com o polling curto de readiness da C1.
+
 Este documento substitui as instruções de ciclo de vida do README A6-S1. O spike
 A6-S2 continua em `spike-standing-stone/`, até C1. Os ADRs D1–D4 e D6 permanecem
 as fontes de arquitetura; esta ordem não certifica resultados de efeitos.

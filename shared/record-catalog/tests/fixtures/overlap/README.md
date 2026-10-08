@@ -1,5 +1,10 @@
 # Fixture de sobreposição — B2-fix1
 
+Atualização C2: PERK.jsonl contém o PERK real `00080D:Mundus.esp` alcançado pelo
+PerkToApply do MGEF do Guerreiro. Campos são extraídos do export A2, sem alterar
+o vínculo sintético da raça desta fixture. O manifesto conserva o epoch e ajusta
+row_count. O cenário continua destinado à identidade e composição compartilhadas.
+
 Derivada de `_work/exports/` (A2). Mantém o ativador do Guerreiro, seu SPEL e
 seu MGEF com os campos exportados. Uma raça jogável mantém Flags e Starting,
 mas seu ActorEffect é substituído **somente nesta fixture** pelo feitiço do

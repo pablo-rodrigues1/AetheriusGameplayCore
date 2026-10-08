@@ -22,6 +22,9 @@ for (const name of ['shared', 'tools', 'database', 'catalog', 'tsconfig.base.jso
   await cp(path.join(root, name), path.join(staging, name), { recursive: true, filter });
 if (!flags.includes('--foundation')) await cp(path.join(root, 'modules'), path.join(staging, 'modules'), { recursive: true, filter });
 await mkdir(path.join(staging, 'runtime'), { recursive: true });
+// C2's provider tests exercise the same runtime delivery boundary and signed
+// offline definition view. Keep these sources in the disposable staging tree.
+await cp(path.join(root, 'runtime/src'), path.join(staging, 'runtime/src'), { recursive: true, filter });
 // Old B3 tsconfig explicitly names runtime/node_modules/@types. This junction
 // supplies the package's own declared dependencies without changing that config.
 const junction = path.join(staging, 'runtime/node_modules');
