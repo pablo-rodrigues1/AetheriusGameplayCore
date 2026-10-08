@@ -36,6 +36,12 @@ it does not expose `commands.getActiveCharacterData()`. In the current local
 autowhitelist path, `registerActiveCharacter` fabricates `character.id` from
 `profileId`. The spike reads the actor profile directly with `mp.get(actorId, 'profileId')` and uses `profile:<profileId>` as the provisional key, following the D1 proposal. Missing, zero, negative, or invalid profile IDs veto activation and are logged. This is not the session-bound canonical `CharacterKey` and must be replaced by an identity port before a durable feature ships. The active-actor scan follows the existing host bound of users 1–10; profile IDs are not enumerated.
 
+Activation events carry the placed reference ID, while the catalog contains
+base activator IDs. The handler reads that reference's `baseDesc`, resolves it
+through `mp.getIdFromDesc`, and compares the resulting runtime ID with the
+catalog IDs resolved during initialization. Missing or invalid base descriptions
+are delegated to the previous handler without logging.
+
 Run the integration test from the workspace root with
 `AETHERIUS_TEST_DATABASE_URL` set from `_work/db.env`:
 

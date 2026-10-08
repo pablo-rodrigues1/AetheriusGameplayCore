@@ -13,26 +13,52 @@ const pool = new Pool({ connectionString: databaseUrl, max: 4 });
 const logs = [];
 let serviceSequence = 0;
 
+function canonicalDescriptor(desc) {
+  const match = /^([0-9a-f]+):(.+)$/iu.exec(desc);
+  return match ? `${Number.parseInt(match[1], 16).toString(16)}:${match[2]}` : desc;
+}
+
 function fakeMp({ activeActor = null, profileId = 7 } = {}) {
   const ids = new Map();
   const descs = new Map();
+  const referenceBases = new Map();
+  const throwingBaseReferences = new Set();
+  const profileIds = new Map();
   let nextId = 0x1000;
+  let nextReferenceId = 0xe7bdd;
+  if (activeActor !== null) profileIds.set(activeActor, profileId);
   const mp = {
     onActivate: undefined,
     calls: [],
     getIdFromDesc(desc) {
-      if (!ids.has(desc)) {
+      const key = canonicalDescriptor(desc);
+      if (!ids.has(key)) {
         nextId += 1;
-        ids.set(desc, nextId);
+        ids.set(key, nextId);
         descs.set(nextId, desc);
       }
-      return ids.get(desc);
+      return ids.get(key);
     },
     getDescFromId(id) { return descs.get(id) ?? `000000:Skyrim.esm`; },
     get(actorId, property) {
-      if (property !== 'profileId' || actorId !== activeActor) return undefined;
-      return profileId;
+      if (property === 'baseDesc') {
+        if (throwingBaseReferences.has(actorId)) throw new Error('reference has no base');
+        return referenceBases.get(actorId);
+      }
+      if (property === 'profileId') return profileIds.get(actorId);
+      return undefined;
     },
+    referenceForBase(baseDesc) {
+      nextReferenceId += 1;
+      referenceBases.set(nextReferenceId, baseDesc);
+      return nextReferenceId;
+    },
+    referenceWithBaseError() {
+      nextReferenceId += 1;
+      throwingBaseReferences.add(nextReferenceId);
+      return nextReferenceId;
+    },
+    setProfileId(actorId, value) { profileIds.set(actorId, value); },
     callPapyrusFunction(callType, className, functionName, self, args) {
       mp.calls.push({ callType, className, functionName, self, args });
       return true;
@@ -179,9 +205,10 @@ test('onActivate veta sincronamente, persiste em segundo plano e shutdown restau
   mp.onActivate = oldHandler;
   const { service, characterKey } = newService(mp);
   await service.initialize();
-  const target = mp.getIdFromDesc('0D232F:Skyrim.esm');
+  const target = mp.referenceForBase('d232f:Skyrim.esm');
+  assert.notEqual(target, mp.getIdFromDesc('0D232F:Skyrim.esm'));
   const actor = 0x206;
-  mp.get = (actorId, property) => actorId === actor && property === 'profileId' ? 108549 : undefined;
+  mp.setProfileId(actor, 108549);
   const result = mp.onActivate(target, actor);
   assert.equal(result, false);
   assert.equal(typeof result?.then, 'undefined');
@@ -204,7 +231,36 @@ test('ativacao ignorada que nao e pedra nao gera log', async () => {
   const { service } = newService(mp);
   await service.initialize();
   const logsBefore = logs.length;
-  assert.equal(mp.onActivate(0x7ffe, 0x206), undefined);
+  const target = mp.referenceForBase('7ffe:Skyrim.esm');
+  assert.equal(mp.onActivate(target, 0x206), undefined);
+  assert.equal(logs.length, logsBefore);
+  service.shutdown();
+});
+
+test('referencia cuja base nao e pedra e delegada sem log', async () => {
+  const calls = [];
+  const mp = fakeMp();
+  mp.onActivate = (...args) => { calls.push(args); return 'delegated'; };
+  const { service } = newService(mp);
+  await service.initialize();
+  const nonStoneTarget = mp.referenceForBase('123456:Skyrim.esm');
+  const logsBefore = logs.length;
+  assert.equal(mp.onActivate(nonStoneTarget, 0x206), 'delegated');
+  assert.deepEqual(calls, [[nonStoneTarget, 0x206]]);
+  assert.equal(logs.length, logsBefore);
+  service.shutdown();
+});
+
+test('erro ao ler baseDesc delega sem log', async () => {
+  const calls = [];
+  const mp = fakeMp();
+  mp.onActivate = (...args) => { calls.push(args); return 'delegated'; };
+  const { service } = newService(mp);
+  await service.initialize();
+  const target = mp.referenceWithBaseError();
+  const logsBefore = logs.length;
+  assert.equal(mp.onActivate(target, 0x206), 'delegated');
+  assert.deepEqual(calls, [[target, 0x206]]);
   assert.equal(logs.length, logsBefore);
   service.shutdown();
 });
@@ -214,11 +270,10 @@ test('ator sem perfil recebe veto e nao grava a ativacao', async () => {
   const { service } = newService(mp);
   await service.initialize();
   const cases = [[0x207, undefined], [0x208, 0], [0x209, -1]];
-  mp.get = (actorId, property) => property === 'profileId'
-    ? cases.find(([candidate]) => candidate === actorId)?.[1]
-    : undefined;
   for (const [actor, profileId] of cases) {
-    assert.equal(mp.onActivate(mp.getIdFromDesc('0D232F:Skyrim.esm'), actor), false);
+    mp.setProfileId(actor, profileId);
+    const target = mp.referenceForBase('d232f:Skyrim.esm');
+    assert.equal(mp.onActivate(target, actor), false);
     assert.equal(profileId === undefined || profileId <= 0, true);
   }
   await new Promise(resolve => setTimeout(resolve, 50));

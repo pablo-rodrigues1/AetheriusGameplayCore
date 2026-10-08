@@ -274,7 +274,21 @@ export function createStandingStoneSpike({ mp, pg, log }) {
   }
 
   function activation(targetId, casterId) {
-    const stone = [...stoneRuntimeIds].find(([, runtimeId]) => runtimeId === targetId)?.[0] ?? null;
+    let baseRuntimeId;
+    try {
+      const baseDesc = mp.get(targetId, 'baseDesc');
+      if (typeof baseDesc !== 'string' || !/^[0-9a-f]+:[^:]+$/u.test(baseDesc)) {
+        return typeof previousOnActivate === 'function' ? previousOnActivate(targetId, casterId) : undefined;
+      }
+      baseRuntimeId = mp.getIdFromDesc(baseDesc);
+      if (!Number.isSafeInteger(baseRuntimeId) || baseRuntimeId <= 0) {
+        return typeof previousOnActivate === 'function' ? previousOnActivate(targetId, casterId) : undefined;
+      }
+    } catch {
+      return typeof previousOnActivate === 'function' ? previousOnActivate(targetId, casterId) : undefined;
+    }
+
+    const stone = [...stoneRuntimeIds].find(([, runtimeId]) => runtimeId === baseRuntimeId)?.[0] ?? null;
     if (!stone || !STONES[stone] || !stoneRuntimeIds.has(stone)) {
       return typeof previousOnActivate === 'function' ? previousOnActivate(targetId, casterId) : undefined;
     }
