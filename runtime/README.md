@@ -1,47 +1,147 @@
-# A6-S1: bundle CommonJS (spike descartável)
+# B1 — Runtime do GameplayCore
 
-Este runtime testa D3 antes do G-ARQ. `createGameplayCore({ mp, pg, env, log })`
-expõe `initialize`, `shutdown`, `healthCheck` e `info`. A versão vem do package.json
-da raiz. As sete features permanecem em `off`; nenhum serviço do host é usado.
-O único registro é um listener de diagnóstico no `process`, no evento
-`aetherius:gameplay-core:health-check`. Shutdown remove exatamente esse listener.
-O ciclo é idempotente, inclusive ao inicializar duas vezes sem shutdown.
-Isso não certifica listeners nativos de jogo nem capacidades de gameplay.
+Este documento substitui as instruções de ciclo de vida do README A6-S1. O spike
+A6-S2 continua em `spike-standing-stone/`, até C1. Os ADRs D1–D4 e D6 permanecem
+as fontes de arquitetura; esta ordem não certifica resultados de efeitos.
 
-Na raiz do Core:
+Na raiz do Core, com Node >=22.14 e npm 10:
 
 ```powershell
-Push-Location runtime
-npm.cmd ci --workspaces=false
-Pop-Location
-npm run typecheck:runtime
+npm ci
+npm run typecheck
 npm run build
+npm test
 ```
 
-As dependências de build ficam em `runtime/node_modules`; o build gera apenas
-`dist/aetherius-gameplay-core.cjs`, sem dependências externas em runtime. A entrada
-`default` de `@aetherius/contracts` aponta ao fonte TS para resolução pelo bundler.
-Ela não promete executar TypeScript diretamente pelo Node 22 sem um loader.
+Um comando instala as dependências de todos os workspaces, incluindo os pacotes
+novos de `modules/*`. O lockfile da raiz foi reconciliado offline; instalação
+limpa pela rede fica com o revisor. Scripts agregados descobrem os pacotes a cada
+execução. Pacotes sem comando de build são fonte puro; typecheck usa tsc quando
+há tsconfig. Todos os testes disponíveis são executados, e falha retorna exit 1.
+Os fontes de shared/tools/modules são copiados para `runtime/.packages/Core`;
+compilação, sync-data e fixtures geradas escrevem somente nessa cópia. As ferramentas
+vêm das dependências declaradas no Core. Em instalação com dependências hoisted,
+o runner fornece a ponte exigida pelos tsconfigs históricos de B3/B4.
 
-No servidor final, o dev aplica o descriptor de `gameplay-core` de
-`phase0-basic.js`, distribui o `.cjs`, recopia o gamemode para o diretório de
-execução e configura em `gamemode/.env`:
+Para testes, fornecer `AETHERIUS_TEST_DATABASE_URL`, exclusivamente de banco local
+`aetherius_test`, sem imprimir a variável. Os testes B2 também precisam dos cinco
+JSONL originais em `_work/exports` e dos plugins reais e manifesto no Data do host.
+Esses artefatos não são substituídos por records fabricados. Caminhos alternativos:
+`GAMEPLAY_CORE_TEST_EXPORTS` e `GAMEPLAY_CORE_TEST_DATA_DIR`. As junções de fixtures
+são somente para leitura pelos testes B2. O teste `npm test` completo contém um caso
+B3 que abre brevemente um socket local, e portanto é executado pelo revisor fora do
+sandbox. `npm test -- --unit` exclui explicitamente a integração B3; a integração B1
+contra PostgreSQL continua obrigatória, assim como os 12 casos do spike. O subconjunto
+`npm run test:foundation` executa shared/tools/runtime, sem os módulos históricos.
+Nenhum destes subconjuntos equivale à suíte completa.
 
-```dotenv
-ENABLE_GAMEPLAY_CORE=true
-GAMEPLAY_CORE_BUNDLE=C:/deploy/aetherius-gameplay-core.cjs
+O build incorpora os JSON dos domínios B2 e todas as migrations SQL B3 no arquivo
+`dist/aetherius-gameplay-core.cjs`. Não há dependência de npm em runtime: apenas
+módulos internos do Node. O host injeta o seu pool existente por `pg.init()`;
+o runtime não constrói nem fecha pools e não lê URL de banco.
+
+O descriptor existente permanece compatível com `{ mp, pg, env, log }` e com os
+métodos `initialize`, `shutdown`, `healthCheck`, `info`. A factory não inicia nada.
+`initialize` serializa boot e substituição por uma coordenação guardada em `process`
+com Symbol.for, inclusive quando o require cache foi apagado. A nova instância
+aguarda shutdown da anterior. Shutdown aborta o signal dos sistemas, remove os hooks
+que ainda possui, cancela os timers e desliga sistemas em ordem inversa. Retentativa
+no mesmo objeto reconstrói as dependências. Falha de sistema libera seu próprio scope.
+Operações assíncronas de um sistema devem verificar `signal` e `identity.isCurrent`
+depois de cada await antes de projetar; o runtime não pode cancelar um comando SQL
+que já foi enviado pelo domínio.
+
+Todos os hooks de propriedade mp passam pelo broker. Ele chama o handler anterior
+e os sistemas e preserva um veto síncrono `false`. Não restaura sobre um handler
+posterior escrito por outra pessoa. `mp.on` não expõe unsubscribe no C++ atual:
+um único bridge de disconnect por host permanece no processo e mantém somente os
+assinantes atuais. Shutdown remove os assinantes, e recarga não adiciona outro
+listener nativo. Isto é diferente de um handler vivo da instância anterior.
+
+Identidade lê `mp.get(0, 'onlinePlayers')` e `mp.get(actorId, 'profileId')`, nunca
+varre userIds ou perfis. Profile positivo gera as chaves `profile:<profile_id>`.
+O host precisa declarar `offlineMode: false`; modo offline/contexto desconhecido
+fica UNSUPPORTED. Para desenvolvimento local somente, a opção explícita
+`GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY=true` aceita esse perfil, sem alegar que foi
+autenticado. `getUserByActor` associa o ator ao evento nativo disconnect, inclusive
+userId zero, e cada nova ligação recebe UUID como epoch. Sem esse par de APIs, só
+a observação periódica detecta desconexões; reconexões invisíveis entre dois polls
+não são certificadas. O port verifica o binding completo e a presença online.
+
+`actor-ready` é PARTIAL, `ONLINE_DELAY_APPROXIMATION`, `certified:false`: disparado
+uma vez por binding, três segundos após a primeira detecção online. O temporizador
+fica somente em `actors.ts`. Não é ACK do cliente. O host envia learnedSpells no
+spawn, mas não confirma que remoteServer.ts terminou removeAllSpells/learnSpells.
+Mudança mínima para sinal certo: ACK do cliente após aplicar o spawn/learnedSpells,
+validado no host contra ator, conexão e geração de spawn; expor callback ao gamemode.
+Até B5, o runtime não declara a entrega da projeção como certificada.
+
+Configuração por sistema: `GAMEPLAY_CORE_MODE_STANDING_STONES`, `_RACES`, `_CLASSES`,
+`_RELIGION`, `_SPELLS`, `_PERKS`, `_DAMAGE` e qualquer novo ID transformado em maiúsculas
+com hífens trocados por underscores. Valores: off/audit/shadow/canary/active; padrão off.
+Valor inválido gera aviso e off. Canary recebe a lista explícita, separada por vírgula,
+`GAMEPLAY_CORE_CANARY_CHARACTERS=profile:108549`. `canMutate(binding)` permite somente
+active ou personagem selecionado em canary, com binding atual. Um sistema deve usar
+essa guarda antes de enviar comandos ao dono do fato; possuir um contexto audit/shadow
+não autoriza mutação. A persistência é API interna confiável, não uma barreira de segurança
+contra código malicioso. O flag histórico `ENABLE_STANDING_STONE_SPIKE=true` permanece
+independente destes modos e aparece separado no relatório.
+
+`capabilityReport()` lista por sistema modo, disponibilidade de dependências, domínio,
+limitações de links do catálogo, migrations requeridas, instrução de manutenção e provas.
+`registered`/`started` distinguem dependências disponíveis de código de sistema ligado.
+SUPPORTED nessa lista é disponibilidade das dependências do runtime, não semântica de
+perks/feitiços nem certificação de resultado. B2 só entregou standing-stones e races;
+classes/religion/spells/perks/damage ficam UNSUPPORTED até seus catálogos existirem.
+
+Migrations nunca são aplicadas por padrão. Em banco ausente, hash diferente ou migration
+pendente, o runtime mantém healthCheck=true e indisponibiliza os dependentes do banco.
+O catálogo de raça ainda pode estar disponível. Aplicação de desenvolvimento no boot:
+`GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV=true`; schema opcional
+`GAMEPLAY_CORE_DATABASE_SCHEMA`, padrão public. Manutenção explícita:
+
+```powershell
+npm run migrations:apply -- <caminho-absoluto-do-gamemode/core/pg.js> [schema]
+npm run migrations:status -- <caminho-absoluto-do-gamemode/core/pg.js> [schema]
 ```
 
-Caminhos relativos são resolvidos contra `process.cwd()` do servidor, não contra
-o arquivo temporário usado pelo SkyMP. O registry registra falha se o caminho,
-a factory ou os quatro métodos estiverem ausentes; os outros módulos continuam
-o boot. A flag desligada dispensa o bundle. O pool injetado é o wrapper existente
-`core/pg.js`; não se cria pool nem se faz consulta neste spike.
+O comando de manutenção usa e fecha o wrapper do gamemode somente no processo CLI.
+Ele não cria um pool adicional. Credenciais e causas de erros não entram nos logs.
 
-O registry oferece shutdown, mas `phase0-basic.js` não o conecta ao encerramento
-do host. O aceite verifica a chamada explícita de `shutdownAll` e o reinício
-no mesmo processo. Integrar o encerramento/reload automático pertence ao B1.
+Registro mínimo (antes de initialize):
 
-O verificador da ordem fica em `_work/evidence/A6-S1/verify.cjs` na raiz do
-workspace. Usa o gamemode copiado por `run-local-server.ps1 -Refresh`, fora do
-SkyMP, com `mp` indefinido, e as dependências já instaladas nessa cópia.
+```ts
+core.register({
+  id: 'races', domain: 'races', requiresDatabase: false,
+  start(ctx) {
+    const unsubscribe = ctx.actors.onReady(({ binding }) => {
+      if (ctx.signal.aborted || !ctx.identity.isCurrent(binding)) return;
+      // Consumir catálogo, compor com o dono do fato e projetar através de B5.
+      // Mutação só se ctx.canMutate(binding), com revisão/epoch conferidos após await.
+    });
+    return unsubscribe;
+  }
+});
+await core.initialize();
+```
+
+Específico do spike: tabela fixa de pedras/feitiços, três tabelas spike_, ledger e
+lock próprios provisórios, Papyrus AddSpell/RemoveSpell direto, snapshot de projeção,
+reset remove/add pós-spawn, identidade provisória no handler de ativação e flag dedicada.
+No bundle B1 seu hook passa pelo broker. A reidratação provisória do spike permanece independente do IdentityPort, inclusive em offlineMode, atrás da mesma flag.
+O spike preserva seu polling e delay legados, isolados no seu arquivo, para manter A6-S2;
+esses timers são rastreados e cancelados em shutdown. C1/B5 substituem essas peças.
+
+Verificação no host nativo pelo revisor, fora do sandbox, sem tocar UDP 7777:
+
+```powershell
+node runtime/review-host.mjs <workspace> <evidence-dir-B1-reviewer> <porta-UDP-livre>
+```
+
+O script exige `AETHERIUS_TEST_DATABASE_URL`, rejeita 7777, confere a porta, usa
+`core/pg.js` real, schema isolado e o addon real. Verifica boot, catálogo, migrations,
+health listener único, substituição de bundle após `mp.clear` e require sem cache,
+e reinitialize. Somente sua sintaxe foi conferida nesta ordem. Não executa o watcher
+do TS nem login/jogo: o relatório contém o roteiro adicional da recarga efetiva de
+`phase0-basic.js` numa cópia separada do servidor completo.
+

@@ -29,6 +29,7 @@ export class Hooks {
   private entries = new Map<string, { previous: Hook | undefined; dispatch: Hook; listeners: Set<Hook> }>();
   constructor(private mp: RuntimeMp | undefined, private scope: Scope, private warn: (s: string) => void) {}
   register(name: `on${string}`, listener: Hook): () => void {
+    if (!/^on[A-Z][A-Za-z0-9]*$/.test(name)) throw new Error('Invalid mp property hook name');
     if (!this.mp) throw new Error('UNSUPPORTED: host hook unavailable');
     let entry = this.entries.get(name);
     if (!entry) {

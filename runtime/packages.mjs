@@ -5,9 +5,10 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 const root = fileURLToPath(new URL('../', import.meta.url));
-const staging = path.join(root, 'runtime/.packages/Core');
 const [operation, ...flags] = process.argv.slice(2);
 if (!['typecheck', 'test', 'build'].includes(operation)) throw Error('Usage: packages.mjs typecheck|test|build [--foundation] [--unit]');
+// A fresh snapshot avoids stale source/tests when another order removes a file.
+const staging = path.join(root, 'runtime/.packages', `${operation}-${process.pid}`, 'Core');
 const runtimeRequire = createRequire(new URL('./package.json', import.meta.url));
 const tooling = path.dirname(path.dirname(runtimeRequire.resolve('typescript/package.json')));
 const npmCli = process.env.npm_execpath;
@@ -27,6 +28,19 @@ const junction = path.join(staging, 'runtime/node_modules');
 if (!existsSync(junction)) await symlink(tooling, junction, 'junction');
 const coreJunction = path.join(staging, 'node_modules');
 if (!existsSync(coreJunction)) await symlink(tooling, coreJunction, 'junction');
+if (operation === 'test') {
+  // B2's immutable characterization tests read real export/plugin artifacts.
+  // These are read-only fixture junctions, never synthetic replacement records.
+  const fixtures = [
+    [path.join(staging, '../_work/exports'), process.env.GAMEPLAY_CORE_TEST_EXPORTS ?? path.resolve(root, '../_work/exports')],
+    [path.join(staging, '../aetherius-server/build/dist/server/data'), process.env.GAMEPLAY_CORE_TEST_DATA_DIR ?? path.resolve(root, '../aetherius-server/build/dist/server/data')]
+  ];
+  for (const [target, source] of fixtures) {
+    if (!existsSync(source)) throw Error(`Required B2 test artifacts missing: ${source}`);
+    await mkdir(path.dirname(target), { recursive: true });
+    if (!existsSync(target)) await symlink(source, target, 'junction');
+  }
+}
 const env = { ...process.env, PATH: `${path.join(tooling, '.bin')}${path.delimiter}${process.env.PATH}`, NODE_PATH: tooling };
 let failures = 0;
 function run(directory, script, command) {
@@ -40,6 +54,9 @@ for (const group of ['shared', 'tools', ...flags.includes('--foundation') ? [] :
     const directory = path.join(staging, group, dir.name);
     if (!existsSync(path.join(directory, 'package.json'))) continue;
     const manifest = JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'));
+    const dependencies = path.join(root, group, dir.name, 'node_modules');
+    if (existsSync(dependencies)) await symlink(dependencies, path.join(directory, 'node_modules'), 'junction');
+    if (manifest.name === 'aetherius-enemy-system') await mkdir(path.join(directory, 'reports'), { recursive: true });
     if (operation === 'test' && flags.includes('--unit') && manifest.name === '@aetherius/persistence') {
       run(directory, 'build'); run(directory, 'unit tests', ['--test', 'tests/unit.test.mjs']);
       console.log('B3 integration not executed: one case opens a local listening socket; reviewer runs npm test');

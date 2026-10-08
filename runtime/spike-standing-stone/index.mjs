@@ -93,7 +93,7 @@ function safeCall(log, fn) {
   }
 }
 
-export function createStandingStoneSpike({ mp, pg, log, actors }) {
+export function createStandingStoneSpike({ mp, pg, log }) {
   const pool = pg.init();
   const stoneRuntimeIds = new Map();
   const spellRuntimeIds = new Map();
@@ -105,7 +105,6 @@ export function createStandingStoneSpike({ mp, pg, log, actors }) {
   let polling = false;
   let requestSequence = 0;
   const spawnTimers = new Set();
-  const subscriptions = [];
 
   function actorRef(actorId) {
     return { type: 'form', desc: mp.getDescFromId(actorId) };
@@ -119,6 +118,7 @@ export function createStandingStoneSpike({ mp, pg, log, actors }) {
   }
 
   function papyrus(method, actorId, grant) {
+    if (!initialized) return; // Async database work from a retired instance cannot project.
     const args = method === 'AddSpell' ? [spellRef(grant), false] : [spellRef(grant)];
     return safeCall(log, () => mp.callPapyrusFunction('method', 'Actor', method, actorRef(actorId), args));
   }
@@ -339,28 +339,15 @@ export function createStandingStoneSpike({ mp, pg, log, actors }) {
     activateHandler = activation;
     mp.onActivate = activateHandler;
     initialized = true;
-    if (actors) {
-      subscriptions.push(actors.onReady(({ binding }) => {
-        const { actorId } = binding.actorRef;
-        const { characterKey } = binding;
-        activeActors.set(actorId, characterKey);
-        void rehydrate(characterKey, actorId).then(() => {
-          if (initialized && actors.isCurrent(binding)) resendAfterSpawn(characterKey, actorId, 0);
-        }).catch(() => log.info('[standing-stone] actor-ready rehydration failed'));
-      }));
-      subscriptions.push(actors.onUnbound(binding => activeActors.delete(binding.actorRef.actorId)));
-    } else {
-      pollTimer = setInterval(() => { void scanActiveActors(); }, ACTIVE_POLL_MS);
-      if (typeof pollTimer.unref === 'function') pollTimer.unref();
-      await scanActiveActors();
-    }
+    pollTimer = setInterval(() => { void scanActiveActors(); }, ACTIVE_POLL_MS);
+    if (typeof pollTimer.unref === 'function') pollTimer.unref();
+    await scanActiveActors();
   }
 
   function shutdown() {
     if (pollTimer) clearInterval(pollTimer);
     for (const timer of spawnTimers) clearTimeout(timer);
     spawnTimers.clear();
-    for (const unsubscribe of subscriptions.splice(0)) unsubscribe();
     pollTimer = undefined;
     if (mp.onActivate === activateHandler) mp.onActivate = previousOnActivate;
     activeActors.clear();

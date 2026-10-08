@@ -23,7 +23,6 @@ export function createStandingStoneSpike(args: {
     release(): void;
   }> } };
   log: { info(message: string): void };
-  actors?: import('../src/actors.js').Actors;
 }): {
   initialize(): Promise<void>;
   shutdown(): void;

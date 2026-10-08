@@ -109,6 +109,8 @@ export function createGameplayCore(host: HostContext) {
   async function boot(ticket: number) {
     const current = () => wanted && generation === ticket;
     if (!current()) return;
+    if (stopTask) await stopTask;
+    if (!current()) return;
     if (coordinator.active && coordinator.active !== api) await coordinator.active.shutdown();
     if (!current()) return;
     coordinator.active = api;
@@ -134,7 +136,7 @@ export function createGameplayCore(host: HostContext) {
       db = { status: 'SUPPORTED', missing: Object.freeze([]) };
     } catch (error) {
       const code = safeCode(error);
-      db = { status: 'UNSUPPORTED', missing: Object.freeze([code, instruction]) };
+      db = { status: 'UNSUPPORTED', missing: Object.freeze([code, `Required migrations: ${BUILD_MIGRATIONS.map(m => m.version).join(', ')}`, instruction]) };
       warn(`persistence unavailable: ${code}; ${instruction}`);
     }
     if (!current()) return;
@@ -160,19 +162,24 @@ export function createGameplayCore(host: HostContext) {
     }
     if (env.ENABLE_STANDING_STONE_SPIKE === 'true' && host.mp && pool) {
       let releaseHook: (() => void) | undefined;
+      let legacyHook: Hook | undefined;
       const view = new Proxy(host.mp, { get(target, key) {
-        if (key === 'onActivate') return undefined;
+        if (key === 'onActivate') return legacyHook;
         const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
       }, set(_target, key, value) {
         if (key !== 'onActivate') throw new Error('Spike cannot write host properties');
-        releaseHook?.(); releaseHook = value ? hooks.register('onActivate', value as Hook) : undefined; return true;
+        releaseHook?.(); legacyHook = value as Hook | undefined;
+        releaseHook = value ? hooks.register('onActivate', value as Hook) : undefined; return true;
       } });
-      spike = createStandingStoneSpike({ mp: view as StandingStoneMp, pg: { init: () => pool! }, log: host.log, actors });
+      // Preserve the approved offline spike's provisional identity/reconnect path.
+      // Production systems use Actors/IdentityPort; C1 will replace the spike.
+      spike = createStandingStoneSpike({ mp: view as StandingStoneMp, pg: { init: () => pool! }, log: host.log });
       try { await spike.initialize(); }
       catch (error) { spike.shutdown(); spike = undefined; warn(`standing-stone spike unavailable: ${safeCode(error)}`); }
     }
     if (!current()) { disposeNow(); await stopSystems(); return; }
     initialized = true; warn(`bundle ${BUNDLE_VERSION}; initialized; active instances=1`);
+    for (const item of report().systems) if (item.status === 'UNSUPPORTED') warn(`${item.id}: UNSUPPORTED; ${item.missing.join(' | ')}`);
   }
   const api = Object.freeze({
     initialize(): Promise<void> {
@@ -193,7 +200,7 @@ export function createGameplayCore(host: HostContext) {
     register(system: SystemRegistration): void {
       if (wanted || initialized) throw new Error('Register systems before initialize');
       if (!/^[a-z][a-z0-9-]*$/.test(system.id) || registrations.has(system.id)) throw new Error('Invalid/duplicate system id');
-      registrations.set(system.id, system);
+      registrations.set(system.id, Object.freeze({ ...system }));
       const prior = specs.get(system.id);
       const domain = system.domain ?? prior?.domain;
       specs.set(system.id, { id: system.id, ...(domain ? { domain } : {}), requiresDatabase: system.requiresDatabase ?? prior?.requiresDatabase ?? true });

@@ -50,3 +50,14 @@ node --test AetheriusGameplayCore/runtime/spike-standing-stone/index.test.mjs
 ```
 
 The tests truncate only the spike tables in the disposable test database.
+
+## B1 (07/10/2026) — supersessão parcial
+
+A descrição acima da varredura de usuários 1–10 foi substituída: a execução isolada
+usa `onlinePlayers` (OnlinePlayersBinding.cpp). Dentro do bundle, o hook pertence
+ao broker. Reidratação e identidade provisórias continuam funcionando em offlineMode
+atrás da mesma flag, com o delay legado isolado no spike.
+Os timers da execução isolada são rastreados e cancelados no shutdown. O guard de
+Papyrus impede projeção por instância encerrada. Identidade e projeção deste slice
+continuam provisórias; as limitações e opções atuais estão em `../README.md`.
+

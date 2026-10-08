@@ -79,7 +79,9 @@ export class Actors implements IdentityPort {
       : { status: 'UNSUPPORTED' as const, reason: 'No live authenticated profile binding (offline requires explicit development opt-in)' };
   }
   isCurrent(binding: SessionBinding): boolean {
-    return this.bindings.get(binding.actorRef.actorId) === binding && this.online().includes(binding.actorRef.actorId)
+    const live = this.bindings.get(binding.actorRef.actorId);
+    return !!live && live.epoch === binding.epoch && live.profileKey === binding.profileKey && live.characterKey === binding.characterKey
+      && this.online().includes(binding.actorRef.actorId)
       && this.profile(binding.actorRef.actorId) === Number(binding.profileKey.slice(8));
   }
   onReady(fn: (event: ActorReady) => void): () => void { this.ready.add(fn); return this.scope.add(() => this.ready.delete(fn)); }
