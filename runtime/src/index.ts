@@ -10,6 +10,9 @@ import type { StandingStoneMp } from '../spike-standing-stone/index.mjs';
 import { Actors } from './actors.js';
 import { Hooks, Scope } from './scope.js';
 import type { Hook, HostContext } from './host.js';
+import { SpellProjection } from './projection/index.js';
+export { SpellProjection } from './projection/index.js';
+export type { ProjectionResult, ProjectionOutcome, ProjectionItem } from './projection/index.js';
 export type { HostContext, RuntimeMp } from './host.js';
 export type { ActorReady } from './actors.js';
 
@@ -22,6 +25,7 @@ export interface SystemContext {
   readonly catalog: DomainCatalog | undefined;
   readonly persistence: { readonly pool: PoolPort; readonly withTransaction: typeof withTransaction; readonly executeCommand: typeof executeCommand } | undefined;
   readonly identity: Actors;
+  readonly projection: Pick<SpellProjection, 'publish' | 'onAck' | 'capability'>;
   readonly actors: Pick<Actors, 'onReady' | 'onUnbound'>;
   readonly hooks: { register(name: `on${string}`, listener: Hook): () => void };
   readonly log: HostContext['log'];
@@ -74,6 +78,7 @@ export function createGameplayCore(host: HostContext) {
   const stops: (() => void | Promise<void>)[] = [];
   const failures = new Map<string, string>();
   let spike: ReturnType<typeof createStandingStoneSpike> | undefined;
+  let projection: SpellProjection | undefined;
   function warn(message: string) { host.log.info(`[gameplay-core] ${message}`); }
   function mode(id: string): FeatureMode {
     let value = featureModes.get(id);
@@ -99,11 +104,13 @@ export function createGameplayCore(host: HostContext) {
   function report() {
     return Object.freeze({ version: BUNDLE_VERSION, initialized, database: Object.freeze({ ...db }),
       actorReady: Object.freeze({ status: 'PARTIAL', signal: 'ONLINE_DELAY_APPROXIMATION', limitations: actors.limitations, proof: ['runtime/tests/runtime.test.mjs'] }),
+      projection: projection?.capability() ?? Object.freeze({ status: 'UNSUPPORTED', reason: 'Runtime has not initialized' }),
       systems: Object.freeze([...specs.values()].map(capability)),
       spike: Object.freeze({ enabled: env.ENABLE_STANDING_STONE_SPIKE === 'true', running: !!spike }) });
   }
   function disposeNow() { wanted = false; initialized = false; controller.abort(); spike?.shutdown(); spike = undefined; scope.close(); }
   async function stopSystems() {
+    await projection?.shutdown(); projection = undefined;
     for (const stop of stops.splice(0).reverse()) { try { await stop(); } catch { warn('system shutdown failed'); } }
   }
   async function boot(ticket: number) {
@@ -140,6 +147,13 @@ export function createGameplayCore(host: HostContext) {
       warn(`persistence unavailable: ${code}; ${instruction}`);
     }
     if (!current()) return;
+    const canary = new Set((env.GAMEPLAY_CORE_CANARY_CHARACTERS ?? '').split(',').map(s => s.trim()).filter(s => /^profile:[1-9][0-9]*$/.test(s)));
+    projection = new SpellProjection({ pool: db.status === 'SUPPORTED' ? pool : undefined,
+      unavailableReason: db.missing.join(' | '), mp: host.mp, schema: env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public',
+      catalogs: [...catalogs.values()], identity: actors, actors, signal: controller.signal, warn,
+      canProject: binding => current() && [...registrations.values()].some(system => !failures.has(system.id)
+        && capability(specs.get(system.id)!).status === 'SUPPORTED'
+        && (mode(system.id) === 'active' || (mode(system.id) === 'canary' && canary.has(binding.characterKey)))) });
     actors.start();
     const health = (reply: (healthy: boolean) => void) => reply(initialized);
     process.on(healthEvent, health); scope.add(() => process.removeListener(healthEvent, health));
@@ -148,10 +162,18 @@ export function createGameplayCore(host: HostContext) {
       const m = mode(system.id);
       if (m === 'off' || capability(spec).status !== 'SUPPORTED') continue;
       const systemScope = new Scope(); scope.add(() => systemScope.close());
-      const canary = new Set((env.GAMEPLAY_CORE_CANARY_CHARACTERS ?? '').split(',').map(s => s.trim()).filter(s => /^profile:[1-9][0-9]*$/.test(s)));
+      let systemActive = true; systemScope.add(() => { systemActive = false; });
+      const systemProjection = projection;
       const context: SystemContext = Object.freeze({ id: system.id, mode: m, catalog: spec.domain ? catalogs.get(spec.domain) : undefined,
         persistence: pool && db.status === 'SUPPORTED' ? Object.freeze({ pool, withTransaction, executeCommand }) : undefined,
-        identity: actors, actors: Object.freeze({ onReady: (fn: Parameters<Actors['onReady']>[0]) => systemScope.add(actors.onReady(fn)),
+        identity: actors, projection: Object.freeze({
+          capability: () => systemProjection.capability(), onAck: (listener: Parameters<SpellProjection['onAck']>[0]) => systemProjection.onAck(listener),
+          publish: (input: Parameters<SpellProjection['publish']>[0]) => {
+            if (!systemActive || !context.canMutate(input.binding)) return Promise.resolve({ status: 'UNSUPPORTED' as const,
+              reason: 'FEATURE_MODE_OR_BINDING_REFUSED', state: 'REJECTED' as const, items: [] });
+            return systemProjection.publish(input);
+          }
+        }), actors: Object.freeze({ onReady: (fn: Parameters<Actors['onReady']>[0]) => systemScope.add(actors.onReady(fn)),
           onUnbound: (fn: Parameters<Actors['onUnbound']>[0]) => systemScope.add(actors.onUnbound(fn)) }),
         hooks: Object.freeze({ register: (name: `on${string}`, fn: Hook) => systemScope.add(hooks.register(name, fn)) }),
         signal: controller.signal, log: host.log,

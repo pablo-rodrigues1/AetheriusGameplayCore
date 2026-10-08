@@ -28,12 +28,12 @@ test('real PostgreSQL: pending migrations do not apply; development opt-in appli
     await runtime.shutdown();
     runtime = core({ GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV: 'true' }); await runtime.initialize();
     assert.equal(runtime.capabilityReport().database.status, 'SUPPORTED');
-    assert.equal((await pool.query(`SELECT count(*)::int AS n FROM "${schema}".gc_schema_migrations`)).rows[0].n, 2);
+    assert.equal((await pool.query(`SELECT count(*)::int AS n FROM "${schema}".gc_schema_migrations`)).rows[0].n, 3);
     await runtime.shutdown();
     runtime = core({}); await runtime.initialize(); assert.equal(runtime.capabilityReport().database.status, 'SUPPORTED'); await runtime.shutdown();
     await pool.query(`UPDATE "${schema}".gc_schema_migrations SET sha256='changed' WHERE version='0002_gc_commands.sql'`);
     runtime = core({}); await runtime.initialize(); assert.equal(runtime.capabilityReport().database.status, 'UNSUPPORTED');
-    console.log('B1: pending schema untouched; two migrations applied with development flag; restart checked; modified hash refused');
+    console.log('B1/B5a: pending schema untouched; three migrations applied with development flag; restart checked; modified hash refused');
   } finally { await runtime?.shutdown(); await pool.query(`DROP SCHEMA "${schema}" CASCADE`); await pool.end(); }
 });
 

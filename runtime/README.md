@@ -76,6 +76,14 @@ Mudança mínima para sinal certo: ACK do cliente após aplicar o spawn/learnedS
 validado no host contra ator, conexão e geração de spawn; expor callback ao gamemode.
 Até B5, o runtime não declara a entrega da projeção como certificada.
 
+B5a acrescenta `ctx.projection`: port comum de feitiços/habilidades/poderes por
+diferença, com registro PostgreSQL e reconciliação no sinal aproximado da B1.
+Somente declara aplicação no host; ACK e perks continuam pendentes de B5b.
+Contrato, política de feitiços externos, recuperação de falhas e harness nativo:
+[`src/projection/README.md`](src/projection/README.md). Este documento supersede a
+instrução provisória de consumir B5 como peça futura no exemplo abaixo. O spike
+permanece separado e não usa o novo port antes de C1.
+
 Configuração por sistema: `GAMEPLAY_CORE_MODE_STANDING_STONES`, `_RACES`, `_CLASSES`,
 `_RELIGION`, `_SPELLS`, `_PERKS`, `_DAMAGE` e qualquer novo ID transformado em maiúsculas
 com hífens trocados por underscores. Valores: off/audit/shadow/canary/active; padrão off.
@@ -116,7 +124,7 @@ core.register({
   start(ctx) {
     const unsubscribe = ctx.actors.onReady(({ binding }) => {
       if (ctx.signal.aborted || !ctx.identity.isCurrent(binding)) return;
-      // Consumir catálogo, compor com o dono do fato e projetar através de B5.
+      // Consumir catálogo, compor com o dono do fato e chamar ctx.projection.publish.
       // Mutação só se ctx.canMutate(binding), com revisão/epoch conferidos após await.
     });
     return unsubscribe;
