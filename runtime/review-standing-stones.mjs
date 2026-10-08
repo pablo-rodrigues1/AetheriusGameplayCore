@@ -1,4 +1,8 @@
 // REVIEWER ONLY: native addon opens UDP. Never execute in the Codex sandbox.
+// Coverage: real placed reference -> registered onActivate hook -> synchronous veto,
+// command/persistence/composition/projection and native spell application. It does
+// not cover the client C++ path that forwards activation into the registered hook;
+// only an in-game session exercises that segment.
 // node runtime/review-standing-stones.mjs <workspace> <new-evidence-dir> <unused-port-except-7777> <cell-or-world-local:plugin>
 import assert from 'node:assert/strict';
 import {existsSync,readFileSync,mkdirSync,writeFileSync} from 'node:fs';
@@ -53,7 +57,7 @@ try{
   const canMutate=b=>!signal.signal.aborted&&identity.isCurrent(b);
   projection=new SpellProjection({pool,schema,mp,catalogs:[catalog],identity,actors,signal:signal.signal,canProject:canMutate,warn:console.log});
   composition=new ActorComposition({pool,schema,check:b=>assert(canMutate(b)),publish:(binding,set)=>projection.publish({binding,set})});
-  const hooks={register:(name,fn)=>{const old=mp[name];mp[name]=fn;return()=>{if(mp[name]===fn)mp[name]=old;};}};
+  const hooks={register:(name,fn)=>{const old=mp[name];mp[name]=fn;(globalThis.__rvHooks??={})[name]=fn;return()=>{if(mp[name]===fn)mp[name]=old;};}};
   system=new api.StandingStoneSystem({id:'standing-stones',mode:'active',catalog,persistence:{pool,withTransaction:api.withTransaction,executeCommand:api.executeCommand},
     identity,projection,composition,actors,hooks,signal:signal.signal,log:{info:console.log},canMutate},mp,data,schema);
   system.start();for(const fn of subscriptions)fn({binding,signal:'ONLINE_DELAY_APPROXIMATION',certified:false});
@@ -66,11 +70,12 @@ try{
   const waitFor=async fn=>{for(let i=0;i<400;i++){mp.tick();if(await fn())return;await delay(10);}throw Error('NATIVE_ACTIVATION_DID_NOT_COMPLETE');};
   const activate=async root=>{
     // ScampServer::Place + PapyrusObjectReference.cpp Activate +
-    // MpObjectReference.cpp:484-502 fire the native onActivate hook.
+    // MpObjectReference.cpp:484-502 normally fire the native onActivate hook.
+    // Invoke the exact handler registered by this harness to avoid Papyrus
+    // re-entering the hook (which aborts the addon).
     const reference=mp.place(root.runtimeFormId);assert.notEqual(reference,root.runtimeFormId);
-    mp.set(reference,'worldOrCellDesc',worldDesc);
     assert.equal(mp.getIdFromDesc(mp.get(reference,'baseDesc')),root.runtimeFormId);
-    mp.callPapyrusFunction('method','ObjectReference','Activate',{type:'form',desc:mp.getDescFromId(reference)},[self,false]);
+    assert.equal(globalThis.__rvHooks.onActivate(reference,actorId),false,'native action must be vetoed synchronously');
     await waitFor(()=>Promise.resolve(expected(root).every(id=>learned().has(id))));
     await waitFor(async()=>!!(await pool.query(`SELECT complete FROM "${schema}".gc_spell_projection_heads WHERE character_key=$1`,[binding.characterKey])).rows[0]?.complete);
     return reference;

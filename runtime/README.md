@@ -156,6 +156,20 @@ Verificação no host nativo pelo revisor, fora do sandbox, sem tocar UDP 7777:
 node runtime/review-host.mjs <workspace> <evidence-dir-B1-reviewer> <porta-UDP-livre>
 ```
 
+O harness nativo de pedras segue a mesma regra de porta livre e é executado pelo
+revisor fora do sandbox. `runtime/review-standing-stones.mjs` coloca uma referência
+real com `mp.place` e invoca diretamente o handler `onActivate` que o próprio
+sistema registrou. Assim verifica veto síncrono, persistência, composição e
+aplicação nativa dos feitiços sem chamar `ObjectReference.Activate` por Papyrus
+(essa reentrada aborta o addon) ou usar `mp.set` para `worldOrCellDesc` (API não
+implementada). O harness não cobre o trecho C++ do cliente que encaminha a
+ativação ao gancho; isso só é exercitado em jogo. O comando e os argumentos estão
+no cabeçalho do script.
+
+O aviso privado cria `gcStandingStoneNotice` antes da primeira escrita. Não se
+deve testar sua existência com `mp.get`: no host, uma leitura de propriedade
+custom ainda não registrada escreve um erro no log antes de lançar a exceção.
+
 O script exige `AETHERIUS_TEST_DATABASE_URL`, rejeita 7777, confere a porta, usa
 `core/pg.js` real, schema isolado e o addon real. Verifica boot, catálogo, migrations,
 health listener único, substituição de bundle após `mp.clear` e require sem cache,

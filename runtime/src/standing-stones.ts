@@ -72,11 +72,18 @@ export class StandingStoneSystem {
     if (this.context.signal.aborted || !this.context.identity.isCurrent(binding)) return;
     try {
       if (!this.mp?.makeProperty || !this.mp.set) throw Error('NOTICE_API_UNAVAILABLE');
-      // A read checks registration in the real host, including after mp.clear.
-      // Define lazily so audit/shadow/off create no properties or UI state.
-      try { this.mp.get(binding.actorRef.actorId, noticeProperty); }
-      catch { this.mp.makeProperty(noticeProperty, { isVisibleByOwner: true, isVisibleByNeighbors: false,
-        updateOwner: noticeOwnerCode, updateNeighbor: '' }); }
+      // ScampServer::Get logs an error for an unregistered custom property,
+      // even though it throws. Register before the first write instead.
+      try {
+        this.mp.makeProperty(noticeProperty, { isVisibleByOwner: true, isVisibleByNeighbors: false,
+          updateOwner: noticeOwnerCode, updateNeighbor: '' });
+      } catch (error) {
+        // MakeProperty is host-global and rejects duplicates. A duplicate means
+        // the property survived a runtime reload; after mp.clear it can be made
+        // again. Do not probe with Get, which logs before throwing when absent.
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes("'propertyName' must be unique")) throw error;
+      }
       this.mp.set(binding.actorRef.actorId, noticeProperty, { id: randomUUID(), sentAt: Date.now(), message });
     } catch { this.log('PLAYER_NOTICE_UNSUPPORTED'); }
   }

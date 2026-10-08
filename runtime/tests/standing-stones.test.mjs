@@ -15,7 +15,7 @@ const compiled=await build({absWorkingDir:fileURLToPath(new URL('../../',import.
   export {adoptSpikeChoice} from './runtime/src/adoption.ts';
   export {loadDomain} from './shared/record-catalog/src/index.ts';
   export {createFileHost} from './tools/catalog/host.ts';
-  export {noticeOwnerCode} from './runtime/src/standing-stones.ts';
+  export {noticeOwnerCode,StandingStoneSystem} from './runtime/src/standing-stones.ts';
 `},bundle:true,platform:'node',format:'esm',write:false});
 const api=await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
 const databaseUrl=process.env.AETHERIUS_TEST_DATABASE_URL;
@@ -103,6 +103,14 @@ test('placed reference activation, private success/failure notification, databas
   const seen=[],ctx={state:{},value:f.mp.notices[1].value,sp:{Debug:{notification:m=>seen.push(m)}}};
   runInNewContext(property.updateOwner,{ctx,Date});runInNewContext(property.updateOwner,{ctx,Date});assert.equal(seen.length,1);
   down=false;f.mp.clearNoticeProperty();assert.equal(f.mp.onActivate(ref,91),false);await until(()=>f.mp.notices.length===3);assert.equal(f.mp.properties.size,1);
+});
+test('first standing stone notice registers its custom property before any get',async t=>{
+  const mp=standingHost(),binding={characterKey:'profile:90001',profileKey:'profile:90001',actorRef:{actorId:91},epoch:'notice-test'};
+  const system=new api.StandingStoneSystem({signal:new AbortController().signal,
+    identity:{isCurrent:()=>true},canMutate:()=>true,log:{info(){}},mode:'active'},mp,mp.data,'public');
+  system.notify(binding,'Pedra guardiã escolhida.');
+  assert.equal(mp.properties.has('gcStandingStoneNotice'),true);
+  assert.equal(mp.missingNoticePropertyReads,0,'an absent custom property read is a host error');
 });
 test('unavailable catalog or database at boot refuses recognized stones visibly without grants',async t=>{
   const f=await setup(t,{catalogAvailable:false});assert.equal(f.mp.onActivate(f.mp.reference(roots[0]),91),false);

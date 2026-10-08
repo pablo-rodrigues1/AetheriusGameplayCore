@@ -10,7 +10,7 @@ export function standingHost({catalogAvailable=true,shift=0}={}) {
   const data=JSON.parse(readFileSync(new URL('../../catalog/standing-stones.json',import.meta.url),'utf8'));
   const originalGet=mp.get, originalId=mp.getIdFromDesc;
   const ids=new Map(), descs=new Map(), references=new Map(), properties=new Map(), values=new Map(), learned=new Map();
-  const calls=[], notices=[];
+  const calls=[], notices=[];let missingNoticePropertyReads=0;
   const desc=key=>{const [plugin,hex]=key.split('|');return `${hex.toLowerCase()}:${plugin}`;};
   mp.getIdFromDesc=d=>{const id=originalId(d)+shift;descs.set(id,d);return id;};
   for(const r of data.records) ids.set(r.stableFormKey,mp.getIdFromDesc(desc(r.stableFormKey)));
@@ -20,10 +20,10 @@ export function standingHost({catalogAvailable=true,shift=0}={}) {
   mp.getDescFromId=id=>descs.get(id)??`dynamic:${id}`;
   mp.get=(actor,name)=>{
     if(name==='baseDesc')return references.get(actor);
-    if(name==='gcStandingStoneNotice'){if(!properties.has(name))throw Error("Property doesn't exist");return values.get(actor)??null;}
+    if(name==='gcStandingStoneNotice'){if(!properties.has(name)){missingNoticePropertyReads++;throw Error("Property doesn't exist");}return values.get(actor)??null;}
     return originalGet(actor,name);
   };
-  mp.makeProperty=(name,definition)=>{assert(!properties.has(name),'real host rejects duplicate properties');properties.set(name,definition);};
+  mp.makeProperty=(name,definition)=>{if(properties.has(name))throw Error("'propertyName' must be unique");properties.set(name,definition);};
   mp.set=(actor,name,value)=>{assert(properties.has(name));values.set(actor,structuredClone(value));notices.push({actor,name,value:structuredClone(value)});};
   mp.callPapyrusFunction=(type,cls,method,self,args)=>{
     assert.equal(type,'method');assert.equal(cls,'Actor');assert.equal(self.type,'form');
@@ -35,9 +35,11 @@ export function standingHost({catalogAvailable=true,shift=0}={}) {
     if(method==='RemoveSpell')return spells.delete(id);
     throw Error('unsupported native method');
   };
-  return Object.assign(mp,{data,ids,calls,notices,properties,learned:own,
+  const host=Object.assign(mp,{data,ids,calls,notices,properties,learned:own,
     reference(stoneKey){const id=90000+references.size;references.set(id,desc(stoneKey));return id;},
     mutations:()=>calls.filter(c=>['AddSpell','RemoveSpell'].includes(c.method)),
     clearNoticeProperty(){properties.clear();}
   });
+  Object.defineProperty(host,'missingNoticePropertyReads',{get:()=>missingNoticePropertyReads});
+  return host;
 }
