@@ -1,0 +1,13 @@
+{
+  "name": "@aetherius/record-catalog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "build": "node node_modules/typescript/bin/tsc -p tsconfig.build.json"
+  },
+  "devDependencies": { "typescript": "5.9.3", "@types/node": "22.10.2" }
+}

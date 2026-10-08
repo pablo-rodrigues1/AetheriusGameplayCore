@@ -1,12 +1,12 @@
 # D7 — Ordem de implementação
 
-Estado: **proposta**. Reflete a prioridade fixada pelo dono do projeto em 07/10/2026. Substitui a seção 13 da arquitetura canônica e as fases F0–F12 do planejamento de 02/10.
+Estado: **decidida** pelo dono do projeto em 07/10/2026. Substitui a seção 13 da arquitetura canônica e as fases F0–F12 do planejamento de 02/10.
 
 ## Contexto
 
 A arquitetura de 05/10 ordenava as fases como F0 a F12 (com Enemy, Leveling, Durability e o cutover de dano antes de magia). O prompt de fundação propunha outra ordem. O dono do projeto fixou a prioridade: fazer funcionar o que o jogador usa diretamente.
 
-## Decisão proposta
+## Decisão
 
 ```text
 Fase A  Arquitetura: auditoria, exports, contratos, spikes, ADRs      -> gate G-ARQ
@@ -15,9 +15,9 @@ Fase B  Fundação mínima: runtime, catálogo, persistência,
 Fase C  Sistemas do jogador, nesta ordem:
         C1  Pedras guardiãs
         C2  Raças
-        C3  Classes, com os feitiços e perks que cada classe concede
+        C3  Classes. Feitiços e perks pertencem às classes: são entregues aqui,
         C5  Religião
-Depois  Perks fora das classes (C4), feitiços fora das classes (C6),
+Depois  O que sobrar de perks e feitiços sem ligação com classe (C4, C6), se houver,
         troca da fórmula de dano (trilha D)
 Fase H  Homologação em jogo no servidor local, a cada gate
 Fase E  Entrega: código e documentação ao dev do servidor final

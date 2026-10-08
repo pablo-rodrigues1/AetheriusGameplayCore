@@ -1,6 +1,6 @@
 # D3 — Como o Core roda no servidor
 
-Estado: **proposta**, com evidência do spike S1. Aguarda aprovação no gate G-ARQ.
+Estado: **decidida** pelo dono do projeto em 07/10/2026, com evidência do spike S1 e do teste em jogo.
 
 ## Contexto
 
@@ -12,7 +12,7 @@ O gamemode é JavaScript CommonJS puro, carregado pelo SkyMP a partir de `gamemo
 2. Publicar o Core como pacote e instalar no gamemode.
 3. Gerar um único arquivo CommonJS e carregá-lo por um descriptor do module-registry.
 
-## Decisão proposta
+## Decisão
 
 Opção 3. O Core é compilado (esbuild) em `dist/aetherius-gameplay-core.cjs`, um arquivo sem dependência externa em runtime. Um descriptor `gameplay-core` em `phase0-basic.js`, sob `ENABLE_GAMEPLAY_CORE`, carrega o arquivo indicado em `GAMEPLAY_CORE_BUNDLE` e entrega a ele `{ mp, pg, env, log }`. Cada feature tem seu modo (`off`, `audit`, `shadow`, `canary`, `active`) dentro do Core.
 

@@ -1,6 +1,6 @@
 # D4 — Projeção de concessões no cliente
 
-Estado: **proposta**, com evidência do spike S2. Aguarda aprovação no gate G-ARQ.
+Estado: **decidida** pelo dono do projeto em 07/10/2026, com evidência do spike S2 e do teste em jogo.
 
 ## Contexto
 
@@ -10,7 +10,7 @@ O servidor decide quais perks, feitiços e habilidades cada personagem tem. Para
 - Perks: o servidor não guarda nada. O cliente aplica perks por conta própria, a partir de listas embutidas.
 - Não há noção de origem: não se sabe por que um personagem tem um feitiço.
 
-## Decisão proposta
+## Decisão
 
 1. **A memória que manda é a do Core.** As tabelas do Core guardam os fatos; o conjunto de concessões é recalculado deles. A lista de feitiços do save do SkyMP passa a ser consequência, reconciliada a cada spawn.
 2. **Toda concessão tem origem** (`CLASS`, `RACE`, `STANDING_STONE`, `RELIGION` e as demais dos contratos). Revogar uma origem não remove o que outra origem também concede.
@@ -27,4 +27,4 @@ O servidor decide quais perks, feitiços e habilidades cada personagem tem. Para
 
 ## Evidência
 
-Auditoria A1, itens 4 e 5; spike S2 e sua revisão: caminho fechado em código com 8 testes contra PostgreSQL real; projeção pós-spawn dependente de temporizador de 3 segundos; evidência em jogo pendente.
+Auditoria A1, itens 4 e 5; spike S2 e sua revisão: caminho fechado em código com 8 testes contra PostgreSQL real; projeção pós-spawn dependente de temporizador de 3 segundos. Sessão em jogo de 07/10/2026: pedra ativada, reconexão e troca de pedra confirmadas pelo dono do projeto.
