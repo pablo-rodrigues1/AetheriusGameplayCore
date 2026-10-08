@@ -7,11 +7,11 @@ export interface StandingStoneMp {
   onActivate?: ((targetId: number, casterId: number) => unknown) | undefined;
   getIdFromDesc(desc: string): number;
   getDescFromId(formId: number): string;
+  get?(actorId: number, property: 'profileId'): number | undefined;
   callPapyrusFunction(callType: string, className: string, functionName: string,
     self: { type: 'form'; desc: string }, args: unknown[]): unknown;
   isConnected?(userId: number): boolean;
   getUserActor?(userId: number): number | undefined;
-  getActorsByProfileId?(profileId: number): number[] | undefined;
 }
 export function composeStandingStoneGrants(stoneKey: string | undefined): readonly SpikeGrant[];
 export function planGrantProjection(previous: readonly SpikeGrant[], next: readonly SpikeGrant[]):

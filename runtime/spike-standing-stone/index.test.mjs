@@ -13,7 +13,7 @@ const pool = new Pool({ connectionString: databaseUrl, max: 4 });
 const logs = [];
 let serviceSequence = 0;
 
-function fakeMp({ activeActor = null } = {}) {
+function fakeMp({ activeActor = null, profileId = 7 } = {}) {
   const ids = new Map();
   const descs = new Map();
   let nextId = 0x1000;
@@ -29,13 +29,16 @@ function fakeMp({ activeActor = null } = {}) {
       return ids.get(desc);
     },
     getDescFromId(id) { return descs.get(id) ?? `000000:Skyrim.esm`; },
+    get(actorId, property) {
+      if (property !== 'profileId' || actorId !== activeActor) return undefined;
+      return profileId;
+    },
     callPapyrusFunction(callType, className, functionName, self, args) {
       mp.calls.push({ callType, className, functionName, self, args });
       return true;
     },
     isConnected(userId) { return activeActor !== null && userId === 1; },
     getUserActor(userId) { return activeActor !== null && userId === 1 ? activeActor : undefined; },
-    getActorsByProfileId(profileId) { return activeActor !== null && profileId === 7 ? [activeActor] : []; }
   };
   return mp;
 }
@@ -152,15 +155,16 @@ test('dois comandos concorrentes deixam um estado final completo e projetado', a
 });
 
 test('processo novo reidrata o fato e reenvia após o reset de feitiços do spawn', async () => {
-  const first = { ...newService(), characterKey: '7' };
+  const first = { ...newService(), characterKey: 'profile:108549' };
   await first.service.initialize();
   await first.service.chooseStandingStone({ requestId: 'restart-choice', characterKey: first.characterKey,
     stone: 'skyrim.esm|0D2333', actorId: 0x204 });
   first.service.shutdown();
 
-  const secondMp = fakeMp({ activeActor: 0x205 });
+  const secondMp = fakeMp({ activeActor: 0x205, profileId: 108549 });
   const second = { ...newService(secondMp), characterKey: first.characterKey };
   await second.service.initialize();
+  assert.ok(logs.some(message => message === '[standing-stone] active actor associated: character=profile:108549'));
   const rehydrated = await second.service.rehydrate(second.characterKey, 0x205);
   assert.equal(rehydrated.stone, 'skyrim.esm|0D2333');
   await new Promise(resolve => setTimeout(resolve, 3150));
@@ -177,18 +181,49 @@ test('onActivate veta sincronamente, persiste em segundo plano e shutdown restau
   await service.initialize();
   const target = mp.getIdFromDesc('0D232F:Skyrim.esm');
   const actor = 0x206;
-  mp.getActorsByProfileId = profileId => profileId === 7 ? [actor] : [];
+  mp.get = (actorId, property) => actorId === actor && property === 'profileId' ? 108549 : undefined;
   const result = mp.onActivate(target, actor);
   assert.equal(result, false);
   assert.equal(typeof result?.then, 'undefined');
   for (let attempt = 0; attempt < 50; attempt += 1) {
-    const persisted = await pool.query('SELECT stone_key FROM spike_standing_stone_choices WHERE character_key = $1', [String(7)]);
+    const persisted = await pool.query('SELECT stone_key FROM spike_standing_stone_choices WHERE character_key = $1', ['profile:108549']);
     if (persisted.rows.length) break;
     await new Promise(resolve => setTimeout(resolve, 20));
   }
-  const persisted = await pool.query('SELECT stone_key FROM spike_standing_stone_choices WHERE character_key = $1', [String(7)]);
+  const persisted = await pool.query('SELECT stone_key FROM spike_standing_stone_choices WHERE character_key = $1', ['profile:108549']);
   assert.equal(persisted.rows[0].stone_key, 'skyrim.esm|0D232F');
+  assert.ok(logs.some(message => message === '[standing-stone] activation recognized: stone=skyrim.esm|0D232F character=profile:108549'));
+  assert.ok(logs.some(message => message === '[standing-stone] command recorded and projection sent: stone=skyrim.esm|0D232F character=profile:108549'));
   service.shutdown();
   assert.equal(mp.onActivate, oldHandler);
   assert.equal(characterKey.startsWith('a6s2-test-'), true);
+});
+
+test('ativacao ignorada que nao e pedra nao gera log', async () => {
+  const mp = fakeMp();
+  const { service } = newService(mp);
+  await service.initialize();
+  const logsBefore = logs.length;
+  assert.equal(mp.onActivate(0x7ffe, 0x206), undefined);
+  assert.equal(logs.length, logsBefore);
+  service.shutdown();
+});
+
+test('ator sem perfil recebe veto e nao grava a ativacao', async () => {
+  const mp = fakeMp();
+  const { service } = newService(mp);
+  await service.initialize();
+  const cases = [[0x207, undefined], [0x208, 0], [0x209, -1]];
+  mp.get = (actorId, property) => property === 'profileId'
+    ? cases.find(([candidate]) => candidate === actorId)?.[1]
+    : undefined;
+  for (const [actor, profileId] of cases) {
+    assert.equal(mp.onActivate(mp.getIdFromDesc('0D232F:Skyrim.esm'), actor), false);
+    assert.equal(profileId === undefined || profileId <= 0, true);
+  }
+  await new Promise(resolve => setTimeout(resolve, 50));
+  const rows = await pool.query('SELECT count(*)::int AS count FROM spike_standing_stone_choices');
+  assert.equal(rows.rows[0].count, 0);
+  assert.equal(logs.filter(message => message.includes('activation vetoed: no provisional active-character key')).length, 3);
+  service.shutdown();
 });

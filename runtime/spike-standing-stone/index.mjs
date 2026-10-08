@@ -20,7 +20,6 @@ const STONE_FORM_IDS = Object.freeze(Object.fromEntries(
 ));
 const SOURCE = Object.freeze({ kind: 'STANDING_STONE', key: 'standing-stone-choice' });
 const ACTIVE_USER_LIMIT = 10;
-const PROFILE_SCAN_LIMIT = 50;
 const ACTIVE_POLL_MS = 1000;
 const SPAWN_RESEND_GAP_MS = 3000;
 const CREATE_TABLES_SQL = `
@@ -198,6 +197,7 @@ export function createStandingStoneSpike({ mp, pg, log }) {
         await client.query('BEGIN');
         await saveProjection(client, characterKey, nextProjection);
         await client.query('COMMIT');
+        log.info(`[standing-stone] command recorded and projection sent: stone=${stone} character=${characterKey}`);
         return result;
       } catch (error) {
         try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
@@ -242,12 +242,9 @@ export function createStandingStoneSpike({ mp, pg, log }) {
   }
 
   function characterKeyForActor(actorId) {
-    if (typeof mp.getActorsByProfileId !== 'function') return null;
-    for (let profileId = 1; profileId <= PROFILE_SCAN_LIMIT; profileId += 1) {
-      const actors = mp.getActorsByProfileId(profileId);
-      if (actors?.includes(actorId)) return String(profileId);
-    }
-    return null;
+    const profileId = typeof mp.get === 'function' ? mp.get(actorId, 'profileId') : undefined;
+    if (!Number.isSafeInteger(profileId) || profileId <= 0) return null;
+    return `profile:${profileId}`;
   }
 
   async function scanActiveActors() {
@@ -264,6 +261,7 @@ export function createStandingStoneSpike({ mp, pg, log }) {
         seen.add(actorId);
         if (activeActors.get(actorId) === characterKey) continue;
         activeActors.set(actorId, characterKey);
+        log.info(`[standing-stone] active actor associated: character=${characterKey}`);
         try {
           await rehydrate(characterKey, actorId);
           resendAfterSpawn(characterKey, actorId);
@@ -286,6 +284,7 @@ export function createStandingStoneSpike({ mp, pg, log }) {
       log.info(`[standing-stone] activation vetoed: no provisional active-character key for actor ${casterId}`);
       return false;
     }
+    log.info(`[standing-stone] activation recognized: stone=${stone} character=${characterKey}`);
     requestSequence += 1;
     const requestId = `standing-stone:${Date.now()}:${casterId}:${requestSequence}`;
     void chooseStandingStone({ requestId, characterKey, stone, actorId: casterId })

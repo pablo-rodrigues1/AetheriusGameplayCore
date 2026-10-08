@@ -34,10 +34,7 @@ ActorState supplies grants from other origins.
 Identity is provisional. `phase0-basic.js` passes only `{ mp, pg, env, log }`;
 it does not expose `commands.getActiveCharacterData()`. In the current local
 autowhitelist path, `registerActiveCharacter` fabricates `character.id` from
-`profileId`. The spike uses that profile ID for this experiment. This is not
-the canonical `CharacterKey` and must be replaced by a session-bound identity
-port before a durable feature ships. The active-character scan follows the
-existing local host bounds (users 1–10 and profiles 1–50).
+`profileId`. The spike reads the actor profile directly with `mp.get(actorId, 'profileId')` and uses `profile:<profileId>` as the provisional key, following the D1 proposal. Missing, zero, negative, or invalid profile IDs veto activation and are logged. This is not the session-bound canonical `CharacterKey` and must be replaced by an identity port before a durable feature ships. The active-actor scan follows the existing host bound of users 1–10; profile IDs are not enumerated.
 
 Run the integration test from the workspace root with
 `AETHERIUS_TEST_DATABASE_URL` set from `_work/db.env`:
