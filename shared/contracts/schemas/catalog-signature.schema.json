@@ -1,0 +1,6 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aetherius.invalid/contracts/v1/catalog-signature.schema.json",
+  "title": "CatalogSignature",
+  "$ref": "https://aetherius.invalid/contracts/v1/grant-set.schema.json#/definitions/CatalogSignature"
+}

@@ -1,0 +1,6 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aetherius.invalid/contracts/v1/grant-projection.schema.json",
+  "title": "GrantProjection",
+  "$ref": "https://aetherius.invalid/contracts/v1/grant-set.schema.json#/definitions/GrantProjection"
+}

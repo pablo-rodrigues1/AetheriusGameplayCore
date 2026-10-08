@@ -1,0 +1,6 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aetherius.invalid/contracts/v1/plugin-kind.schema.json",
+  "title": "PluginKind",
+  "$ref": "https://aetherius.invalid/contracts/v1/grant-set.schema.json#/definitions/PluginKind"
+}

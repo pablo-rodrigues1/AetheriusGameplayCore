@@ -1,0 +1,10 @@
+{
+  "name": "aetherius-gameplay-core",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["shared/*"],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspace @aetherius/contracts",
+    "test": "npm test --workspace @aetherius/contracts"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aetherius.invalid/contracts/v1/resource-value.schema.json",
+  "title": "ResourceValue",
+  "$ref": "https://aetherius.invalid/contracts/v1/grant-set.schema.json#/definitions/ResourceValue"
+}

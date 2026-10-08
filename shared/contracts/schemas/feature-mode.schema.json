@@ -1,0 +1,6 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aetherius.invalid/contracts/v1/feature-mode.schema.json",
+  "title": "FeatureMode",
+  "$ref": "https://aetherius.invalid/contracts/v1/grant-set.schema.json#/definitions/FeatureMode"
+}
