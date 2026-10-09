@@ -17,6 +17,8 @@ import { ActorComposition } from './composition.ts';
 import { StandingStoneSystem } from './standing-stones.ts';
 import { RaceSystem } from './races.ts';
 import { ClassSystem } from './classes.ts';
+import { PoisonProjection } from './poison.ts';
+export { poisonDoseBonus } from './poison.ts';
 import { developmentLevel } from '../../modules/class-progression-system/src/index.ts';
 export { classGrants, readClass, createClassCommands, developmentLevel, withDevelopmentLevel } from '../../modules/class-progression-system/src/index.ts';
 export { createDurableLeveling } from '../../modules/leveling-system/src/integration/durable.ts';
@@ -246,10 +248,16 @@ export function createGameplayCore(host: HostContext) {
         && capability(specs.get(system.id)!).status === 'SUPPORTED'
         && (mode(system.id) === 'active' || (mode(system.id) === 'canary' && canary.has(binding.characterKey)))) });
     const commonProjection = projection;
+    const poisonProjection=new PoisonProjection(host.mp,()=>[...catalogs.values()],binding=>current()&&actors.isCurrent(binding),warn);
+    scope.add(()=>poisonProjection.shutdown());
+    actors.onUnbound(binding=>poisonProjection.clear(binding));
+    if(host.mp?.getServerSettings().aetheriusCombat?.weaponPoison===true)
+      actors.onReady(({binding})=>{void composition?.inspect(binding).catch(()=>warn('poison dose UNSUPPORTED: composition unavailable'));});
     composition = new ActorComposition({ pool: db.status === 'SUPPORTED' ? pool : undefined,
       schema: env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public',
       check: binding => { if (!current() || !actors.isCurrent(binding)) throw Object.assign(Error('STALE_BINDING'), { code: 'STALE_BINDING' }); },
-      publish: (binding, set) => commonProjection.publish({ binding, set }) });
+      publish: (binding, set) => commonProjection.publish({ binding, set }),
+      onComposed:(binding,set)=>poisonProjection.publish(binding,set) });
     actors.start();
     const health = (reply: (healthy: boolean) => void) => reply(initialized);
     process.on(healthEvent, health); scope.add(() => process.removeListener(healthEvent, health));

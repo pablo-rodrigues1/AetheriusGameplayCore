@@ -22,6 +22,16 @@ export function buildClasses(exportsDir:string,configPath:string,fingerprints:re
   const perks=exported(join(exportsDir,'PERK.jsonl')),avif=exported(join(exportsDir,'AVIF.jsonl'));
   if(perks.manifest.epoch!==avif.manifest.epoch)throw Error('EXPORT_EPOCH_MISMATCH');
   const rows=new Map(perks.rows.map(r=>[r.formid.toLowerCase(),r]));
+  // D-P1: deeper official evidence supplies the missing entry-point predicates.
+  // Merge only effect fields; acquisition and other record payloads stay unchanged.
+  const poison=exported(join(exportsDir,'classes/PERK-concentrated-poison-depth12.jsonl'));
+  if(poison.manifest.epoch!==perks.manifest.epoch)throw Error('POISON_EXPORT_EPOCH_MISMATCH');
+  for(const deep of poison.rows){const prior=rows.get(deep.formid.toLowerCase());
+    if(!prior||prior.winner!==deep.winner||prior.editorid!==deep.editorid)throw Error('POISON_WINNER_MISMATCH');
+    const fields=new Map(prior.fields.map(f=>[f.path,f]));
+    for(const field of deep.fields.filter(f=>f.path.startsWith('Effects[')))fields.set(field.path,field);
+    rows.set(deep.formid.toLowerCase(),{...prior,fields:[...fields.values()]});
+  }
   const chains=new Map<string,{rank:number;skill:string;chain:string[]}>();
   for(const a of avif.rows)for(const f of a.fields.filter(f=>/^PerkTree\[\d+\]\.Perk$/.test(f.path)&&f.value)) {
     let address=f.value!;const chain:string[]=[];

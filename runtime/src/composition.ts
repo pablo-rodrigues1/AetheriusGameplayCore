@@ -32,6 +32,7 @@ export class ActorComposition {
     readonly schema: string;
     readonly check: (binding: SessionBinding) => void;
     readonly publish: (binding: SessionBinding, set: ReturnType<typeof compose>) => Promise<ProjectionResult>;
+    readonly onComposed?: (binding:SessionBinding,set:ReturnType<typeof compose>)=>void;
   }) {}
   register(provider: CompositionProvider): () => void {
     if (this.closed || this.providers.has(provider.id)) throw new Error('Duplicate/closed composition provider');
@@ -61,7 +62,7 @@ export class ActorComposition {
           facts: revision, grants: revision, equipment: 0, effects: 0, catalog: 1
         });
       });
-      check(); return action(set);
+      check(); this.options.onComposed?.(binding,set); return action(set);
     });
     const tail = task.finally(() => { if (this.tails.get(binding.characterKey) === tail) this.tails.delete(binding.characterKey); });
     this.tails.set(binding.characterKey, tail); return tail;

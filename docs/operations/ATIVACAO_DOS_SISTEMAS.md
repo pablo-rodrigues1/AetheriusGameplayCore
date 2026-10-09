@@ -1,6 +1,6 @@
 # Ativação dos sistemas do GameplayCore num servidor
 
-Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 08/10/2026.
+Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 09/10/2026.
 
 Cada sistema do Core (pedras guardiãs, raças, e os que vierem) precisa de duas coisas no servidor onde roda: **tabelas próprias no PostgreSQL** e **uma opção de configuração que o liga**. No ambiente de desenvolvimento local esses dois passos foram feitos à mão a cada sistema. Este documento descreve o que foi feito, para ser repetido no servidor oficial com as diferenças necessárias.
 
@@ -25,6 +25,8 @@ Arquivos em `database/migrations/`, aplicados em ordem.
 | `0005_gc_race_observation.sql` | `gc_race_observation` | a raça que o servidor observou em cada personagem | raças |
 | `0006_gc_character_class.sql` | `gc_character_class` | classe escolhida e revisão por personagem; não altera XP | classes |
 | `0007_gc_leveling_progress.sql` | `gc_leveling_progress` | XP total, nível e estado de fadiga do único writer Leveling | adaptador Leveling e leitura de nível pelas classes |
+
+D-P1 não cria migration: revestimento e cargas usam o inventário nativo existente; o bônus por ator e os ticks do veneno são transitórios. Não há ledger ou store de efeitos novo.
 
 Cada sistema novo acrescentará a sua migration, com o próximo número. Esta tabela deve ser atualizada junto.
 
@@ -81,6 +83,16 @@ Valor inválido é tratado como `off`, com aviso no log. Sistema ausente da conf
 | `GAMEPLAY_CORE_CANARY_CHARACTERS` | lista separada por vírgula, no formato `profile:<profile_id>`; vale para os sistemas em modo `canary` |
 | `GAMEPLAY_CORE_DATABASE_SCHEMA` | schema das tabelas `gc_`; padrão `public`. Tem de ser o mesmo usado ao aplicar as migrations |
 
+### Veneno no host nativo (D-P1)
+
+A opção `aetheriusCombat.weaponPoison` é um booleano de **server-settings.json**, lido no construtor C++ do addon, não uma variável do `.env`. Ausente ou `false`: comportamento antigo. `true`: habilita o revestimento e o golpe com veneno. Alteração exige reiniciar o processo nativo; recarregar só o gamemode não altera a opção. Não habilita `aetheriusCombat.shadow`.
+
+```json
+"aetheriusCombat": { "weaponPoison": true, "shadow": false }
+```
+
+Sem Core, o host usa uma carga por dose. Com Core e classes em `active` (ou personagem selecionado em `canary`), a composição entrega `aetheriusPoisonDoseBonus`, propriedade nativa em memória, inteira de 0 a 65534. `mp.get(actorId, 'aetheriusPoisonStatus')` expõe resultado e máscara das famílias recusadas, para diagnóstico. O cliente não escreve esses valores. Os modos de classe não habilitam o C++ por si só.
+
 ### Só desenvolvimento: **não usar no servidor oficial**
 
 Todas as opções abaixo usam a mesma trava: `NODE_ENV=local` explicitamente, `GAME_ACCESS_CONTROL` diferente de `true` e `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS=true`. Ausência de `NODE_ENV` nunca conta como local, mesmo que `server-options.js` escolha o arquivo local por padrão. `production` e `staging` recusam as opções. O ambiente vem de `env: process.env` no descriptor do gamemode, depois de carregar seu `.env`; `GAME_ACCESS_CONTROL` é a mesma variável lida pelo AccessControl do host.
@@ -128,6 +140,32 @@ A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolviment
 - No oficial com sessão autenticada, `offlineMode=true` permite pedras, raças e classes normalmente. Se `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` ficar por engano em produção, só classes ficam indisponíveis, com erro explícito; pedras e raças continuam para o jogador autenticado.
 - Rank representa posição na cadeia `NextPerk`, não o `NumRanks` de cada record. A concessão automática segue os marcos de classes; condições nativas de aquisição são evidência e não são avaliadas pelo sistema. Não há complemento automático de ranks/pré-requisitos. Os seis rótulos não resolvidos permanecem no catálogo como `UNSUPPORTED`.
 - Fora de C3a: interface, custo/restrições de troca (incluindo Winterhold), skills, pontos/alocação de atributos, feitiços de classe e entrega B5b. O módulo legado permanece intocado e não é ligado pelo runtime novo.
+
+### Veneno em arma (D-P1)
+
+**Primeira alteração de comportamento de jogo do Core no C++ do host.** A ordem foi autorizada fora da sequência da trilha D. O outro desenvolvedor precisa reaplicar os arquivos novos `server_guest_lib/aetherius_combat/WeaponPoison*.h`, as integrações marcadas `AETHERIUS D-P1`, os bindings `PoisonDoseBinding.*` e os testes nativos, e recompilar o addon. A lista exata de linhas está no relatório da ordem. O spike de dano anterior continua independente e desligado.
+
+- Ao usar ALCH vencedor marcado como veneno, ele não passa por `EatItem`: consome uma unidade e reveste exatamente uma arma do inventário interno do host, preservando a mão equipada. Stack de armas é dividido em uma unidade revestida e o restante. Sem arma, duas armas candidatas ou arma já envenenada: recusa sem consumir.
+- O servidor reconcilia os extras de equipamento com seu inventário. A informação de veneno enviada pelo cliente não remove, troca ou aumenta cargas. O host publica inventário e equipamento nativos atualizados.
+- Após golpe aceito, a arma é identificada pelo record do golpe e pela instância equipada. O pacote não identifica mão: duas cópias do mesmo record equipadas resultam em recusa. Golpe bloqueado, bash, fonte diferente, alvo morto pelo dano físico, arco/besta: sem aplicação nem gasto. São decisões conservadoras pendentes de confirmação em jogo, assim como mão preferida e substituição.
+- Suportado: `ValueMod` detrimental de Health/Magicka/Stamina, magnitude positiva finita, sem área ou CTDA. Instantâneo reduz o percentual pelo máximo nativo e usa o writer `SetPercentages`, com publicação em fila; duração usa magnitude por segundo no store/timer existente do host. Não usa `ApplyMagicEffects`, que restauraria recursos. Duração superior a 86400 segundos é recusada. Um efeito ativo no mesmo recurso impede sobreposição (`UNSUPPORTED`), sem substituir o anterior. O primeiro segundo é aplicado no golpe; os restantes são ticks de um segundo.
+- Famílias `UNSUPPORTED`, máscara: duração fora do limite `1`, archetype não coberto `2`, actor value não coberto `4`, magnitude inválida `8`, área `16`, condição ou parcela de script `32`, sobreposição `64`, contexto de recurso ausente `128`, dano letal sem dono certificado de abate `256`. VMAD é declarado como parcela de script não suportada; ele não suprime o dano direto declarado no record. CTDA não certificada recusa o efeito condicionado inteiro. Aplica as famílias cobertas de um ALCH misto e gasta uma carga; se nenhuma for aplicável, preserva a carga. Paralysis, Slow, fraquezas, debuffs e scripts não têm resultado certificado nesta ordem. Dano de veneno que zeraria Health é recusado, sem chamar o fluxo de morte/gamemode. Resistências/imunidades, atribuição de abate por veneno e visual do efeito não foram certificados.
+- Ownership dos resultados cobertos: `NATIVE_SERVER`, pelo writer de recursos e inventário do host. O Core decide apenas o bônus derivado dos grants. Parcelas não cobertas ficam `UNSUPPORTED` no host.
+- O dano físico é calculado pela mesma fórmula anterior. Nenhum entry point de dano foi ligado. Fangs (`ModAttackDamage`) e Alkahest (`ModTargetDamageResistance`) aguardam a ordem da fórmula e sua cobertura.
+- `Concentrated Poison`: rank máximo possuído, bônus 2/4/6, mais uma carga base. Viper nível 40: **7 cargas**. Os três ranks coexistem nas concessões, mas as condições de entry point suprimem os inferiores. Condições de aquisição não impedem os marcos. O catálogo incorpora o export profundo oficial; as identidades continuam por plugin de definição e FormID local.
+- O Core reentrega o bônus na composição e no sinal de ator pronto já existente (aproximação de 3 segundos, sem ACK do cliente), limpa no desligamento/desvínculo e recusa epoch antigo. Classe sem esse perk recebe zero. O revestimento já aplicado conserva as cargas obtidas ao usar a dose; trocar a classe altera a próxima dose.
+- Os ticks são transitórios: não são serializados nem reaplicados como cura ao carregar save. Reiniciar o host perde a porção temporal restante; desligar a opção cancela a continuação no próximo tick. A arma/cargas seguem o formato nativo existente. Persistência de efeito temporal e stacking completo permanecem sem certificação.
+- O cliente compara `poisonId` e `poisonCount` em `extrasEqual`. Se a contagem local divergir, `applyInventory` remove e adiciona a instância, embora transmita o estado equipado por `pushWornState`. Continuidade visual de equipamento exige teste em jogo; não foi alterado o cliente.
+
+**Histórico supersedido:** a primeira sessão parou porque o export raso não continha as condições. O revisor forneceu `PERK-concentrated-poison-depth12.jsonl` e `REGRA-CONCENTRATED-POISON.md` pela instância oficial `C:\Modding\MO2`; o dono esclareceu que regras não verificáveis seriam tratadas conservadoramente e famílias parciais não impediriam a entrega. O antigo diagnóstico permanece em `_work/evidence/D-P1/`, mas seu bloqueio está resolvido.
+
+Harness real, exclusivo do revisor (não executado por Sol):
+
+```powershell
+node "<workspace>\_work\evidence\D-P1\resume\native-harness.cjs" --port <porta-isolada> --work-dir <pasta-isolada> --addon "<build>\dist\server\scam_native.node" --settings "<build>\dist\server\server-settings.json"
+```
+
+Instancia o addon real com seu bot interno, arma e veneno resolvidos por StableFormKey. Não usa banco, `destroyActor` ou Papyrus Activate. A porta é obrigatória e 7777 é recusada. Teste em execução e validação em jogo cabem ao revisor/dono; esta entrega não ligou o servidor.
 
 ## 6. Ordem recomendada para ligar um sistema no servidor oficial
 
@@ -179,6 +217,7 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 |---|---|---|---|
 | 08/10/2026 | pedras guardiãs | migrations 0001 a 0004; adoção da pedra do personagem de teste, vinda do protótipo | `ENABLE_STANDING_STONE_SPIKE=false`, `GAMEPLAY_CORE_MODE_STANDING_STONES=active`, `GAMEPLAY_CORE_DATABASE_SCHEMA=public`, `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV=false`, `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY=true` |
 | 08/10/2026 | raças | migration 0005 | `GAMEPLAY_CORE_MODE_RACES=active` |
+| 09/10/2026 | veneno D-P1 | nenhuma alteração em aetherius_dev; testes somente em aetherius_test | compilação Release e sync dos plugins oficiais; opção não ligada; servidor não iniciado; ticks cobertos por teste unitário; stacking e jogo pendentes de revisão |
 | 08/10/2026 | classes (C3a) | migrations 0006 e 0007; classe do personagem de teste definida como `viper` pela ferramenta `runtime/set-character-class.mjs` | `GAMEPLAY_CORE_MODE_CLASSES=active` e, **só neste ambiente de teste**, `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` |
 
 As linhas acima registram a configuração histórica anterior à B1-fix1; não comprovam ativação com a trava nova. **Para o revisor manter o teste local:** definir `NODE_ENV=local` e `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS=true`; deixar `GAME_ACCESS_CONTROL` ausente (ou `false`). `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` pode permanecer somente nesse teste. Com login oficial, remover `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY`: o host novo exige sessão oficial mesmo quando ela está presente. Para harness com host antigo sem identidade oficial, conservar essa opção com a trava local.

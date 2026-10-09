@@ -5,6 +5,7 @@ import {readFileSync} from 'node:fs';
 import {randomBytes} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
+import {setTimeout as realDelay} from 'node:timers/promises';
 import {build} from 'esbuild';
 import {classHost} from './class-host.mjs';
 import {logger} from './host.mjs';
@@ -30,8 +31,11 @@ let configs,profile=96000;
 before(async()=>{await pool.query(`CREATE SCHEMA "${schema}"`);await api.applyMigrations(pool,await api.readMigrations(`${root}/database/migrations`),schema);
   const result=await new api.ConfigLoader(`${root}/modules/leveling-system`).load();assert.notEqual(result.status,'NOT_READY');configs=result.configs;});
 after(async()=>{await Promise.all(cores.map(c=>c.shutdown()));await pool.query(`DROP SCHEMA "${schema}" CASCADE`);await pool.end();});
-async function setup(t,{offlineMode=false,mode='active',env={},stoneMode='off',raceMode='off',pgPool=pool}={}){
+async function setup(t,{offlineMode=false,mode='active',env={},stoneMode='off',raceMode='off',pgPool=pool,weaponPoison=false}={}){
   t.mock.timers.enable({apis:['setInterval','setTimeout']});const mp=classHost({catalogAvailable:true,offlineMode}),log=logger();mp.profiles.set(91,++profile);
+  // D-P1 native shape from PoisonDoseBinding: numeric transient value on mp.set.
+  if(weaponPoison){const settings=mp.getServerSettings;mp.getServerSettings=()=>({...settings(),aetheriusCombat:{weaponPoison:true}});
+    mp.poisonDoses=[];const prior=mp.set;mp.set=(id,prop,value)=>prop==='aetheriusPoisonDoseBonus'?mp.poisonDoses.push({id,value}):prior?.(id,prop,value);}
   mp.appearances.set(91,{raceId:mp.ids.get('skyrim.esm|013746')});
   const core=coreApi.createGameplayCore({mp,pg:{init:()=>pgPool},log,env:{...developmentEnv,GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY:offlineMode?'true':undefined,GAMEPLAY_CORE_MODE_CLASSES:mode,GAMEPLAY_CORE_MODE_STANDING_STONES:stoneMode,GAMEPLAY_CORE_MODE_RACES:raceMode,...env}});
   cores.push(core);t.after(()=>core.shutdown());await core.initialize();const binding=core.identity.lookup({actorId:91}).value;
@@ -90,6 +94,17 @@ test('class command idempotent, default level 1, switching preserves progress an
   const before=await f.core.inspectActor(f.binding);assert.equal(before.grants.length,4);assert.equal(await progress(f.binding.characterKey),undefined);
   const input={binding:f.binding,classId:'elementalista',requestId:'staff-replay'};assert.equal((await f.core.setCharacterClass(input)).receipt.replayed,false);assert.equal((await f.core.setCharacterClass({...input,binding:{...f.binding,epoch:f.binding.epoch}})).receipt.replayed,true);
   assert.equal((await f.set('guardiao')).status,'SUPPORTED');const next=await f.core.inspectActor(f.binding);const delta=api.diff(before,next);assert(delta.added.length>0&&delta.removed.length>0);assert.equal(await progress(f.binding.characterKey),undefined);assert.equal(f.mp.mutations().length,0);
+});
+test('D-P1: viper DEV40 reenters on ready, class switch clears bonus, stale epoch refused',async t=>{
+  const f=await setup(t,{offlineMode:true,env:{GAMEPLAY_CORE_DEV_CLASS_LEVEL:'40'},weaponPoison:true});
+  assert.equal((await f.set('viper')).status,'SUPPORTED');assert.equal(f.mp.poisonDoses.at(-1).value,6);
+  f.mp.poisonDoses.length=0;t.mock.timers.tick(3000);
+  for(let i=0;i<200&&!f.mp.poisonDoses.length;i++)await realDelay(10);
+  assert.equal(f.mp.poisonDoses.at(-1).value,6,'actor-ready must redeliver');
+  assert.equal((await f.set('guardiao')).status,'SUPPORTED');assert.equal(f.mp.poisonDoses.at(-1).value,0);
+  const n=f.mp.poisonDoses.length;
+  assert.equal((await f.core.setCharacterClass({binding:{...f.binding,epoch:'stale'},classId:'viper',requestId:'stale-poison'})).status,'UNSUPPORTED');
+  assert.equal(f.mp.poisonDoses.length,n);await f.core.shutdown();assert.equal(f.mp.poisonDoses.at(-1).value,0);
 });
 test('XP level up appends milestones on fresh composition, preserves class on process rehydration',async t=>{
   const f=await setup(t);await f.set('elementalista');const before=await f.core.inspectActor(f.binding),adapter=coreApi.createDurableLeveling(pool,configs);

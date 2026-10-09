@@ -12,7 +12,7 @@ export interface RuntimeMp extends SkyMpCatalogApi {
   };
   onActivate?: Hook | undefined;
   get(id: number, property: string): unknown;
-  getServerSettings(): { dataDir?: string; offlineMode?: boolean };
+  getServerSettings(): { dataDir?: string; offlineMode?: boolean; aetheriusCombat?:{weaponPoison?:boolean} };
   getUserByActor?(actorId: number): number;
   on?(event: string, listener: (...args: number[]) => void): unknown;
   getDescFromId(id: number): string;
