@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
 import { fakeHost, unavailablePg, logger } from './host.mjs';
+import { developmentEnv } from './development-env.mjs';
+import { officialHost } from './official-host.mjs';
 const require = createRequire(import.meta.url);
 const bundlePath = require.resolve('../../dist/aetherius-gameplay-core.cjs');
 const factory = () => { delete require.cache[bundlePath]; return require(bundlePath).createGameplayCore; };
@@ -57,8 +59,49 @@ test('identity uses live online actors, profile 108549, invalid profiles and new
 test('offline/unverifiable identity is unsupported unless development explicitly opts in', async () => {
   const ctx = context({}, fakeHost({ offlineMode: true })); const core = factory()(ctx);
   await core.initialize(); assert.equal(core.identity.lookup(actor).status, 'UNSUPPORTED'); await core.shutdown();
-  const dev = factory()({ ...ctx, env: { GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY: 'true' } });
+  const dev = factory()({ ...ctx, env: { ...developmentEnv, GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY: 'true' } });
   await dev.initialize(); assert.equal(dev.identity.lookup(actor).status, 'SUPPORTED'); await dev.shutdown();
+});
+
+test('official offline identity: missing session refuses even DEV opt-in; exact session changes epoch and readiness', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const mp = fakeHost({ offlineMode: true }), official = officialHost(mp), events = [], unbound = [];
+  const core = factory()(context({ ...developmentEnv, GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY: 'true', GAMEPLAY_CORE_MODE_PROBE: 'active' }, mp));
+  core.register({ id: 'probe', requiresDatabase: false, start(c) { c.actors.onReady(e => events.push(e)); c.actors.onUnbound(b => unbound.push(b)); } });
+  await core.initialize();
+  try {
+    assert.equal(core.identity.lookup(actor).status, 'UNSUPPORTED');
+    official.authenticate(91); core.identity.poll();
+    const first = core.identity.lookup(actor).value; assert.equal(first.characterKey, 'profile:108549');
+    t.mock.timers.tick(3000); assert.equal(events.length, 1);
+    official.authenticate(91); // Same actor/user/profile, new official object, no disconnect event.
+    assert.equal(core.identity.isCurrent(first), false); assert.equal(core.identity.lookup(actor).status, 'UNSUPPORTED');
+    core.identity.poll(); const next = core.identity.lookup(actor).value;
+    assert.notEqual(next.epoch, first.epoch); assert.equal(unbound.length, 1);
+    t.mock.timers.tick(3000); assert.equal(events.length, 2);
+    official.clear(91); assert.equal(core.identity.isCurrent(next), false); core.identity.poll();
+    assert.equal(core.identity.lookup(actor).status, 'UNSUPPORTED');
+    official.authenticate(91); core.identity.poll(); const guidBinding = core.identity.lookup(actor).value;
+    official.changeGuid(91); assert.equal(core.identity.isCurrent(guidBinding), false);
+    assert.equal(core.identity.lookup(actor).status, 'UNSUPPORTED');
+  } finally { await core.shutdown(); }
+});
+
+test('official profile divergence refuses with log; no fallback on missing/throwing facade, even online', async () => {
+  const mp = fakeHost(), official = officialHost(mp), ctx = context({}, mp); official.authenticate(91);
+  const core = factory()(ctx); await core.initialize();
+  try {
+    const binding = core.identity.lookup(actor).value; official.mismatch(91);
+    assert.equal(core.identity.isCurrent(binding), false); core.identity.poll();
+    assert.equal(core.identity.lookup(actor).status, 'UNSUPPORTED');
+    assert(ctx.log.messages.some(s => s.includes('profile_id differs')));
+    mp.aetheriusOfficialIdentity = { session() { throw Error('private token must not be logged'); } };
+    assert.equal(core.identity.lookup(actor).status, 'UNSUPPORTED'); core.identity.poll();
+    assert(!ctx.log.messages.join('\n').includes('private token'));
+  } finally { await core.shutdown(); }
+  const empty = fakeHost(); officialHost(empty);
+  const noSession = factory()(context({}, empty)); await noSession.initialize();
+  try { assert.equal(noSession.identity.lookup(actor).status, 'UNSUPPORTED'); } finally { await noSession.shutdown(); }
 });
 
 test('actor ready fires once per binding; invalid and disconnected actors never fire', async t => {

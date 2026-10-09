@@ -33,7 +33,7 @@ try{
     if(key==='callPapyrusFunction')return(...args)=>{if(['AddSpell','RemoveSpell','AddPerk','RemovePerk','SetActorValue'].includes(args[2]))mutations.push(args[2]);return target.callPapyrusFunction(...args);};
     const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
   }});
-  core=api.createGameplayCore({mp,pg,env:{GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV:'true',GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY:'true',GAMEPLAY_CORE_MODE_CLASSES:'active',GAMEPLAY_CORE_DEV_CLASS_LEVEL:'40'},log:{info:m=>{logs.push(m);console.log(m);}}});
+  core=api.createGameplayCore({mp,pg,env:{NODE_ENV:'local',GAMEPLAY_CORE_ALLOW_DEV_OPTIONS:'true',GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV:'true',GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY:'true',GAMEPLAY_CORE_MODE_CLASSES:'active',GAMEPLAY_CORE_DEV_CLASS_LEVEL:'40'},log:{info:m=>{logs.push(m);console.log(m);}}});
   // Test schema only. The runtime's approved DEV migration runner applies all files.
   await pg.init().query(`CREATE SCHEMA "${schema}"`);created=true;await core.initialize();
   assert.equal(core.capabilityReport().systems.find(s=>s.id==='classes').status,'SUPPORTED');assert(logs.some(m=>m.includes('DEV')));

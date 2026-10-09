@@ -141,7 +141,7 @@ test('bundle mantém o spike desligado por padrão e o liga só pela flag dedica
   const original = () => 'previous';
   mp.onActivate = original;
   const enabled = createGameplayCore({ mp, pg: { init() { pgInitCalls += 1; return pool; } },
-    env: { ENABLE_STANDING_STONE_SPIKE: 'true' }, log: { info: message => logs.push(message) } });
+    env: { ...developmentEnv, ENABLE_STANDING_STONE_SPIKE: 'true' }, log: { info: message => logs.push(message) } });
   await enabled.initialize();
   assert.equal(enabled.info().features.find(feature => feature.id === 'standing-stones').mode, 'active');
   assert.equal(pgInitCalls, 2); // One injected pool acquisition per lifecycle.
@@ -286,3 +286,4 @@ test('ator sem perfil recebe veto e nao grava a ativacao', async () => {
   assert.equal(logs.filter(message => message.includes('activation vetoed: no provisional active-character key')).length, 3);
   service.shutdown();
 });
+import { developmentEnv } from '../tests/development-env.mjs';

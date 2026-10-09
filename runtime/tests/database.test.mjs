@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { createRequire } from 'node:module';
 import { randomBytes } from 'node:crypto';
 import { fakeHost, logger } from './host.mjs';
+import { developmentEnv } from './development-env.mjs';
 const require = createRequire(import.meta.url);
 const { Pool } = require('pg');
 const { createGameplayCore } = require('../../dist/aetherius-gameplay-core.cjs');
@@ -26,7 +27,7 @@ test('real PostgreSQL: pending migrations do not apply; development opt-in appli
     assert(report.database.missing.some(s => s.includes('migrations:apply')));
     assert.equal((await pool.query('SELECT count(*)::int AS n FROM pg_tables WHERE schemaname=$1', [schema])).rows[0].n, 0);
     await runtime.shutdown();
-    runtime = core({ GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV: 'true' }); await runtime.initialize();
+    runtime = core({ ...developmentEnv, GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV: 'true' }); await runtime.initialize();
     assert.equal(runtime.capabilityReport().database.status, 'SUPPORTED');
     const { readdir } = await import('node:fs/promises');
     const delivered = (await readdir(new URL('../../database/migrations/', import.meta.url))).filter(name => name.endsWith('.sql')).length;
@@ -45,7 +46,7 @@ test('same spike flag preserves offline rehydration; retired spike timers never 
   const pool = new Pool({ connectionString: databaseUrl, connectionTimeoutMillis:2000, options:`-c search_path=${schema},pg_catalog` });
   const mp = fakeHost({ catalogAvailable:true, offlineMode:true }); const calls=[];
   mp.callPapyrusFunction = (_type,_class,method) => { calls.push(method); return true; };
-  const host = { mp, pg:{ init:() => pool }, log:logger(), env:{ ENABLE_STANDING_STONE_SPIKE:'true', GAMEPLAY_CORE_DATABASE_SCHEMA:schema } };
+  const host = { mp, pg:{ init:() => pool }, log:logger(), env:{ ...developmentEnv, ENABLE_STANDING_STONE_SPIKE:'true', GAMEPLAY_CORE_DATABASE_SCHEMA:schema } };
   await pool.query(`CREATE SCHEMA "${schema}"`);
   let first, second;
   try {

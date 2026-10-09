@@ -18,13 +18,15 @@ test('18 classes, nine milestones; level 1/17/40 includes exactly configured sup
     }
   }
 });
-test('DEV option refuses online, absent host setting, malformed and out of range',()=>{
-  for(const offline of [false,undefined])for(const raw of ['40','1','garbage'])assert.throws(()=>developmentLevel(raw,offline),/OFFLINE_MODE_REQUIRED/);
-  for(const raw of ['', '0','41','NaN','1.5','-1',' 40','1e1','040'])assert.throws(()=>developmentLevel(raw,true),/INVALID/);
-  assert.equal(developmentLevel(undefined,false),undefined);assert.equal(developmentLevel('40',true),40);
+test('DEV option requires explicit local environment; refuses malformed and out of range',()=>{
+  for(const env of [{},{NODE_ENV:'production'},{NODE_ENV:'staging'}, {...developmentEnv,GAME_ACCESS_CONTROL:'true'}])
+    for(const raw of ['40','1','garbage'])assert.throws(()=>developmentLevel(raw,env),/refused/);
+  for(const raw of ['', '0','41','NaN','1.5','-1',' 40','1e1','040'])assert.throws(()=>developmentLevel(raw,developmentEnv),/INVALID/);
+  assert.equal(developmentLevel(undefined,{}),undefined);assert.equal(developmentLevel('40',developmentEnv),40);
 });
 test('DEV decorates only a read; removal returns real leveling state',async()=>{
   const actual={level:17,origin:'LEVELING',revision:9},port={read:async()=>actual};
   assert.deepEqual(await withDevelopmentLevel(port,40).read(null,'profile:1'),{level:40,origin:'DEV',revision:9});
   assert.deepEqual(await withDevelopmentLevel(port,undefined).read(null,'profile:1'),actual);
 });
+import { developmentEnv } from './development-env.mjs';

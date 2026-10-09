@@ -3,6 +3,7 @@ import type { ClassDefinition, DomainData, ResolvedRecord } from '../../../share
 import type { QueryExecutor, PoolPort } from '../../../shared/persistence/src/index.ts';
 import { executeCommand } from '../../../shared/persistence/src/index.ts';
 import { assertCharacterKey } from '../../../shared/persistence/src/transaction.ts';
+import { requireDevelopmentOption, type CoreEnvironment } from '../../../runtime/src/development.js';
 export interface ClassFact { readonly classId:string; readonly revision:number }
 export interface CharacterLevel { readonly level:number; readonly origin:'LEVELING'|'LEVELING_DEFAULT'|'DEV'; readonly revision:number }
 export interface CharacterLevelPort { read(tx:QueryExecutor,key:CharacterKey):Promise<CharacterLevel> }
@@ -47,10 +48,10 @@ export function createClassCommands(pool:PoolPort,data:DomainData) {
     });
   }};
 }
-/** Presence is strict: invalid/online override disables classes, including when mode=off. */
-export function developmentLevel(raw:string|undefined,offlineMode:boolean|undefined):number|undefined {
+/** Presence is strict: a refused/invalid override disables classes, even in off. */
+export function developmentLevel(raw:string|undefined,env:CoreEnvironment):number|undefined {
   if(raw===undefined)return undefined;
-  if(offlineMode!==true)throw new ClassError('DEV_CLASS_LEVEL_OFFLINE_MODE_REQUIRED');
+  requireDevelopmentOption({...env,GAMEPLAY_CORE_DEV_CLASS_LEVEL:raw},'GAMEPLAY_CORE_DEV_CLASS_LEVEL');
   if(!/^(?:[1-9]|[12][0-9]|3[0-9]|40)$/.test(raw))throw new ClassError('DEV_CLASS_LEVEL_INVALID');
   return Number(raw);
 }

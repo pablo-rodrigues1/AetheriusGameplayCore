@@ -2,7 +2,14 @@ import type { PoolPort } from '../../shared/persistence/src/index.js';
 import type { SkyMpCatalogApi } from '../../tools/catalog/host.ts';
 
 export type Hook = (...args: number[]) => unknown;
+// Retain the exact opaque object: official isCurrent checks reference identity.
+// Never copy/enumerate it; the host also keeps private authentication metadata.
+export interface OfficialIdentity { readonly actorId: number; readonly userId: number; readonly profile_id: number }
 export interface RuntimeMp extends SkyMpCatalogApi {
+  readonly aetheriusOfficialIdentity?: {
+    session(actorId: number): OfficialIdentity | null;
+    isCurrent(identity: OfficialIdentity): boolean;
+  };
   onActivate?: Hook | undefined;
   get(id: number, property: string): unknown;
   getServerSettings(): { dataDir?: string; offlineMode?: boolean };

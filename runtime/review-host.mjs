@@ -33,7 +33,7 @@ try {
   schema = `gc_b1_review_${process.pid}`;
   await pool.query(`CREATE SCHEMA "${schema}"`);
   schemaCreated = true;
-  const env = { GAMEPLAY_CORE_DATABASE_SCHEMA: schema, GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV:'true' };
+  const env = { NODE_ENV:'local', GAMEPLAY_CORE_ALLOW_DEV_OPTIONS:'true', GAMEPLAY_CORE_DATABASE_SCHEMA: schema, GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV:'true' };
   const log = { info: message => console.log(message) };
   first = require(bundleFile).createGameplayCore({ mp, pg, env, log }); await first.initialize();
   const probe = core => {

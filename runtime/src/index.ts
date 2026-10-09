@@ -9,6 +9,7 @@ import type { Migration, PoolPort } from '../../shared/persistence/src/index.js'
 import { createStandingStoneSpike } from '../spike-standing-stone/index.mjs';
 import type { StandingStoneMp } from '../spike-standing-stone/index.mjs';
 import { Actors } from './actors.js';
+import { DEVELOPMENT_OPTIONS, requireDevelopmentOption } from './development.js';
 import { Hooks, Scope } from './scope.js';
 import type { Hook, HostContext } from './host.js';
 import { SpellProjection } from './projection/index.js';
@@ -78,6 +79,8 @@ const safeCode = (error: unknown) => {
 /** Host descriptor contract is preserved; configuration is snapped per lifecycle. */
 export function createGameplayCore(host: HostContext) {
   const env = { ...host.env };
+  const refusedDevOptions = new Map<string, string>();
+  const devEnabled = (option: string) => !refusedDevOptions.has(option) && env[option] === 'true';
   const raceOwnership = deepFreeze(JSON.parse(JSON.stringify(BUILD_RACE_OWNERSHIP)) as readonly RaceOwnership[]);
   const registrations = new Map<string, SystemRegistration>();
   const specs = new Map(defaults.map(spec => [spec.id, spec]));
@@ -87,7 +90,7 @@ export function createGameplayCore(host: HostContext) {
   let db = { status: 'UNSUPPORTED', missing: ['Runtime has not initialized'] as readonly string[] };
   let pool: PoolPort | undefined;
   let scope = new Scope();
-  let actors = new Actors(host.mp, scope, env.GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY === 'true', warn);
+  let actors = new Actors(host.mp, scope, false, warn);
   let hooks = new Hooks(host.mp, scope, warn);
   let controller = new AbortController();
   let initialized = false;
@@ -158,7 +161,8 @@ export function createGameplayCore(host: HostContext) {
       actorReady: Object.freeze({ status: 'PARTIAL', signal: 'ONLINE_DELAY_APPROXIMATION', limitations: actors.limitations, proof: ['runtime/tests/runtime.test.mjs'] }),
       projection: projection?.capability() ?? Object.freeze({ status: 'UNSUPPORTED', reason: 'Runtime has not initialized' }),
       systems: Object.freeze([...specs.values()].map(capability)),
-      spike: Object.freeze({ enabled: env.ENABLE_STANDING_STONE_SPIKE === 'true', running: !!spike }) });
+      spike: Object.freeze({ enabled: devEnabled('ENABLE_STANDING_STONE_SPIKE'), running: !!spike,
+        ...(refusedDevOptions.has('ENABLE_STANDING_STONE_SPIKE') ? { reason: refusedDevOptions.get('ENABLE_STANDING_STONE_SPIKE') } : {}) }) });
   }
   function disposeNow() { wanted = false; initialized = false; controller.abort(); spike?.shutdown(); spike = undefined; scope.close(); }
   async function stopSystems() {
@@ -175,16 +179,22 @@ export function createGameplayCore(host: HostContext) {
     if (!current()) return;
     coordinator.active = api;
     scope = new Scope(); controller = new AbortController();
-    actors = new Actors(host.mp, scope, env.GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY === 'true', warn);
+    refusedDevOptions.clear();
+    for (const option of DEVELOPMENT_OPTIONS) {
+      try { requireDevelopmentOption(env, option); }
+      catch (error) { const reason = (error as Error).message; refusedDevOptions.set(option, reason); warn(`ERROR ${reason}`); }
+    }
+    actors = new Actors(host.mp, scope, devEnabled('GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY'), warn, 3000,
+      refusedDevOptions.has('GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY'));
     hooks = new Hooks(host.mp, scope, warn);
     catalogs.clear(); catalogFailures.clear(); failures.clear(); pool = undefined;
     devClassLevel=undefined;
-    try{devClassLevel=developmentLevel(env.GAMEPLAY_CORE_DEV_CLASS_LEVEL,host.mp?.getServerSettings().offlineMode);
+    try{devClassLevel=developmentLevel(env.GAMEPLAY_CORE_DEV_CLASS_LEVEL,env);
       if(devClassLevel!==undefined)warn(`DEV class level override=${devClassLevel}; read only; never use on official server`);
-    }catch(error){failures.set('classes',(error as {code:string}).code);warn(`ERROR ${failures.get('classes')}; classes refused`);}
+    }catch(error){failures.set('classes',refusedDevOptions.get('GAMEPLAY_CORE_DEV_CLASS_LEVEL') ?? (error as {code:string}).code);warn(`ERROR ${failures.get('classes')}; classes refused`);}
     failures.set('leveling','SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED: durable adapter available; no event source connected');
     for (const spec of specs.values()) mode(spec.id);
-    if (env.ENABLE_STANDING_STONE_SPIKE === 'true' && ['canary', 'active'].includes(mode('standing-stones'))) {
+    if (devEnabled('ENABLE_STANDING_STONE_SPIKE') && ['canary', 'active'].includes(mode('standing-stones'))) {
       failures.set('standing-stones', 'STANDING_STONE_SPIKE_CONFLICT: disable ENABLE_STANDING_STONE_SPIKE before canary/active');
       warn(failures.get('standing-stones')!);
     }
@@ -198,9 +208,10 @@ export function createGameplayCore(host: HostContext) {
     } catch { for (const domain of BUILD_DOMAINS) catalogFailures.set(domain.domain, ['Catalog host/files unavailable; check host dataDir and relevant plugin files']); }
     const instruction = 'Run npm run migrations:apply -- <absolute-path-to-gamemode-core/pg.js> [schema] from the Core root';
     try {
+      if (refusedDevOptions.has('GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV')) throw Object.assign(Error('Development migrations refused'), { code: 'DEV_MIGRATIONS_REFUSED' });
       pool = host.pg.init();
       const schema = env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public';
-      if (env.GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV === 'true') await applyMigrations(pool, BUILD_MIGRATIONS, schema);
+      if (devEnabled('GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV')) await applyMigrations(pool, BUILD_MIGRATIONS, schema);
       // C2 is optional. A missing race table disables races, while the approved
       // standing-stone installation keeps using its already-applied foundation.
       // Optional slices cannot disable the already approved stone installation.
@@ -277,7 +288,7 @@ export function createGameplayCore(host: HostContext) {
       catch { systemScope.close(); failures.set(system.id, 'System start failed'); warn(`system ${system.id} start failed`); }
       if (!current()) { await stopSystems(); return; }
     }
-    if (env.ENABLE_STANDING_STONE_SPIKE === 'true' && host.mp && pool) {
+    if (devEnabled('ENABLE_STANDING_STONE_SPIKE') && host.mp && pool) {
       let releaseHook: (() => void) | undefined;
       let legacyHook: Hook | undefined;
       const view = new Proxy(host.mp, { get(target, key) {
@@ -334,7 +345,7 @@ export function createGameplayCore(host: HostContext) {
     capabilityReport: report,
     healthCheck: () => initialized,
     info: () => Object.freeze({ ...report(), features: Object.freeze([...specs.values()].map(spec => Object.freeze({ id: spec.id,
-      mode: spec.id === 'standing-stones' && env.ENABLE_STANDING_STONE_SPIKE === 'true' ? 'active' : mode(spec.id) }))), resources: scope.size })
+      mode: spec.id === 'standing-stones' && devEnabled('ENABLE_STANDING_STONE_SPIKE') ? 'active' : mode(spec.id) }))), resources: scope.size })
   });
   return api;
 }

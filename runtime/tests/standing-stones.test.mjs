@@ -131,7 +131,7 @@ test('canary applies only to listed profiles, leaving other characters native',a
   assert.equal((await fact(f.binding)).stone_key,roots[0]);assert.equal(f.mp.mutations().filter(c=>c.actor===92).length,0);
 });
 for(const mode of ['active','canary'])test(`${mode} refuses to start with the spike while preserving the legacy flag`,async t=>{
-  const f=await setup(t,{mode,env:{ENABLE_STANDING_STONE_SPIKE:'true'}});const report=f.core.capabilityReport();
+  const f=await setup(t,{mode,env:{...developmentEnv,ENABLE_STANDING_STONE_SPIKE:'true'}});const report=f.core.capabilityReport();
   const entry=report.systems.find(s=>s.id==='standing-stones');assert.equal(entry.started,false);assert.match(entry.missing.join(' '),/SPIKE_CONFLICT/);assert.equal(report.spike.running,true);
   assert.equal((await f.choose()).status,'UNSUPPORTED');assert.equal(await fact(f.binding),undefined);
 });
@@ -223,3 +223,4 @@ test('two active bindings retain independent facts and grants during concurrent 
   assert.equal((await fact(f.binding)).stone_key,roots[0]);assert.equal((await fact(other)).stone_key,roots[1]);
   assert.deepEqual([...f.mp.learned(91)],[f.mp.ids.get('skyrim.esm|0E5F4C')]);assert.deepEqual([...f.mp.learned(92)],[f.mp.ids.get('skyrim.esm|0E5F47')]);
 });
+import { developmentEnv } from './development-env.mjs';

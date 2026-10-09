@@ -28,7 +28,9 @@ Arquivos em `database/migrations/`, aplicados em ordem.
 
 Cada sistema novo acrescentará a sua migration, com o próximo número. Esta tabela deve ser atualizada junto.
 
-A identidade do personagem em todas as tabelas é `profile:<profile_id>`, com o `profile_id` da plataforma. Nenhuma tabela guarda FormID de runtime nem posição de plugin.
+A identidade do personagem em todas as tabelas é `profile:<profile_id>`, com o `profile_id` da plataforma. No host atual, o Core usa exclusivamente `mp.aetheriusOfficialIdentity.session(actorId)`, confirma `isCurrent` e exige que o `profile_id` coincida com `mp.get(actorId, 'profileId')`. Nova sessão oficial recebe novo epoch do Core, mesmo com o mesmo ator e perfil. Nenhuma tabela guarda FormID de runtime nem posição de plugin.
+
+O servidor oficial roda em `offlineMode=true` com login por token do site. Esse modo não identifica desenvolvimento. Ator sem sessão oficial não recebe vínculo, inclusive se a opção de identidade offline estiver configurada.
 
 ## 3. Como aplicar as migrations
 
@@ -81,12 +83,18 @@ Valor inválido é tratado como `off`, com aviso no log. Sistema ausente da conf
 
 ### Só desenvolvimento: **não usar no servidor oficial**
 
+Todas as opções abaixo usam a mesma trava: `NODE_ENV=local` explicitamente, `GAME_ACCESS_CONTROL` diferente de `true` e `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS=true`. Ausência de `NODE_ENV` nunca conta como local, mesmo que `server-options.js` escolha o arquivo local por padrão. `production` e `staging` recusam as opções. O ambiente vem de `env: process.env` no descriptor do gamemode, depois de carregar seu `.env`; `GAME_ACCESS_CONTROL` é a mesma variável lida pelo AccessControl do host.
+
+Fora dessa combinação, **a presença da opção, inclusive vazia ou `false`, é recusada com `ERROR`, nome e motivo no log**. Remova a opção para retomar o comportamento normal. A confirmação `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS` não liga nenhum sistema por si só e também deve estar ausente no oficial.
+
 | Opção | Por que não |
 |---|---|
-| `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV=true` | faz o servidor aplicar migrations sozinho no boot. No oficial as migrations são aplicadas à mão, com backup |
-| `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY=true` | faz o Core aceitar a identidade do jogador com o servidor em `offlineMode`, isto é, sem login validado. O servidor local de teste roda assim; o oficial não. Sem esta opção e com `offlineMode` ligado, os sistemas não agem para ninguém |
-| `ENABLE_STANDING_STONE_SPIKE=true` | liga o protótipo antigo das pedras, com tabelas próprias (`spike_*`). Nunca junto com `GAMEPLAY_CORE_MODE_STANDING_STONES` em `canary` ou `active`: o sistema novo recusa iniciar. No oficial o protótipo nunca foi usado; deixe ausente ou `false` |
-| `GAMEPLAY_CORE_DEV_CLASS_LEVEL=<1..40>` | **ATENÇÃO: nunca no servidor oficial.** Implementado em C3a; usar `40` no teste local compõe os perks de todos os marcos desde a criação. Não grava nível nem XP. Removida a opção, a leitura retorna ao Leveling (nível 1 se ainda não houver progresso). Só é aceita se `offlineMode` for exatamente `true`; com ele desligado, ausente, valor inválido, vazio ou fora de 1–40, registra **ERROR**, marca classes `UNSUPPORTED` e não inicia o sistema, sem usar o nível real em silêncio. Quando aceita, registra **DEV** a cada boot e mostra origem `DEV` na capacidade e na explicação. C3a apenas compõe esses perks: **nenhum é entregue ao cliente antes de B5b** |
+| `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV=true` | aplica migrations no boot somente com a trava local acima. Se recusada, não adquire o pool nem aplica migrations e deixa indisponíveis os sistemas dependentes do banco. No oficial as migrations são aplicadas à mão, com backup |
+| `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY=true` | aceita perfil sem autenticação somente em host antigo, sem `aetheriusOfficialIdentity`, com a trava local acima. Recusa bloqueia vínculos nesse host antigo, sem retornar silenciosamente à identidade normal. No host atual sempre exige sessão oficial; esta opção não contorna o login |
+| `ENABLE_STANDING_STONE_SPIKE=true` | liga o protótipo antigo (`spike_*`) somente com a trava local acima. Recusada, não inicia o spike; os sistemas atuais independentes seguem. Nunca junto com pedras em `canary`/`active`: o sistema novo recusa iniciar. No oficial deixe ausente |
+| `GAMEPLAY_CORE_DEV_CLASS_LEVEL=<1..40>` | **Nunca no servidor oficial.** Com a trava local acima, `40` compõe todos os marcos sem gravar nível ou XP. Recusada, vazia, inválida ou fora de 1–40: **ERROR**, classes `UNSUPPORTED`, sem iniciar nem usar nível real em silêncio. Removida a opção, volta ao Leveling. Quando aceita, registra **DEV** e mostra essa origem na capacidade e explicação. **Nenhum perk é entregue antes de B5b** |
+
+**Supersessão B1-fix1 (08/10/2026):** a trava anterior de C3a baseada em `offlineMode` e a premissa de B1 de que o oficial não roda offline estão substituídas por esta seção. O critério é exclusivamente o ambiente explícito acima.
 
 A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolvimento: ela transferiu para o sistema novo a pedra de um personagem de teste que vinha do protótipo. O servidor oficial não tem dados do protótipo e não precisa dela.
 
@@ -117,6 +125,7 @@ A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolviment
 - Sem progresso gravado, nível 1. O adaptador `createDurableLeveling(pool, configs).award(...)` calcula XP pelos JSONs e pelas políticas existentes e guarda progresso em `gc_leveling_progress`, usando `gc_commands` para replay por evento e personagem. Nunca cria outro pool ou ledger.
 - **Leveling sem fonte de eventos:** C3a não assina `onDeath` nem aceita relatos de abate do cliente. Ainda faltam dono da confirmação de morte no servidor, cobertura dos inimigos/contextos, descoberta de exclusividade do writer de XP e vínculo autoritativo dos membros do grupo ao `CharacterKey`. Depois de definidos, o integrador poderá encaminhar `aetherius.enemy.killed.v1` e o snapshot de grupo ao adaptador. Até lá, nenhuma opção liga XP automático.
 - **Entrega de perks: `UNSUPPORTED`, aguarda B5b.** Nenhum perk, skill ou atributo é aplicado ao jogador. O port de feitiços mantém a recusa de perks. Raças e pedras continuam funcionando. A explicação mostra a origem `CLASS`, rank e a falta de entrega.
+- No oficial com sessão autenticada, `offlineMode=true` permite pedras, raças e classes normalmente. Se `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` ficar por engano em produção, só classes ficam indisponíveis, com erro explícito; pedras e raças continuam para o jogador autenticado.
 - Rank representa posição na cadeia `NextPerk`, não o `NumRanks` de cada record. A concessão automática segue os marcos de classes; condições nativas de aquisição são evidência e não são avaliadas pelo sistema. Não há complemento automático de ranks/pré-requisitos. Os seis rótulos não resolvidos permanecem no catálogo como `UNSUPPORTED`.
 - Fora de C3a: interface, custo/restrições de troca (incluindo Winterhold), skills, pontos/alocação de atributos, feitiços de classe e entrega B5b. O módulo legado permanece intocado e não é ligado pelo runtime novo.
 
@@ -135,12 +144,13 @@ No ambiente local os passos 4 e 5 foram pulados: o sistema foi direto para `acti
 
 No `.env` do gamemode do servidor oficial, estas opções têm de estar **ausentes**:
 
-- `GAMEPLAY_CORE_DEV_CLASS_LEVEL` (daria nível 40 a todos os personagens);
+- `GAMEPLAY_CORE_DEV_CLASS_LEVEL` (override exclusivo do teste; em produção bloqueia classes);
+- `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS`;
 - `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY`;
 - `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV`;
 - `ENABLE_STANDING_STONE_SPIKE`.
 
-E `offlineMode` tem de estar desligado nas configurações do servidor. No log de boot não pode aparecer nenhum aviso do Core com a palavra `DEV`.
+Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial usa `offlineMode=true` e sessão oficial autenticada por token; não mude esse modo para contornar a identidade. No log não deve haver override `DEV` aceito nem `ERROR` de opção de desenvolvimento recusada. Uma opção recusada precisa ser removida antes de ligar o sistema afetado.
 
 ## 7. Como conferir
 
@@ -153,7 +163,7 @@ E `offlineMode` tem de estar desligado nas configurações do servidor. No log d
   node runtime/explain-character.mjs "<caminho absoluto>\gamemode\core\pg.js" profile:<profile_id>
   ```
 
-  Só lê. Mostra pedra, raça, classe, nível, origem do nível, marcos e cada concessão com suas origens. Sem as migrations C3a, declara classes não suportadas e preserva a explicação de pedras e raças. Com `GAMEPLAY_CORE_DEV_CLASS_LEVEL`, exige um quarto argumento, caminho do `server-settings.json` com `offlineMode:true`, e registra `DEV`. Sem prova de offline recusa a opção.
+  Só lê. Mostra pedra, raça, classe, nível, origem do nível, marcos e concessões. Sem as migrations C3a, declara classes não suportadas e preserva pedras e raças. Com `GAMEPLAY_CORE_DEV_CLASS_LEVEL`, exige a mesma trava de ambiente da seção 4 e registra `DEV`. B1-fix1 substitui a prova anterior por `server-settings.json`: esse argumento não autoriza opções de desenvolvimento.
 
 ## 8. Como desligar ou voltar atrás
 
@@ -171,6 +181,10 @@ E `offlineMode` tem de estar desligado nas configurações do servidor. No log d
 | 08/10/2026 | raças | migration 0005 | `GAMEPLAY_CORE_MODE_RACES=active` |
 | 08/10/2026 | classes (C3a) | migrations 0006 e 0007; classe do personagem de teste definida como `viper` pela ferramenta `runtime/set-character-class.mjs` | `GAMEPLAY_CORE_MODE_CLASSES=active` e, **só neste ambiente de teste**, `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` |
 
-O que difere no servidor oficial: sem adoção, sem `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY`, sem a opção do protótipo, **sem `GAMEPLAY_CORE_DEV_CLASS_LEVEL`** (o nível vem do leveling), e com a passagem por `audit` e `canary` antes de `active`.
+As linhas acima registram a configuração histórica anterior à B1-fix1; não comprovam ativação com a trava nova. **Para o revisor manter o teste local:** definir `NODE_ENV=local` e `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS=true`; deixar `GAME_ACCESS_CONTROL` ausente (ou `false`). `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` pode permanecer somente nesse teste. Com login oficial, remover `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY`: o host novo exige sessão oficial mesmo quando ela está presente. Para harness com host antigo sem identidade oficial, conservar essa opção com a trava local.
+
+Remover `ENABLE_STANDING_STONE_SPIKE=false` e `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV=false` do `.env` quando não forem usadas: fora de desenvolvimento até `false` é presença recusada. As migrations existentes continuam aplicadas manualmente. Nenhuma configuração ou tabela do ambiente local foi alterada na entrega B1-fix1; aplicação e boot cabem ao revisor.
+
+O que difere no servidor oficial: `NODE_ENV=production`, sem confirmação/opções de desenvolvimento e sem adoção; nível vem do Leveling. Manter `offlineMode=true`, login por token e passagem por `audit`/`canary` antes de `active`.
 
 Cada sistema novo acrescenta uma linha a esta tabela e uma subseção à seção 5.

@@ -8,6 +8,8 @@ import {spawn} from 'node:child_process';
 import {build} from 'esbuild';
 import {classHost} from './class-host.mjs';
 import {logger} from './host.mjs';
+import {developmentEnv} from './development-env.mjs';
+import {officialHost} from './official-host.mjs';
 const require=createRequire(import.meta.url),{Pool}=require('pg'),coreApi=require('../../dist/aetherius-gameplay-core.cjs');
 const root=fileURLToPath(new URL('../../',import.meta.url)),load=name=>JSON.parse(readFileSync(`${root}/${name}`,'utf8'));
 const classes=load('catalog/classes.json'),stones=load('catalog/standing-stones.json'),races=load('catalog/races.json');
@@ -31,7 +33,7 @@ after(async()=>{await Promise.all(cores.map(c=>c.shutdown()));await pool.query(`
 async function setup(t,{offlineMode=false,mode='active',env={},stoneMode='off',raceMode='off',pgPool=pool}={}){
   t.mock.timers.enable({apis:['setInterval','setTimeout']});const mp=classHost({catalogAvailable:true,offlineMode}),log=logger();mp.profiles.set(91,++profile);
   mp.appearances.set(91,{raceId:mp.ids.get('skyrim.esm|013746')});
-  const core=coreApi.createGameplayCore({mp,pg:{init:()=>pgPool},log,env:{GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY:'true',GAMEPLAY_CORE_MODE_CLASSES:mode,GAMEPLAY_CORE_MODE_STANDING_STONES:stoneMode,GAMEPLAY_CORE_MODE_RACES:raceMode,...env}});
+  const core=coreApi.createGameplayCore({mp,pg:{init:()=>pgPool},log,env:{...developmentEnv,GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY:offlineMode?'true':undefined,GAMEPLAY_CORE_MODE_CLASSES:mode,GAMEPLAY_CORE_MODE_STANDING_STONES:stoneMode,GAMEPLAY_CORE_MODE_RACES:raceMode,...env}});
   cores.push(core);t.after(()=>core.shutdown());await core.initialize();const binding=core.identity.lookup({actorId:91}).value;
   return {mp,log,core,binding,set:classId=>core.setCharacterClass({binding,classId,requestId:randomBytes(8).toString('hex')})};
 }
@@ -110,8 +112,8 @@ test('DEV read preserves existing XP/fatigue; removal restores durable level',as
   assert.deepEqual(await progress(key),before);
   const real=await api.withTransaction(pool,tx=>coreApi.levelingLevelPort.read(tx,key));assert.equal(real.level,before.character_level);assert.equal(real.origin,'LEVELING');
 });
-for(const [offlineMode,raw] of [[false,'40'],[true,'41'],[true,'bad']])test(`boot refuses DEV=${raw} offline=${offlineMode}; stones retain support`,async t=>{
-  const f=await setup(t,{offlineMode,env:{GAMEPLAY_CORE_DEV_CLASS_LEVEL:raw},stoneMode:'active'});
+for(const [nodeEnv,raw] of [['production','40'],['local','41'],['local','bad']])test(`boot refuses DEV=${raw} NODE_ENV=${nodeEnv}; stones retain support`,async t=>{
+  const f=await setup(t,{env:{NODE_ENV:nodeEnv,GAMEPLAY_CORE_DEV_CLASS_LEVEL:raw},stoneMode:'active'});
   const c=f.core.capabilityReport().systems.find(s=>s.id==='classes');assert.equal(c.status,'UNSUPPORTED');assert.equal(c.started,false);assert(f.log.messages.some(m=>m.includes('ERROR')));
   assert.equal((await f.set('elementalista')).status,'UNSUPPORTED');assert.equal((await f.core.inspectActor(f.binding)).grants.length,0);assert.equal(f.core.capabilityReport().systems.find(s=>s.id==='standing-stones').status,'SUPPORTED');
 });
@@ -145,12 +147,49 @@ test('class transaction rollback leaves no fact or command receipt; conflicting 
   const commands=coreApi.createClassCommands(pool,classes),input={characterKey:key,epoch:'staff',classId:'elementalista',requestId};
   assert.equal((await commands.set(input)).replayed,false);assert.equal((await commands.set({...input,classId:'guardiao'})).status,'conflict');
 });
-test('staff and explain CLI against real test DB, request replay and DEV offline proof',async()=>{
+test('staff and explain CLI against real test DB, request replay and DEV environment proof',async()=>{
   const pgPath=fileURLToPath(new URL('../../../aetherius-server/server/gamemode/core/pg.js',import.meta.url));
-  async function cli(script,args,env={}){return new Promise((resolve,reject)=>{const child=spawn(process.execPath,[`runtime/${script}`,...args],{cwd:root,env:{...process.env,GAME_DATABASE_URL:process.env.AETHERIUS_TEST_DATABASE_URL,...env},stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',b=>output+=b);child.on('error',reject);child.on('close',code=>resolve({code,output}));});}
+  async function cli(script,args,env={}){return new Promise((resolve,reject)=>{const child=spawn(process.execPath,[`runtime/${script}`,...args],{cwd:root,env:{...process.env,NODE_ENV:undefined,GAME_ACCESS_CONTROL:undefined,GAMEPLAY_CORE_ALLOW_DEV_OPTIONS:undefined,GAME_DATABASE_URL:process.env.AETHERIUS_TEST_DATABASE_URL,...env},stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',b=>output+=b);child.on('error',reject);child.on('close',code=>resolve({code,output}));});}
   const args=[pgPath,'profile:97003','elementalista',schema,'cli-request'];const a=await cli('set-character-class.mjs',args),b=await cli('set-character-class.mjs',args);assert.equal(a.code,0);assert.equal(b.code,0);assert.equal(JSON.parse(b.output).replayed,true);
   const read=await cli('explain-character.mjs',[pgPath,'profile:97003',schema]);assert.equal(read.code,0);assert.equal(JSON.parse(read.output).facts.class.classId,'elementalista');
   const denied=await cli('explain-character.mjs',[pgPath,'profile:97003',schema],{GAMEPLAY_CORE_DEV_CLASS_LEVEL:'40'});assert.equal(denied.code,1);
-  const dev=await cli('explain-character.mjs',[pgPath,'profile:97003',schema,`${root}/runtime/tests/fixtures/class-offline-settings.json`],{GAMEPLAY_CORE_DEV_CLASS_LEVEL:'40'});
+  const dev=await cli('explain-character.mjs',[pgPath,'profile:97003',schema],{...developmentEnv,GAMEPLAY_CORE_DEV_CLASS_LEVEL:'40',GAME_ACCESS_CONTROL:undefined});
   assert.equal(dev.code,0);assert.equal(JSON.parse(dev.output).facts.level.origin,'DEV');assert.equal(JSON.parse(dev.output).grants.length,19);assert.equal(await progress('profile:97003'),undefined);
+});
+
+test('official production offline login: accidental DEV 40 disables only classes; authenticated stones/races act; replacement invalidates commands',async t=>{
+  t.mock.timers.enable({apis:['setInterval','setTimeout']});
+  const mp=classHost({catalogAvailable:true,offlineMode:true}),log=logger();mp.profiles.set(91,++profile);
+  mp.appearances.set(91,{raceId:mp.ids.get('skyrim.esm|013746')});
+  const official=officialHost(mp);official.authenticate(91);
+  const core=coreApi.createGameplayCore({mp,pg:{init:()=>pool},log,env:{NODE_ENV:'production',GAME_ACCESS_CONTROL:'true',
+    GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_MODE_CLASSES:'active',GAMEPLAY_CORE_MODE_STANDING_STONES:'active',
+    GAMEPLAY_CORE_MODE_RACES:'active',GAMEPLAY_CORE_DEV_CLASS_LEVEL:'40'}});
+  cores.push(core);t.after(()=>core.shutdown());await core.initialize();
+  const binding=core.identity.lookup({actorId:91}).value;assert(binding);
+  await coreApi.createClassCommands(pool,classes).set({characterKey:binding.characterKey,epoch:'staff',classId:'elementalista',requestId:randomBytes(8).toString('hex')});
+  const c=core.capabilityReport().systems.find(s=>s.id==='classes');assert.equal(c.status,'UNSUPPORTED');assert.equal(c.started,false);assert.equal(c.devClassLevel,null);
+  assert(log.messages.some(m=>m.includes('ERROR')&&m.includes('GAMEPLAY_CORE_DEV_CLASS_LEVEL')&&m.includes('NODE_ENV')));
+  assert.equal((await core.setCharacterClass({binding,classId:'guardiao',requestId:'official-refused'})).status,'UNSUPPORTED');
+  assert.equal((await core.observeRace(binding)).status,'SUPPORTED');
+  t.mock.timers.tick(3000);
+  assert.equal((await core.chooseStandingStone({binding,stoneKey:'skyrim.esm|0D232D',requestId:'official-stone'})).status,'SUPPORTED');
+  assert.equal((await core.inspectActor(binding)).grants.filter(g=>g.source.kind==='CLASS').length,0);
+  assert.equal(await progress(binding.characterKey),undefined);
+  assert(mp.mutations().some(call=>call.method==='AddSpell'));
+  for(const id of ['standing-stones','races'])assert.equal(core.capabilityReport().systems.find(s=>s.id===id).status,'SUPPORTED');
+  official.authenticate(91);assert.equal(core.identity.isCurrent(binding),false);
+  assert.equal((await core.chooseStandingStone({binding,stoneKey:'skyrim.esm|0D232E',requestId:'old-official'})).status,'UNSUPPORTED');
+  core.identity.poll();const next=core.identity.lookup({actorId:91}).value;assert.notEqual(next.epoch,binding.epoch);
+  assert.equal((await core.observeRace(next)).status,'SUPPORTED');
+  await core.shutdown();
+  // Removing the accidental option restores the real level and the stored class,
+  // still authenticated in offlineMode=true, without any development flags.
+  const restored=coreApi.createGameplayCore({mp,pg:{init:()=>pool},log,env:{NODE_ENV:'production',GAME_ACCESS_CONTROL:'true',
+    GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_MODE_CLASSES:'active'}});
+  cores.push(restored);t.after(()=>restored.shutdown());await restored.initialize();
+  const live=restored.identity.lookup({actorId:91}).value;assert(live);
+  assert.equal(restored.capabilityReport().systems.find(s=>s.id==='classes').started,true);
+  assert.equal((await restored.inspectActor(live)).grants.filter(g=>g.source.kind==='CLASS').length,4);
+  assert.equal(await progress(live.characterKey),undefined);
 });

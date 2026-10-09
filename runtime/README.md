@@ -84,15 +84,25 @@ um único bridge de disconnect por host permanece no processo e mantém somente 
 assinantes atuais. Shutdown remove os assinantes, e recarga não adiciona outro
 listener nativo. Isto é diferente de um handler vivo da instância anterior.
 
-Identidade lê `mp.get(0, 'onlinePlayers')` e `mp.get(actorId, 'profileId')`, nunca
-varre userIds ou perfis. Profile positivo gera as chaves `profile:<profile_id>`.
-O host precisa declarar `offlineMode: false`; modo offline/contexto desconhecido
-fica UNSUPPORTED. Para desenvolvimento local somente, a opção explícita
-`GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY=true` aceita esse perfil, sem alegar que foi
-autenticado. `getUserByActor` associa o ator ao evento nativo disconnect, inclusive
-userId zero, e cada nova ligação recebe UUID como epoch. Sem esse par de APIs, só
-a observação periódica detecta desconexões; reconexões invisíveis entre dois polls
-não são certificadas. O port verifica o binding completo e a presença online.
+Identidade lê os atores online e, se existe `mp.aetheriusOfficialIdentity`, exige
+`session(actorId)` atual e `profile_id` igual ao `profileId` do host. Preserva o objeto
+opaco para confirmar `isCurrent`: trocar a sessão invalida o vínculo imediatamente
+e gera novo epoch no poll, mesmo com ator/perfil iguais. Não copia metadados de login.
+O servidor oficial usa `offlineMode=true` com token do site; nenhuma opção DEV é
+necessária para esse vínculo. Ausência de sessão oficial resulta em UNSUPPORTED.
+Somente em host antigo, sem a API oficial, aceita `offlineMode:false` ou a opção
+local `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY=true`. `getUserByActor` associa disconnect,
+inclusive userId zero. Cada vínculo recebe UUID como epoch e exige presença online.
+Esta regra B1-fix1 supersede a premissa anterior de B1 sobre identidade offline.
+
+Todas as opções de desenvolvimento (`GAMEPLAY_CORE_DEV_CLASS_LEVEL`,
+`GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY`, `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV`,
+`ENABLE_STANDING_STONE_SPIKE`) exigem `NODE_ENV=local` explicitamente,
+`GAME_ACCESS_CONTROL` diferente de `true` e `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS=true`.
+Fora dessa combinação, qualquer presença (até `false`) gera ERROR com nome/motivo
+e bloqueia o dependente, sem efeito ou fallback silencioso. Classes são bloqueadas
+pelo nível; banco pela migration; vínculo antigo pela identidade; spike pela flag.
+Os sistemas independentes continuam. Roteiro atual: `docs/operations/ATIVACAO_DOS_SISTEMAS.md`.
 
 `actor-ready` é PARTIAL, `ONLINE_DELAY_APPROXIMATION`, `certified:false`: disparado
 uma vez por binding, três segundos após a primeira detecção online. O temporizador
@@ -131,7 +141,7 @@ classes/religion/spells/perks/damage ficam UNSUPPORTED até seus catálogos exis
 Migrations nunca são aplicadas por padrão. Em banco ausente, hash diferente ou migration
 pendente, o runtime mantém healthCheck=true e indisponibiliza os dependentes do banco.
 O catálogo de raça ainda pode estar disponível. Aplicação de desenvolvimento no boot:
-`GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV=true`; schema opcional
+`GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV=true`, sujeita à trava local acima; schema opcional
 `GAMEPLAY_CORE_DATABASE_SCHEMA`, padrão public. Manutenção explícita:
 
 ```powershell
