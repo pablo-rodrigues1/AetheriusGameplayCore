@@ -8,7 +8,7 @@ import { fingerprintFiles } from './host.ts';
 
 const workspace = resolve(process.argv[2] ?? '../../../');
 const catalogDir = join(workspace, 'AetheriusGameplayCore/catalog');
-const domains = ['standing-stones', 'races'].map(name => JSON.parse(readFileSync(join(catalogDir, `${name}.json`), 'utf8')) as DomainData);
+const domains = ['standing-stones', 'races', 'classes'].map(name => JSON.parse(readFileSync(join(catalogDir, `${name}.json`), 'utf8')) as DomainData);
 const dataDir = join(workspace, 'aetherius-server/build/dist/server/data');
 const manifest = JSON.parse(readFileSync(join(dataDir, 'aetherius-loadorder.json'), 'utf8')) as { loadOrder: string[] };
 const begin = performance.now();

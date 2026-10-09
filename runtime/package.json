@@ -6,7 +6,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "node build.mjs",
-    "test": "node --test tests/*.test.mjs && node --test spike-standing-stone/index.test.mjs && node --test tests/races.acceptance.mjs"
+    "test": "node --test tests/*.test.mjs && node --test spike-standing-stone/index.test.mjs && node --test tests/races.acceptance.mjs && node --test tests/classes.acceptance.mjs"
   },
   "devDependencies": {
     "@types/node": "22.10.2",

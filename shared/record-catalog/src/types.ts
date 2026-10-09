@@ -32,7 +32,7 @@ export interface UnsupportedLink {
 }
 export interface DomainData {
   readonly schemaVersion: 1;
-  readonly domain: 'standing-stones' | 'races';
+  readonly domain: 'standing-stones' | 'races' | 'classes';
   readonly exportEpoch: string;
   readonly signature: CatalogSignature;
   readonly dependencies: readonly PluginFingerprint[];
@@ -40,6 +40,25 @@ export interface DomainData {
   readonly roots: readonly StableFormKey[];
   /** Incomplete grants/semantics are explicit, independent of boot reconciliation. */
   readonly unsupported: readonly UnsupportedLink[];
+  /** Class ids are gameplay choices, never record identities. */
+  readonly classes?: readonly ClassDefinition[];
+}
+export interface ClassPerk {
+  readonly label: string;
+  readonly status: 'SUPPORTED' | 'UNSUPPORTED';
+  readonly stableFormKey: StableFormKey | null;
+  readonly rank: number | null;
+  readonly skill: string | null;
+  readonly chain: readonly StableFormKey[];
+  /** Acquisition predicates are evidence, not entitlement gates in C3a. OR
+   * flags and comparisons are retained; no condition engine is claimed. */
+  readonly prerequisites?: readonly { readonly key:StableFormKey; readonly comparison:string; readonly value:string; readonly flags:string }[];
+  readonly reason: string | null;
+}
+export interface ClassDefinition {
+  readonly id: string;
+  readonly stages: readonly { readonly level: number; readonly perks: readonly ClassPerk[] }[];
+  readonly divergences: readonly string[];
 }
 export interface RecordInspection { readonly type: string }
 export interface CatalogHost {

@@ -60,7 +60,7 @@ function swapped(order: string[], a: string, b: string): string[] {
   return order.map(name => name === a ? b : name === b ? a : name);
 }
 function reorder(order: string[], metadata: PluginFingerprint[], dependencies: Map<string, string[]>, probes: Map<string, string>): { order: string[]; moved: string[] } {
-  const relevant = ['Mundus.esp', 'Aetherius.esp'];
+  const relevant = ['Vokrii - Minimalistic Perks of Skyrim.esp'];
   let result: string[] | undefined;
   let moved: string[] = [];
   for (const a of relevant) {
@@ -79,7 +79,7 @@ function reorder(order: string[], metadata: PluginFingerprint[], dependencies: M
   throw new Error('No valid swap for light plugins');
 }
 function child(workspace: string, evidence: string, port: number, configFile: string): void {
-  const data = ['standing-stones', 'races'].map(name => JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog', `${name}.json`), 'utf8')) as DomainData);
+  const data = ['standing-stones', 'races', 'classes'].map(name => JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog', `${name}.json`), 'utf8')) as DomainData);
   const settings = JSON.parse(readFileSync(configFile, 'utf8')) as Settings;
   assert.equal(settings.port, port, 'Child settings must use the requested port');
   const require = createRequire(import.meta.url);
@@ -157,7 +157,7 @@ async function main(): Promise<void> {
   const stripped = (snapshot: Snapshot) => snapshot.domains.map(d => ({ ...d, entries: d.entries.map(({ runtimeFormId: _id, ...entry }) => entry) }));
   assert.deepEqual(stripped(snapshots[0]!), stripped(snapshots[1]!));
   const altered = snapshots[0]!.domains.flatMap(d => d.entries).filter(entry => snapshots[1]!.domains.flatMap(d => d.entries).find(other => other.key === entry.key)!.runtimeFormId !== entry.runtimeFormId);
-  assert.ok(altered.some(entry => entry.key.startsWith('mundus.esp|') || entry.key.startsWith('aetherius.esp|')), 'Relevant defining plugin ids must change');
+  assert.ok(altered.some(entry => entry.key.startsWith('vokrii - minimalistic perks of skyrim.esp|')), 'Class perk defining plugin ids must change');
   assert.ok(snapshots[0]!.lightProbe.some(p => snapshots[1]!.lightProbe.find(other => other.key === p.key)!.runtimeFormId !== p.runtimeFormId), 'A light probe must change its runtime id');
   console.log(JSON.stringify({ result: 'PASSED', movedPlugins: changed.moved, changedRelevantRecords: altered.length, equivalentDomains: snapshots[0]!.domains.map(d => d.domain) }));
 }

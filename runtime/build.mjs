@@ -20,7 +20,7 @@ const result = await build({
   target: 'node22',
   define: {
     BUNDLE_VERSION: JSON.stringify(version),
-    BUILD_DOMAINS: JSON.stringify(await Promise.all(['standing-stones', 'races'].map(name =>
+    BUILD_DOMAINS: JSON.stringify(await Promise.all(['standing-stones', 'races', 'classes'].map(name =>
       readFile(path.join(root, 'catalog', `${name}.json`), 'utf8').then(JSON.parse)))),
     BUILD_MIGRATIONS: JSON.stringify(await Promise.all((await readdir(path.join(root, 'database/migrations')))
       .filter(name => name.endsWith('.sql')).sort().map(async name => ({ version: name,

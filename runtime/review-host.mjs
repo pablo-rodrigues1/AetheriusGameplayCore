@@ -41,7 +41,7 @@ try {
     assert.deepEqual(replies, [true]); assert.equal(core.healthCheck(), true);
     const report = core.capabilityReport();
     assert.equal(report.database.status,'SUPPORTED');
-    for (const domain of ['races','standing-stones']) assert.equal(report.systems.find(s => s.id===domain).catalog.status,'SUPPORTED');
+    for (const domain of ['races','standing-stones','classes']) assert.equal(report.systems.find(s => s.id===domain).catalog.status,'SUPPORTED');
     return report;
   };
   probe(first);

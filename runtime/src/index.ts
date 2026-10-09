@@ -15,6 +15,11 @@ import { SpellProjection } from './projection/index.js';
 import { ActorComposition } from './composition.ts';
 import { StandingStoneSystem } from './standing-stones.ts';
 import { RaceSystem } from './races.ts';
+import { ClassSystem } from './classes.ts';
+import { developmentLevel } from '../../modules/class-progression-system/src/index.ts';
+export { classGrants, readClass, createClassCommands, developmentLevel, withDevelopmentLevel } from '../../modules/class-progression-system/src/index.ts';
+export { createDurableLeveling } from '../../modules/leveling-system/src/integration/durable.ts';
+export { levelingLevelPort, readProgress } from '../../modules/leveling-system/src/persistence/durable.ts';
 import type { RaceOwnership } from '../../modules/race-system/src/ownership.ts';
 import type { ChoiceIntent } from '../../modules/standing-stone-system/src/index.ts';
 export { standingStoneGrants, createStandingStoneCommands } from '../../modules/standing-stone-system/src/index.ts';
@@ -55,6 +60,7 @@ interface SystemSpec { id: string; domain?: string; requiresDatabase: boolean }
 const defaults: readonly SystemSpec[] = [
   { id: 'standing-stones', domain: 'standing-stones', requiresDatabase: true },
   { id: 'races', domain: 'races', requiresDatabase: true },
+  { id: 'leveling', requiresDatabase:true },
   ...['classes', 'religion', 'spells', 'perks', 'damage'].map(id => ({ id, domain: id, requiresDatabase: true }))
 ];
 const coordinatorKey = Symbol.for('aetherius.runtime.coordinator.v1');
@@ -96,6 +102,14 @@ export function createGameplayCore(host: HostContext) {
   let composition: ActorComposition | undefined;
   let standingStones: StandingStoneSystem | undefined;
   let races: RaceSystem | undefined;
+  let classes: ClassSystem | undefined;
+  let devClassLevel:number|undefined;
+  registrations.set('classes',{id:'classes',domain:'classes',requiresDatabase:true,start(context){
+    const eligible=new Set((env.GAMEPLAY_CORE_CANARY_CHARACTERS??'').split(',').map(s=>s.trim()));
+    classes=new ClassSystem(context,BUILD_DOMAINS.find(d=>d.domain==='classes')!,devClassLevel,env.GAMEPLAY_CORE_DATABASE_SCHEMA??'public',
+      key=>context.mode==='active'||context.mode==='canary'&&eligible.has(key));
+    classes.start();return()=>classes!.shutdown();
+  }});
   registrations.set('races', { id:'races', domain:'races', requiresDatabase:true, observeUnavailable:true, start(context) {
     races = new RaceSystem(context, host.mp, env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public');
     races.start(); return () => races!.shutdown();
@@ -131,6 +145,9 @@ export function createGameplayCore(host: HostContext) {
       ...(spec.id === 'races' ? { ownership: raceOwnership,
         observation: Object.freeze({ source:'mp.get(actorId, appearance).raceId', changeSignal:'onUpdateAppearanceAttempt',
           resultAuthority:'NATIVE_CLIENT', hostMutations:0, limitations:['BASE_NPC_RACE_USED_BY_NATIVE_ADD_SPELL', 'MULTIPLAYER_RESULTS_UNVERIFIED'] }) } : {}),
+      ...(spec.id==='classes'?{levelOrigin:devClassLevel===undefined?'LEVELING':'DEV',devClassLevel:devClassLevel??null,
+        perkDelivery:{status:'UNSUPPORTED',reason:'CLASS_PERKS_NOT_DELIVERED_AWAITING_B5b'},proof:['runtime/tests/classes.acceptance.mjs']} : {}),
+      ...(spec.id==='leveling'?{adapter:'DURABLE_POSTGRESQL',eventSource:{status:'UNSUPPORTED',reason:'SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED'},proof:['runtime/tests/classes.acceptance.mjs']} : {}),
       ...(spec.id === 'standing-stones' ? { ownership: Object.freeze({ grants: 'AETHERIUS_SERVER', results: 'NATIVE_CLIENT' }),
         playerFeedback: Object.freeze({ status: host.mp?.makeProperty && host.mp.set ? 'PARTIAL' : 'UNSUPPORTED',
           channel: 'OWNER_PROPERTY_DEBUG_NOTIFICATION', delivery: 'UNCONFIRMED', proof: ['runtime/tests/standing-stones.test.mjs'] }) } : {}),
@@ -146,7 +163,7 @@ export function createGameplayCore(host: HostContext) {
   function disposeNow() { wanted = false; initialized = false; controller.abort(); spike?.shutdown(); spike = undefined; scope.close(); }
   async function stopSystems() {
     for (const stop of stops.splice(0).reverse()) { try { await stop(); } catch { warn('system shutdown failed'); } }
-    await composition?.shutdown(); composition = undefined; standingStones = undefined; races = undefined;
+    await composition?.shutdown(); composition = undefined; standingStones = undefined; races = undefined; classes=undefined;
     await projection?.shutdown(); projection = undefined;
   }
   async function boot(ticket: number) {
@@ -161,6 +178,11 @@ export function createGameplayCore(host: HostContext) {
     actors = new Actors(host.mp, scope, env.GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY === 'true', warn);
     hooks = new Hooks(host.mp, scope, warn);
     catalogs.clear(); catalogFailures.clear(); failures.clear(); pool = undefined;
+    devClassLevel=undefined;
+    try{devClassLevel=developmentLevel(env.GAMEPLAY_CORE_DEV_CLASS_LEVEL,host.mp?.getServerSettings().offlineMode);
+      if(devClassLevel!==undefined)warn(`DEV class level override=${devClassLevel}; read only; never use on official server`);
+    }catch(error){failures.set('classes',(error as {code:string}).code);warn(`ERROR ${failures.get('classes')}; classes refused`);}
+    failures.set('leveling','SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED: durable adapter available; no event source connected');
     for (const spec of specs.values()) mode(spec.id);
     if (env.ENABLE_STANDING_STONE_SPIKE === 'true' && ['canary', 'active'].includes(mode('standing-stones'))) {
       failures.set('standing-stones', 'STANDING_STONE_SPIKE_CONFLICT: disable ENABLE_STANDING_STONE_SPIKE before canary/active');
@@ -181,10 +203,21 @@ export function createGameplayCore(host: HostContext) {
       if (env.GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV === 'true') await applyMigrations(pool, BUILD_MIGRATIONS, schema);
       // C2 is optional. A missing race table disables races, while the approved
       // standing-stone installation keeps using its already-applied foundation.
-      try { await migrationStatus(pool, BUILD_MIGRATIONS, schema); }
-      catch {
-        await migrationStatus(pool, BUILD_MIGRATIONS.filter(m => m.version !== '0005_gc_race_observation.sql'), schema);
-        failures.set('races', 'RACE_MIGRATION_UNAVAILABLE: apply 0005_gc_race_observation.sql through migrations:apply');
+      // Optional slices cannot disable the already approved stone installation.
+      const verifySlice=async(versions:readonly string[])=>{
+        const subset=BUILD_MIGRATIONS.filter(m=>m.version<'0005'||versions.includes(m.version));
+        const selected=new Set(subset.map(m=>m.version)),known=new Set(BUILD_MIGRATIONS.map(m=>m.version));
+        const view:PoolPort={async connect(){const client=await pool!.connect();return {release:error=>client.release(error),
+          async query<Row=Record<string,unknown>>(sql:string,params?:unknown[]){const result=await client.query<Row>(sql,params);
+            if(sql==='SELECT version, sha256, applied_at FROM gc_schema_migrations ORDER BY version')return {...result,rows:result.rows.filter(row=>{
+              const version=(row as {version:string}).version;return selected.has(version)||!known.has(version);
+            })};return result;}};}};
+        await migrationStatus(view,subset,schema);
+      };
+      await verifySlice([]);
+      for(const [id,versions] of [['races',['0005_gc_race_observation.sql']],['classes',['0006_gc_character_class.sql','0007_gc_leveling_progress.sql']]] as const){
+        try{await verifySlice(versions);}
+        catch{if(!failures.has(id))failures.set(id,`${id.toUpperCase()}_MIGRATION_UNAVAILABLE: apply ${versions.join(', ')}`);}
       }
       db = { status: 'SUPPORTED', missing: Object.freeze([]) };
     } catch (error) {
@@ -293,6 +326,9 @@ export function createGameplayCore(host: HostContext) {
     chooseStandingStone: (intent: ChoiceIntent) => standingStones?.choose(intent) ?? Promise.resolve({ status: 'UNSUPPORTED' as const,
       reason: failures.get('standing-stones') ?? 'STANDING_STONES_NOT_STARTED', committed: false }),
     observeRace: (binding: SessionBinding) => races?.observe(binding) ?? Promise.resolve({status:'UNSUPPORTED' as const,raceKey:null,reason:'RACES_NOT_STARTED'}),
+    setCharacterClass:(input:{binding:SessionBinding;requestId:string;classId:string})=>classes?.set(input)??Promise.resolve({status:'UNSUPPORTED' as const,reason:failures.get('classes')??'CLASSES_NOT_STARTED'}),
+    inspectActor:(binding:SessionBinding)=>composition?.inspect(binding)??Promise.reject(Error('COMPOSITION_UNAVAILABLE')),
+    refreshClass:(binding:SessionBinding)=>classes?.refresh(binding)??Promise.resolve({status:'UNSUPPORTED' as const,reason:failures.get('classes')??'CLASSES_NOT_STARTED'}),
     get identity() { return actors; },
     get actorEvents() { return actors; },
     capabilityReport: report,
