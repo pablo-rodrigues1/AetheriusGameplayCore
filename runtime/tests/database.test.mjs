@@ -6,7 +6,7 @@ import { fakeHost, logger } from './host.mjs';
 import { developmentEnv } from './development-env.mjs';
 const require = createRequire(import.meta.url);
 const { Pool } = require('pg');
-const { createGameplayCore } = require('../../dist/aetherius-gameplay-core.cjs');
+const { createGameplayCore, perkMigration } = require('../../dist/aetherius-gameplay-core.cjs');
 const databaseUrl = process.env.AETHERIUS_TEST_DATABASE_URL;
 if (!databaseUrl) throw Error('AETHERIUS_TEST_DATABASE_URL is required; no test skipped');
 const url = new URL(databaseUrl);
@@ -30,7 +30,8 @@ test('real PostgreSQL: pending migrations do not apply; development opt-in appli
     runtime = core({ ...developmentEnv, GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV: 'true' }); await runtime.initialize();
     assert.equal(runtime.capabilityReport().database.status, 'SUPPORTED');
     const { readdir } = await import('node:fs/promises');
-    const delivered = (await readdir(new URL('../../database/migrations/', import.meta.url))).filter(name => name.endsWith('.sql')).length;
+    const delivered = (await readdir(new URL('../../database/migrations/', import.meta.url))).filter(name => name.endsWith('.sql')).length + 1;
+    assert.equal((await pool.query(`SELECT version FROM "${schema}".gc_schema_migrations WHERE version=$1`,[perkMigration.version])).rowCount,1);
     assert.equal((await pool.query(`SELECT count(*)::int AS n FROM "${schema}".gc_schema_migrations`)).rows[0].n, delivered);
     await runtime.shutdown();
     runtime = core({}); await runtime.initialize(); assert.equal(runtime.capabilityReport().database.status, 'SUPPORTED'); await runtime.shutdown();

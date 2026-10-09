@@ -1,0 +1,431 @@
+diff --git a/client/src/index.ts b/client/src/index.ts
+index 2b9543f9928b81ddf80584f6e795ae89031ef962..394d853b6b7e31645286ea83a1427d918c78dddd 100644
+--- a/client/src/index.ts
++++ b/client/src/index.ts
+@@ -30,6 +30,7 @@ import { RagdollService } from "./services/services/ragdollService";
+ import { DeathService } from "./services/services/deathService";
+ import { ContainersService } from "./services/services/containersService";
+ import { NetworkingService } from "./services/services/networkingService";
++import { GameplayGrantService } from './services/services/gameplayGrantService';
+ import { RemoteServer } from "./services/services/remoteServer";
+ import { SpSnippetService } from "./services/services/spSnippetService";
+ import { SweetTaffyDynamicPerksService } from "./services/services/sweetTaffyDynamicPerksService";
+@@ -98,6 +99,7 @@ const main = () => {
+       new DeathService(sp, controller),
+       new ContainersService(sp, controller),
+       new NetworkingService(sp, controller),
++      new GameplayGrantService(sp, controller),
+       new RemoteServer(sp, controller),
+       new SpSnippetService(sp, controller),
+       new SettingsService(sp, controller),
+diff --git a/client/src/services/events/events.ts b/client/src/services/events/events.ts
+index c7cc046d66c9bea67de5ee4c1dbdac6553438614..143ad6b3f9a89cb459e829b48393a4cf13a72f7f 100644
+--- a/client/src/services/events/events.ts
++++ b/client/src/services/events/events.ts
+@@ -37,12 +37,14 @@ import { QueryKeyCodeBindings } from "./queryKeyCodeBindings";
+ import { SpellCastMessage } from "../messages/spellCastMessage";
+ import { UpdateAnimVariablesMessage } from "../messages/updateAnimVariablesMessage";
+ import { CustomPacketMessage } from "../messages/customPacketMessage";
++import type { GameplaySpawnBarrier } from '../services/gameplayGrantService';
+ 
+ import { AnyRawMessageEvent } from "./anyRawMessageEvent";
+ import { NicknameCreateEvent } from "./nicknameCreateEvent";
+ import { NicknameDestroyEvent } from "./nicknameDestroyEvent";
+ 
+ type EventTypes = {
++    'gameplaySpawnBegin': [{ tasks: string[]; capture: (barrier: GameplaySpawnBarrier) => void }],
+     'gameLoad': [GameLoadEvent],
+ 
+     'sendMessage': [SendMessageEvent<AnyMessage>],
+diff --git a/client/src/services/services/remoteServer.ts b/client/src/services/services/remoteServer.ts
+index 8ab9213c53bc4cc3afb52450728324b127f81f23..0941b51dca343ca13134cb14b85ddcb6122888d4 100644
+--- a/client/src/services/services/remoteServer.ts
++++ b/client/src/services/services/remoteServer.ts
+@@ -64,6 +64,7 @@ import { logTrace, logError } from '../../logging';
+ import { SpellCastMessage } from '../messages/spellCastMessage';
+ import { UpdateAnimVariablesMessage } from '../messages/updateAnimVariablesMessage';
+ import { MsgType } from '../../messages';
++import type { GameplaySpawnBarrier } from './gameplayGrantService';
+ 
+ export const getPcInventory = (): Inventory | undefined => {
+   const res = storage['pcInv'];
+@@ -100,6 +101,11 @@ const unequipIronHelmet = () => {
+ };
+ 
+ export class RemoteServer extends ClientListener {
++  private beginGrantCycle(tasks: string[]): GameplaySpawnBarrier | undefined {
++    let barrier: GameplaySpawnBarrier | undefined;
++    this.controller.emitter.emit('gameplaySpawnBegin', { tasks, capture: value => barrier = value });
++    return barrier;
++  }
+   constructor(private sp: Sp, private controller: CombinedController) {
+     super();
+ 
+@@ -244,7 +250,7 @@ export class RemoteServer extends ClientListener {
+     });
+   }
+ 
+-  private onTeleportMessage(event: ConnectionMessage<TeleportMessage> | ConnectionMessage<TeleportMessage2>): void {
++  private onTeleportMessage(event: ConnectionMessage<TeleportMessage> | ConnectionMessage<TeleportMessage2>, grantCycle?: GameplaySpawnBarrier): void {
+     const msg = event.message;
+     once('update', () => {
+       const id = ("idx" in msg && typeof msg.idx === "number") ? this.getIdManager().getId(msg.idx) : this.getMyActorIndex();
+@@ -271,6 +277,7 @@ export class RemoteServer extends ClientListener {
+           msg.rot[1],
+           msg.rot[2],
+         );
++        grantCycle?.complete('teleport', !!refr);
+       };
+       const actor = Actor.from(refr);
+       if (actor /*&& actor.getFormID() === 0x14*/) {
+@@ -434,11 +441,15 @@ export class RemoteServer extends ClientListener {
+     }
+ 
+     const numSetInventory = this.numSetInventory;
++    const grantCycle = msg.isMe ? this.beginGrantCycle(['spells','appearance','placement','equipment1','equipment2']) : undefined;
++    if (!msg.props?.learnedSpells) grantCycle?.complete('spells');
++    if (!msg.appearance) grantCycle?.complete('appearance');
+ 
+-    const applyPcInv = () => {
++    const applyPcInv = (task: string) => {
+       if (msg.equipment) {
+         applyEquipment(Game.getPlayer()!, msg.equipment)
+       }
++      grantCycle?.complete(task, !!Game.getPlayer());
+ 
+       if (numSetInventory !== this.numSetInventory) {
+         logTrace(this, 'Skipping inventory apply due to newer setInventory message');
+@@ -469,6 +480,7 @@ export class RemoteServer extends ClientListener {
+               `player learnedSpells:`, JSON.stringify(learnedSpells),
+             );
+           }
++          if (!grantCycle?.loading) grantCycle?.complete('spells', !!player);
+         });
+       });
+     }
+@@ -525,13 +537,14 @@ export class RemoteServer extends ClientListener {
+                 break;
+               }
+             }
++            grantCycle?.complete('placement', !!Game.getPlayer());
+           })();
+           // Unfortunatelly it requires two calls to work
+-          Utility.wait(1).then(applyPcInv);
+-          Utility.wait(1.3).then(applyPcInv);
++          Utility.wait(1).then(() => applyPcInv('equipment1'));
++          Utility.wait(1.3).then(() => applyPcInv('equipment2'));
+           // Note: appearance part was copy-pasted
+           if (msg.appearance) {
+-            applyAppearanceToPlayer(msg.appearance);
++            applyAppearanceToPlayer(msg.appearance, grantCycle ? success => grantCycle.complete('appearance', success) : undefined);
+           }
+         }
+ 
+@@ -582,6 +595,8 @@ export class RemoteServer extends ClientListener {
+             logTrace(this, `loading game in world/cell`, msg.transform.worldOrCell.toString(16));
+             // As magias aplicadas antes do loadGame se perdem com ele (ver onGameLoad)
+             this.spawnLearnedSpells = msg.props?.learnedSpells;
++            this.spawnGrantCycle = grantCycle;
++            if (grantCycle) { grantCycle.loading = true; grantCycle.require('spells'); }
+             const loadGameService = this.controller.lookupListener(LoadGameService);
+             loadGameService.loadGame(
+               msg.transform.pos,
+@@ -609,11 +624,11 @@ export class RemoteServer extends ClientListener {
+               { minutes: 0, seconds: 0, hours: this.controller.lookupListener(TimeService).getTime().newGameHourValue }
+             );
+             once('update', () => {
+-              applyPcInv();
+-              Utility.wait(0.3).then(applyPcInv);
++              applyPcInv('equipment1');
++              Utility.wait(0.3).then(() => applyPcInv('equipment2'));
+               // Note: appearance part was copy-pasted
+               if (msg.appearance) {
+-                applyAppearanceToPlayer(msg.appearance);
++                applyAppearanceToPlayer(msg.appearance, grantCycle ? success => grantCycle.complete('appearance', success) : undefined);
+               }
+             });
+           }
+@@ -781,6 +796,9 @@ export class RemoteServer extends ClientListener {
+       logError(this, `onDeathStateContainerMessage - Invalid data`, msgData);
+       return;
+     }
++    const grantCycle = !msgData && id === this.getWorldModel().playerCharacterFormIdx
++      ? this.beginGrantCycle(['death','teleport']) : undefined;
++    if (!msg.tTeleport) grantCycle?.complete('teleport');
+ 
+     if (msg.tChangeValues) {
+       this.onChangeValuesMessage({ message: msg.tChangeValues });
+@@ -788,7 +806,7 @@ export class RemoteServer extends ClientListener {
+     once('update', () => this.onUpdatePropertyMessage({ message: msg.tIsDead }));
+ 
+     if (msg.tTeleport) {
+-      this.onTeleportMessage({ message: msg.tTeleport });
++      this.onTeleportMessage({ message: msg.tTeleport }, grantCycle);
+     }
+ 
+     once('update', () => {
+@@ -802,7 +820,9 @@ export class RemoteServer extends ClientListener {
+             actor: actor,
+             isDead: msgData
+           });
++          grantCycle?.complete('death');
+         } catch (e) {
++          grantCycle?.complete('death', false);
+           if (e instanceof RespawnNeededError) {
+             actor.disableNoWait(false);
+             actor.delete();
+@@ -810,7 +830,7 @@ export class RemoteServer extends ClientListener {
+             throw e;
+           }
+         }
+-      }
++      } else grantCycle?.complete('death', false);
+     });
+   }
+ 
+@@ -999,21 +1019,26 @@ export class RemoteServer extends ClientListener {
+   // reenviava, ~20 s depois. Reaplica assim que o carregamento termina.
+   private onGameLoad(e: GameLoadEvent): void {
+     const learnedSpells = this.spawnLearnedSpells;
+-    if (!e.isCausedBySkyrimPlatform || !learnedSpells) return;
++    const grantCycle = this.spawnGrantCycle;
++    if (!e.isCausedBySkyrimPlatform || (!learnedSpells && !grantCycle)) return;
+     this.spawnLearnedSpells = undefined;
++    this.spawnGrantCycle = undefined;
++    grantCycle?.complete('placement', !!Game.getPlayer());
+ 
+     once('update', () => {
+       Utility.wait(1).then(() => {
+         const player = Game.getPlayer();
+-        if (player) {
++        if (player && learnedSpells) {
+           removeAllSpells(player);
+           learnSpells(player, learnedSpells);
+           logTrace(this, `player learnedSpells after loadGame:`, JSON.stringify(learnedSpells));
+         }
++        grantCycle?.complete('spells', !!player);
+       });
+     });
+   }
+ 
+   private spawnLearnedSpells?: number[];
++  private spawnGrantCycle?: GameplaySpawnBarrier;
+   private numSetInventory = 0;
+ }
+diff --git a/client/src/sync/appearance.ts b/client/src/sync/appearance.ts
+index 9e5b9876876bfe3e44d18039d8437ab79b022141..acae4a362018a4e655ede07bef53f5d4cf88dd45 100644
+--- a/client/src/sync/appearance.ts
++++ b/client/src/sync/appearance.ts
+@@ -159,7 +159,7 @@ export const applyAppearance = (appearance: Appearance): ActorBase => {
+   return npc;
+ };
+ 
+-export const applyAppearanceToPlayer = (appearance: Appearance): void => {
++export const applyAppearanceToPlayer = (appearance: Appearance, completed?: (success: boolean) => void): void => {
+   applyAppearanceCommon(
+     appearance,
+     ActorBase.from((Game.getPlayer() as Actor).getBaseObject()) as ActorBase,
+@@ -168,7 +168,9 @@ export const applyAppearanceToPlayer = (appearance: Appearance): void => {
+   (Game.getPlayer() as Actor).queueNiNodeUpdate();
+   Utility.wait(0.0625).then(() => {
+     once("update", () => {
+-      Game.getPlayer()?.startDeferredKill();
++      const player = Game.getPlayer();
++      player?.startDeferredKill();
++      completed?.(!!player);
+     });
+-  });
++  }).catch(error => { if (completed) completed(false); else throw error; });
+ };
+diff --git a/client/src/services/services/gameplayGrantService.ts b/client/src/services/services/gameplayGrantService.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..eb1febc33a4d402b6e161dcd89cc85d98c738a2f
+--- /dev/null
++++ b/client/src/services/services/gameplayGrantService.ts
+@@ -0,0 +1,186 @@
++import { MsgType } from '../../messages';
++import { ClientListener, CombinedController, Sp } from './clientListener';
++
++const channel = 'aetherius.gameplay.grants';
++const maxPacket = 65536;
++const maxItems = 512;
++const token = (s: unknown): s is string => typeof s === 'string' && /^[a-zA-Z0-9_-]{1,96}$/.test(s);
++const exact = (p: any, keys: string[]) => p && typeof p === 'object' && !Array.isArray(p)
++  && Object.keys(p).sort().join('|') === keys.sort().join('|');
++type WireItem = { key: string; plugin: string; localFormId: number; signature: string; action: 'ensure' | 'remove'; owned: boolean };
++type ItemReport = { key: string; signature: string; action: string; status: string };
++type Packet = { [key: string]: any };
++
++/** Completion of calls already made by RemoteServer, not physical engine work.
++ * Optional emitter hook: absence of this service leaves the old flow untouched. */
++export class GameplaySpawnBarrier {
++  readonly id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${GameplaySpawnBarrier.sequence++}`;
++  private static sequence = 0;
++  private pending: Set<string>;
++  failed = false;
++  loading = false;
++  constructor(tasks: string[], private changed: () => void) { this.pending = new Set(tasks); }
++  complete(task: string, success = true) { if (!success) this.failed = true; this.pending.delete(task); this.changed(); }
++  require(task: string) { this.pending.add(task); this.changed(); }
++  get done() { return !this.failed && this.pending.size === 0; }
++}
++
++/** The server owns the set; the client supplies presence/application evidence.
++ * Durable ownership is restored only when explicitly attested by the server.
++ * Without that attestation, a perk already present is never claimed or removed. */
++export class GameplayGrantService extends ClientListener {
++  private session?: string;
++  private cycle?: GameplaySpawnBarrier;
++  private challenge?: string;
++  private begun?: string;
++  private readySent = false;
++  private owned = new Set<string>();
++  private protected = new Set<string>();
++  private last?: { id: string; revision: string; content: string; reports: ItemReport[] };
++  private queued?: string;
++  private queuedPacket?: Packet;
++  private generation = 0;
++  private sessions = new Set<string>();
++  constructor(private sp: Sp, private controller: CombinedController) {
++    super();
++    controller.emitter.on('gameplaySpawnBegin', e => {
++      this.cycle = new GameplaySpawnBarrier(e.tasks, () => this.tryReady());
++      this.challenge = undefined; this.begun = undefined; this.readySent = false;
++      this.last = undefined; this.queued = undefined; this.queuedPacket = undefined; this.generation++;
++      e.capture(this.cycle); this.tryBegin();
++    });
++    controller.emitter.on('customPacketMessage', e => this.receive(e.message.contentJsonDump));
++    controller.emitter.on('connectionDisconnect', () => this.disconnect());
++    controller.emitter.on('connectionAccepted', () => this.disconnect());
++    controller.emitter.on('gameLoad', e => {
++      if (this.cycle?.loading && e.isCausedBySkyrimPlatform) return;
++      // Unknown/local save loads have no instrumented spawn tasks: invalidate,
++      // announce loading, and leave readiness unavailable until next spawn.
++      if (this.session) {
++        this.cycle = new GameplaySpawnBarrier(['unobserved-load'], () => this.tryReady());
++        this.challenge = undefined; this.begun = undefined; this.readySent = false;
++        this.last = undefined; this.queued = undefined; this.queuedPacket = undefined; this.generation++; this.tryBegin();
++      }
++    });
++  }
++  private disconnect() {
++    this.session = undefined; this.cycle = undefined; this.challenge = undefined;
++    this.begun = undefined; this.readySent = false; this.last = undefined;
++    this.queued = undefined; this.queuedPacket = undefined; this.owned.clear(); this.protected.clear(); this.sessions.clear(); this.generation++;
++  }
++  private send(packet: Packet) {
++    if (!this.session) return;
++    this.controller.emitter.emit('sendMessage', {
++      message: { t: MsgType.CustomPacket, contentJsonDump: JSON.stringify({ channel, v: 1, session: this.session, ...packet }) },
++      reliability: 'reliable'
++    });
++  }
++  private tryBegin() {
++    if (!this.session || !this.cycle || this.begun === this.cycle.id) return;
++    this.begun = this.cycle.id;
++    this.send({ type: 'begin', cycle: this.cycle.id });
++  }
++  private tryReady() {
++    if (!this.session || !this.cycle?.done || !this.challenge || this.readySent) return;
++    this.readySent = true;
++    this.send({ type: 'ready', cycle: this.cycle.id, challenge: this.challenge });
++  }
++  private receive(raw: string) {
++    // UTF-8 can use 3 bytes per UTF-16 unit. Conservatively bound both before parse.
++    if (typeof raw !== 'string' || raw.length > maxPacket || this.sp.encodeUtf8(raw).byteLength > maxPacket) return;
++    let p: Packet;
++    try { p = JSON.parse(raw); } catch { return; }
++    if (!p || p.channel !== channel || p.v !== 1) return;
++    if (p.type === 'hello') {
++      if (!exact(p, ['channel','v','session','type']) || !token(p.session)) return;
++      if (this.sessions.has(p.session) || this.sessions.size >= 256) return;
++      this.sessions.add(p.session);
++      // A new authenticated session may be another character. Restore ownership
++      // only from that character's durable server evidence, never from the old one.
++      this.owned.clear(); this.protected.clear();
++      this.session = p.session; this.challenge = undefined; this.begun = undefined;
++      this.readySent = false; this.last = undefined; this.queued = undefined; this.queuedPacket = undefined; this.generation++;
++      this.tryBegin(); return;
++    }
++    if (p.session !== this.session || p.cycle !== this.cycle?.id) return;
++    if (p.type === 'challenge') {
++      if (!exact(p, ['channel','v','session','type','cycle','challenge']) || !token(p.challenge) || this.challenge) return;
++      this.challenge = p.challenge; this.tryReady(); return;
++    }
++    if (p.type !== 'perks' || !this.readySent || !this.cycle?.done || p.challenge !== this.challenge
++      || !exact(p, ['channel','v','session','type','cycle','challenge','id','revision','items']) || !token(p.id)
++      || !exact(p.revision, ['facts','grants','equipment','effects','catalog'])
++      || Object.keys(p.revision).some(k => !Number.isSafeInteger(p.revision[k]) || p.revision[k] < 0)
++      || !Array.isArray(p.items) || p.items.length > maxItems) return;
++    const keys = new Set<string>();
++    if (p.items.some((i: WireItem) => {
++      if (!exact(i, ['key','plugin','localFormId','signature','action','owned'])
++        || typeof i.plugin !== 'string' || !/^[^\x00-\x1f\\/:|]+\.(esm|esp|esl)$/.test(i.plugin)
++        || !Number.isSafeInteger(i.localFormId) || i.localFormId < 1 || i.localFormId > 0xffffff
++        || i.key !== `${i.plugin.toLowerCase()}|${i.localFormId.toString(16).toUpperCase().padStart(6,'0')}`
++        || typeof i.signature !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(i.signature)
++        || !['ensure','remove'].includes(i.action) || typeof i.owned !== 'boolean' || (i.action === 'remove' && !i.owned)
++        || keys.has(i.key)) return true;
++      keys.add(i.key); return false;
++    })) return;
++    const revision = JSON.stringify(p.revision);
++    if (this.last) {
++      const old = JSON.parse(this.last.revision);
++      if (Object.keys(old).some(k => p.revision[k] < old[k])) return;
++      if (p.id === this.last.id) {
++        if (raw === this.last.content) this.ack(p, this.last.reports);
++        return;
++      }
++      // Equal revision retries use a new server request id, with identical items.
++      if (Object.keys(old).every(k => old[k] === p.revision[k]) && JSON.stringify(p.items) !== JSON.stringify(JSON.parse(this.last.content).items)) return;
++    }
++    if (this.queuedPacket) {
++      const queued = this.queuedPacket;
++      if (p.id === queued.id || Object.keys(queued.revision).some(k => p.revision[k] < queued.revision[k])) return;
++      if (Object.keys(queued.revision).every(k => p.revision[k] === queued.revision[k]) && JSON.stringify(p.items) !== JSON.stringify(queued.items)) return;
++    }
++    this.queued = p.id;
++    this.queuedPacket = p;
++    const generation = this.generation;
++    this.controller.once('update', () => {
++      if (generation !== this.generation || this.queued !== p.id || p.session !== this.session || p.challenge !== this.challenge || !this.cycle?.done) return;
++      this.queued = undefined;
++      this.queuedPacket = undefined;
++      const player = this.sp.Game.getPlayer();
++      if (!player) return;
++      const reports: ItemReport[] = p.items.map((item: WireItem) => {
++        const report = { key: item.key, signature: item.signature, action: item.action, status: 'FAILED' };
++        try {
++          // No runtime index/masking: the engine resolves defining filename + local id.
++          const perk = this.sp.Perk.from(this.sp.Game.getFormFromFile(item.localFormId, item.plugin));
++          if (!perk) { report.status = 'UNRESOLVED'; return report; }
++          const present = player.hasPerk(perk);
++          if (item.action === 'ensure') {
++            if (!item.owned && present && !this.owned.has(item.key)) this.protected.add(item.key);
++            if (!present) {
++              player.addPerk(perk);
++              if (!player.hasPerk(perk)) return report;
++              if (!this.protected.has(item.key)) this.owned.add(item.key);
++            } else if (item.owned && !this.protected.has(item.key)) this.owned.add(item.key);
++            report.status = this.owned.has(item.key) ? 'APPLIED' : 'ALREADY_PRESENT';
++          } else {
++            if (this.protected.has(item.key)) return report;
++            // Restore server-recorded authorship across reconnect/save, never
++            // infer it merely from presence. Removal must be explicitly owned.
++            if (item.owned) this.owned.add(item.key);
++            if (!this.owned.has(item.key)) return report;
++            if (present) player.removePerk(perk);
++            if (player.hasPerk(perk)) return report;
++            this.owned.delete(item.key); report.status = present ? 'REMOVED' : 'ALREADY_ABSENT';
++          }
++        } catch { /* Failed item is returned, never silently skipped. */ }
++        return report;
++      });
++      this.last = { id: p.id, revision, content: raw, reports };
++      this.ack(p, reports);
++    });
++  }
++  private ack(p: Packet, items: ItemReport[]) {
++    this.send({ type: 'ack', cycle: p.cycle, challenge: p.challenge, id: p.id, revision: p.revision, items });
++  }
++}

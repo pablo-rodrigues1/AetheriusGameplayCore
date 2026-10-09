@@ -4,7 +4,7 @@ import { classGrants, readClass, createClassCommands, withDevelopmentLevel } fro
 import { levelingLevelPort } from '../../modules/leveling-system/src/persistence/durable.ts';
 import type { SystemContext } from './index.ts';
 import { scopedPool } from './persistence-scope.ts';
-/** Classes only compose. B5b owns eventual delivery of perks. */
+/** Classes own facts; the common projection port owns client delivery. */
 export class ClassSystem {
   private stops:(()=>void)[]=[];
   private tails=new Set<Promise<unknown>>();
@@ -20,7 +20,12 @@ export class ClassSystem {
   }
   private track(task:Promise<unknown>){this.tails.add(task);void task.finally(()=>this.tails.delete(task)).catch(()=>{});}
   async refresh(binding:SessionBinding){
-    try{const set=await this.context.composition.inspect(binding);this.context.log.info(`[classes] ${this.context.mode}: ${binding.characterKey}; level origin=${this.devLevel===undefined?'LEVELING':'DEV'}; class perks=${set.grants.filter(g=>g.source.kind==='CLASS').length}; UNSUPPORTED delivery: awaits B5b`);return {status:'SUPPORTED' as const,set};}
+    try{const set=await this.context.composition.inspect(binding);
+      const available=this.context.projection.capability().perks.status==='SUPPORTED';
+      const projection=available&&this.context.canMutate(binding)?await this.context.composition.recompose(binding):undefined;
+      const delivery=this.context.projection.perkStatus(binding);
+      this.context.log.info(`[classes] ${this.context.mode}: ${binding.characterKey}; level origin=${this.devLevel===undefined?'LEVELING':'DEV'}; class perks=${set.grants.filter(g=>g.source.kind==='CLASS').length}; delivery=${delivery.state}`);
+      return {status:'SUPPORTED' as const,set,delivery,projection};}
     catch{return {status:'UNSUPPORTED' as const,reason:'CLASS_COMPOSITION_UNAVAILABLE'};}
   }
   async set(input:{binding:SessionBinding;requestId:string;classId:string}){

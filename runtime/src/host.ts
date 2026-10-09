@@ -14,7 +14,9 @@ export interface RuntimeMp extends SkyMpCatalogApi {
   get(id: number, property: string): unknown;
   getServerSettings(): { dataDir?: string; offlineMode?: boolean; aetheriusCombat?:{weaponPoison?:boolean} };
   getUserByActor?(actorId: number): number;
-  on?(event: string, listener: (...args: number[]) => void): unknown;
+  getUserActor?(userId: number): number;
+  sendCustomPacket?(userId: number, contentJsonDump: string): void;
+  on?(event: string, listener: (...args: any[]) => void): unknown;
   getDescFromId(id: number): string;
   makeProperty?(name: string, options: { isVisibleByOwner: boolean; isVisibleByNeighbors: boolean; updateOwner: string; updateNeighbor: string }): void;
   set?(id: number, property: string, value: unknown): void;

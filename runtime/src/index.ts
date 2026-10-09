@@ -13,7 +13,13 @@ import { DEVELOPMENT_OPTIONS, requireDevelopmentOption } from './development.js'
 import { Hooks, Scope } from './scope.js';
 import type { Hook, HostContext } from './host.js';
 import { SpellProjection } from './projection/index.js';
-import { ActorComposition } from './composition.ts';
+import { PerkDelivery } from './projection/perks.ts';
+import { ClientDelivery } from './client-delivery.ts';
+export { ClientDelivery } from './client-delivery.ts';
+export { PerkDelivery } from './projection/perks.ts';
+export { perkMigration } from './projection/migration.ts';
+import { ActorComposition, nativeStonePerkKeys } from './composition.ts';
+export {nativeStonePerkKeys} from './composition.ts';
 import { StandingStoneSystem } from './standing-stones.ts';
 import { RaceSystem } from './races.ts';
 import { ClassSystem } from './classes.ts';
@@ -43,7 +49,7 @@ export interface SystemContext {
   readonly catalog: DomainCatalog | undefined;
   readonly persistence: { readonly pool: PoolPort; readonly withTransaction: typeof withTransaction; readonly executeCommand: typeof executeCommand } | undefined;
   readonly identity: Actors;
-  readonly projection: Pick<SpellProjection, 'publish' | 'onAck' | 'capability'>;
+  readonly projection: Pick<SpellProjection, 'publish' | 'onAck' | 'capability' | 'perkStatus'>;
   readonly composition: Pick<ActorComposition, 'register' | 'recompose' | 'inspect'>;
   readonly actors: Pick<Actors, 'onReady' | 'onUnbound'>;
   readonly hooks: { register(name: `on${string}`, listener: Hook): () => void };
@@ -109,6 +115,9 @@ export function createGameplayCore(host: HostContext) {
   let races: RaceSystem | undefined;
   let classes: ClassSystem | undefined;
   let devClassLevel:number|undefined;
+  let clientDelivery: ClientDelivery | undefined;
+  let perkDeliveryFailure: string | undefined;
+  const deliveryMode = modes.has(env.GAMEPLAY_CORE_CLIENT_PERKS_MODE as FeatureMode) ? env.GAMEPLAY_CORE_CLIENT_PERKS_MODE as FeatureMode : 'off';
   registrations.set('classes',{id:'classes',domain:'classes',requiresDatabase:true,start(context){
     const eligible=new Set((env.GAMEPLAY_CORE_CANARY_CHARACTERS??'').split(',').map(s=>s.trim()));
     classes=new ClassSystem(context,BUILD_DOMAINS.find(d=>d.domain==='classes')!,devClassLevel,env.GAMEPLAY_CORE_DATABASE_SCHEMA??'public',
@@ -151,7 +160,7 @@ export function createGameplayCore(host: HostContext) {
         observation: Object.freeze({ source:'mp.get(actorId, appearance).raceId', changeSignal:'onUpdateAppearanceAttempt',
           resultAuthority:'NATIVE_CLIENT', hostMutations:0, limitations:['BASE_NPC_RACE_USED_BY_NATIVE_ADD_SPELL', 'MULTIPLAYER_RESULTS_UNVERIFIED'] }) } : {}),
       ...(spec.id==='classes'?{levelOrigin:devClassLevel===undefined?'LEVELING':'DEV',devClassLevel:devClassLevel??null,
-        perkDelivery:{status:'UNSUPPORTED',reason:'CLASS_PERKS_NOT_DELIVERED_AWAITING_B5b'},proof:['runtime/tests/classes.acceptance.mjs']} : {}),
+        perkDelivery:projection?.capability().perks??{status:'UNSUPPORTED',reason:'CLIENT_PERK_DELIVERY_OFF_OR_UNAVAILABLE'},proof:['runtime/tests/classes.acceptance.mjs','runtime/tests/perks.test.mjs']} : {}),
       ...(spec.id==='leveling'?{adapter:'DURABLE_POSTGRESQL',eventSource:{status:'UNSUPPORTED',reason:'SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED'},proof:['runtime/tests/classes.acceptance.mjs']} : {}),
       ...(spec.id === 'standing-stones' ? { ownership: Object.freeze({ grants: 'AETHERIUS_SERVER', results: 'NATIVE_CLIENT' }),
         playerFeedback: Object.freeze({ status: host.mp?.makeProperty && host.mp.set ? 'PARTIAL' : 'UNSUPPORTED',
@@ -160,7 +169,8 @@ export function createGameplayCore(host: HostContext) {
   }
   function report() {
     return Object.freeze({ version: BUNDLE_VERSION, initialized, database: Object.freeze({ ...db }),
-      actorReady: Object.freeze({ status: 'PARTIAL', signal: 'ONLINE_DELAY_APPROXIMATION', limitations: actors.limitations, proof: ['runtime/tests/runtime.test.mjs'] }),
+      actorReady: Object.freeze({ status: 'PARTIAL', signal: clientDelivery ? 'CLIENT_SPAWN_TASKS_COMPLETED_WITH_LEGACY_APPROXIMATION' : 'ONLINE_DELAY_APPROXIMATION', limitations: actors.limitations, proof: ['runtime/tests/runtime.test.mjs','runtime/tests/client-delivery.test.mjs'] }),
+      clientPerks: Object.freeze({mode:deliveryMode,...clientDelivery?.capability()??{status:'UNSUPPORTED',reason:perkDeliveryFailure??'CLIENT_PROTOCOL_OFF'}}),
       projection: projection?.capability() ?? Object.freeze({ status: 'UNSUPPORTED', reason: 'Runtime has not initialized' }),
       systems: Object.freeze([...specs.values()].map(capability)),
       spike: Object.freeze({ enabled: devEnabled('ENABLE_STANDING_STONE_SPIKE'), running: !!spike,
@@ -170,7 +180,7 @@ export function createGameplayCore(host: HostContext) {
   async function stopSystems() {
     for (const stop of stops.splice(0).reverse()) { try { await stop(); } catch { warn('system shutdown failed'); } }
     await composition?.shutdown(); composition = undefined; standingStones = undefined; races = undefined; classes=undefined;
-    await projection?.shutdown(); projection = undefined;
+    await projection?.shutdown(); projection = undefined; clientDelivery=undefined;
   }
   async function boot(ticket: number) {
     const current = () => wanted && generation === ticket;
@@ -181,6 +191,7 @@ export function createGameplayCore(host: HostContext) {
     if (!current()) return;
     coordinator.active = api;
     scope = new Scope(); controller = new AbortController();
+    if(env.GAMEPLAY_CORE_CLIENT_PERKS_MODE!==undefined&&!modes.has(env.GAMEPLAY_CORE_CLIENT_PERKS_MODE as FeatureMode))warn('invalid GAMEPLAY_CORE_CLIENT_PERKS_MODE; using off');
     refusedDevOptions.clear();
     for (const option of DEVELOPMENT_OPTIONS) {
       try { requireDevelopmentOption(env, option); }
@@ -232,6 +243,8 @@ export function createGameplayCore(host: HostContext) {
         try{await verifySlice(versions);}
         catch{if(!failures.has(id))failures.set(id,`${id.toUpperCase()}_MIGRATION_UNAVAILABLE: apply ${versions.join(', ')}`);}
       }
+      perkDeliveryFailure=undefined;
+      try{await verifySlice(['0008_gc_perk_projection.sql']);}catch{perkDeliveryFailure='PERK_MIGRATION_UNAVAILABLE: apply 0008_gc_perk_projection.sql';}
       db = { status: 'SUPPORTED', missing: Object.freeze([]) };
     } catch (error) {
       const code = safeCode(error);
@@ -240,7 +253,21 @@ export function createGameplayCore(host: HostContext) {
     }
     if (!current()) return;
     const canary = new Set((env.GAMEPLAY_CORE_CANARY_CHARACTERS ?? '').split(',').map(s => s.trim()).filter(s => /^profile:[1-9][0-9]*$/.test(s)));
+    const deliveryAllowed=(binding:SessionBinding)=>current()&&actors.isCurrent(binding)&&(deliveryMode==='active'||deliveryMode==='canary'&&canary.has(binding.characterKey));
+    let perks:PerkDelivery|undefined;
+    if(['active','canary'].includes(deliveryMode)&&db.status==='SUPPORTED'&&!perkDeliveryFailure&&pool&&host.mp?.on&&host.mp.getUserActor&&host.mp.getUserByActor&&host.mp.sendCustomPacket){
+      clientDelivery=new ClientDelivery(host.mp,actors,scope,deliveryAllowed,warn);clientDelivery.start(hooks);
+      const ranks=new Map<import('../../shared/contracts/src/identity.js').StableFormKey,Set<number>>();
+      const classData=BUILD_DOMAINS.find(d=>d.domain==='classes');
+      for(const cls of classData?.classes??[])for(const stage of cls.stages)for(const perk of stage.perks)if(perk.stableFormKey&&perk.rank){
+        if(!ranks.has(perk.stableFormKey))ranks.set(perk.stableFormKey,new Set());ranks.get(perk.stableFormKey)!.add(perk.rank);
+      }
+      perks=new PerkDelivery({pool,schema:env.GAMEPLAY_CORE_DATABASE_SCHEMA??'public',channel:clientDelivery,catalogs:[...catalogs.values()],rankRecords:ranks,
+        check:binding=>{if(!deliveryAllowed(binding))throw Error('STALE_BINDING_OR_CLIENT_MODE');},nativeRecords:(binding,set)=>new Set([
+          ...races?.nativeKeys(binding)??[],...nativeStonePerkKeys(set,BUILD_DOMAINS.find(d=>d.domain==='standing-stones'))]),warn});
+    }else if(['active','canary'].includes(deliveryMode))warn(`client perks UNSUPPORTED: ${perkDeliveryFailure??'TRANSPORT_OR_DATABASE_UNAVAILABLE'}`);
     projection = new SpellProjection({ pool: db.status === 'SUPPORTED' ? pool : undefined,
+      ...(perks?{perks}:{}),
       unavailableReason: db.missing.join(' | '), mp: host.mp, schema: env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public',
       catalogs: [...catalogs.values()], identity: actors, actors, signal: controller.signal, warn,
       nativeRecords: binding => races?.nativeKeys(binding) ?? new Set(),
@@ -272,7 +299,7 @@ export function createGameplayCore(host: HostContext) {
       const context: SystemContext = Object.freeze({ id: system.id, mode: m, catalog: spec.domain ? catalogs.get(spec.domain) : undefined,
         persistence: pool && db.status === 'SUPPORTED' && !failures.has(system.id) ? Object.freeze({ pool, withTransaction, executeCommand }) : undefined,
         identity: actors, projection: Object.freeze({
-          capability: () => systemProjection.capability(), onAck: (listener: Parameters<SpellProjection['onAck']>[0]) => systemProjection.onAck(listener),
+          capability: () => systemProjection.capability(), perkStatus:(binding:SessionBinding)=>systemProjection.perkStatus(binding), onAck: (listener: Parameters<SpellProjection['onAck']>[0]) => systemProjection.onAck(listener),
           publish: (input: Parameters<SpellProjection['publish']>[0]) => {
             if (!systemActive || !context.canMutate(input.binding)) return Promise.resolve({ status: 'UNSUPPORTED' as const,
               reason: 'FEATURE_MODE_OR_BINDING_REFUSED', state: 'REJECTED' as const, items: [] });

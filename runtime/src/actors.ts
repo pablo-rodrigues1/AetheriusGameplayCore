@@ -4,7 +4,9 @@ import type { IdentityPort } from '../../shared/contracts/src/ports.js';
 import type { RuntimeMp, OfficialIdentity } from './host.js';
 import { Scope } from './scope.js';
 
-export interface ActorReady { readonly binding: SessionBinding; readonly signal: 'ONLINE_DELAY_APPROXIMATION'; readonly certified: false }
+export type ActorReady = { readonly binding: SessionBinding } & (
+  { readonly signal: 'ONLINE_DELAY_APPROXIMATION'; readonly certified: false } |
+  { readonly signal: 'CLIENT_SPAWN_TASKS_COMPLETED'; readonly certified: true });
 // ScampServer::On exposes no removeListener. One permanent bridge per native host,
 // holding only current subscribers, survives require-cache eviction without leaks.
 const bridgeKey = Symbol.for('aetherius.runtime.disconnect-bridges.v1');
@@ -18,11 +20,14 @@ export class Actors implements IdentityPort {
   private profileMismatches = new Set<number>();
   private ready = new Set<(event: ActorReady) => void>();
   private unbound = new Set<(binding: SessionBinding) => void>();
+  private bound = new Set<(binding: SessionBinding) => void>();
+  private invalidated = new Set<(binding: SessionBinding) => void>();
+  private protocol = new Set<number>();
   private pending = new Map<number, () => void>();
   readonly limitations: readonly string[];
   constructor(private mp: RuntimeMp | undefined, private scope: Scope, private allowOffline: boolean,
     private warn: (s: string) => void, private readyDelay = 3000, private legacyIdentityRefused = false) {
-    this.limitations = Object.freeze(['ONLINE_DELAY_APPROXIMATION: no client load ACK', 'readiness is not proof of projection delivery']);
+    this.limitations = Object.freeze(['ONLINE_DELAY_APPROXIMATION for clients without protocol', 'client ACK certifies known spawn calls only, not engine/gameplay results']);
   }
   start(): void {
     const mp = this.mp;
@@ -36,7 +41,7 @@ export class Actors implements IdentityPort {
       const listener = (user: number) => { for (const [actor, linkedUser] of this.users) if (linkedUser === user) this.unbind(actor); };
       subscribers.add(listener); this.scope.add(() => subscribers!.delete(listener));
     } else this.warn('disconnect bridge unavailable: session changes detected only by online snapshot');
-    this.scope.add(() => { for (const actor of [...this.bindings.keys()]) this.unbind(actor); this.profileMismatches.clear(); this.ready.clear(); this.unbound.clear(); });
+    this.scope.add(() => { for (const actor of [...this.bindings.keys()]) this.unbind(actor); this.profileMismatches.clear(); this.ready.clear(); this.unbound.clear(); this.bound.clear(); this.invalidated.clear(); });
     this.poll(); this.scope.interval(() => this.poll(), 250);
   }
   private online(): number[] {
@@ -82,11 +87,12 @@ export class Actors implements IdentityPort {
           catch { this.warn('actor-ready subscriber failed'); }
         }
       }, this.readyDelay));
+      for (const fn of [...this.bound]) { try { fn(binding); } catch { this.warn('actor-bound subscriber failed'); } }
     }
   }
   private unbind(actor: number): void {
     const binding = this.bindings.get(actor);
-    this.pending.get(actor)?.(); this.pending.delete(actor); this.users.delete(actor); this.bindings.delete(actor); this.officialSessions.delete(actor);
+    this.pending.get(actor)?.(); this.pending.delete(actor); this.protocol.delete(actor); this.users.delete(actor); this.bindings.delete(actor); this.officialSessions.delete(actor);
     if (binding) for (const fn of [...this.unbound]) { try { fn(binding); } catch { this.warn('actor-unbound subscriber failed'); } }
   }
   lookup(actor: ActorRef) {
@@ -104,4 +110,27 @@ export class Actors implements IdentityPort {
   }
   onReady(fn: (event: ActorReady) => void): () => void { this.ready.add(fn); return this.scope.add(() => this.ready.delete(fn)); }
   onUnbound(fn: (binding: SessionBinding) => void): () => void { this.unbound.add(fn); return this.scope.add(() => this.unbound.delete(fn)); }
+  onBound(fn: (binding: SessionBinding) => void): () => void { this.bound.add(fn); return this.scope.add(() => this.bound.delete(fn)); }
+  onInvalidated(fn: (binding: SessionBinding) => void): () => void { this.invalidated.add(fn); return this.scope.add(() => this.invalidated.delete(fn)); }
+  clientLoading(binding: SessionBinding): void {
+    if (!this.isCurrent(binding)) return;
+    const actor = binding.actorRef.actorId;
+    this.protocol.add(actor); this.pending.get(actor)?.(); this.pending.delete(actor);
+    for (const fn of [...this.invalidated]) fn(binding);
+  }
+  clientReady(binding: SessionBinding): void {
+    if (!this.isCurrent(binding) || !this.protocol.has(binding.actorRef.actorId)) return;
+    for (const fn of [...this.ready]) { try { fn({ binding, signal: 'CLIENT_SPAWN_TASKS_COMPLETED', certified: true }); } catch { this.warn('actor-ready subscriber failed'); } }
+  }
+  /** Respawn invalidates readiness even before the client's next begin. */
+  respawn(binding: SessionBinding): void {
+    if (!this.isCurrent(binding)) return;
+    const actor = binding.actorRef.actorId;
+    this.pending.get(actor)?.(); this.pending.delete(actor);
+    for (const fn of [...this.invalidated]) fn(binding);
+    if (!this.protocol.has(actor)) this.pending.set(actor, this.scope.timeout(() => {
+      this.pending.delete(actor);
+      if (this.isCurrent(binding)) for (const fn of [...this.ready]) fn({ binding, signal: 'ONLINE_DELAY_APPROXIMATION', certified: false });
+    }, this.readyDelay));
+  }
 }

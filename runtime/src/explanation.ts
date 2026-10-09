@@ -30,14 +30,20 @@ export async function explainCharacter(tx:QueryExecutor,key:CharacterKey,stones:
   const set=compose(key,[standingStoneGrants(stoneCatalog,stone),raceGrants(raceCatalog,race),classOutput],
     {facts:revision,grants:revision,equipment:0,effects:0,catalog:1});
   const native=nativeGrantKeys(set);
+  const relation=(await tx.query<{relation:string|null}>("SELECT to_regclass('gc_perk_projections') AS relation")).rows[0]?.relation;
+  const perkRows=relation?(await tx.query<{stable_form_key:string;owned:boolean;active:boolean;item_status:string;revision:unknown}>(
+    'SELECT stable_form_key,owned,active,item_status,revision FROM gc_perk_projections WHERE character_key=$1',[key])).rows:[];
+  const deliveries=new Map(perkRows.map(row=>[row.stable_form_key,row]));
+  const delivery=(recordKey:string)=>!relation?'UNSUPPORTED: PERK_MIGRATION_UNAVAILABLE':deliveries.has(recordKey)
+    ?`LAST_CLIENT_ACK:${deliveries.get(recordKey)!.item_status}; current session status requires runtime`:'NOT_CONFIRMED: client protocol off, unavailable, or awaiting ACK';
   return {characterKey:key,facts:{standingStone:stone??null,race:race??null,...(classes?{class:classFact??null,level}: {})},revision:set.revision,
     ...(classes?{classMilestones:classFact?classDefinition(classes,classFact.classId).stages.map(stage=>({...stage,reached:stage.level<=level!.level,
-      delivery:'UNSUPPORTED: class perks not delivered to client; awaits B5b'})):[],perkDelivery:'UNSUPPORTED: class perks not delivered to client; awaits B5b'}:{}),
+      delivery:'GRANT_PROJECTION_PORT: current session status requires runtime'})):[],perkDelivery:{status:relation?'DELIVERY_BOOKKEEPING_AVAILABLE':'UNSUPPORTED',items:perkRows,limitation:'Past ACK is not confirmation of a current session or gameplay result'}}:{}),
     observationStatus:race?.status??'UNSUPPORTED',
     initialAttributes:race?.status==='SUPPORTED'&&race.raceKey?initialRaceAttributes(raceCatalog,race.raceKey):null,
-    grants:effectiveSet(set).grants.map(grant=>({ ...grant, delivery:grant.sources.some(s=>s.kind==='CLASS')?'UNSUPPORTED: class perks not delivered to client; awaits B5b':native.has(grant.definition.stableFormKey)?'NATIVE_RACE_RECORD':'GRANT_PROJECTION_PORT',
+    grants:effectiveSet(set).grants.map(grant=>({ ...grant, delivery:native.has(grant.definition.stableFormKey)?'NATIVE_RACE_RECORD':grant.sources.some(s=>s.kind==='CLASS')?delivery(grant.definition.stableFormKey):'GRANT_PROJECTION_PORT',
       ownership:grant.sources.map(source=>({source, ...(source.kind==='RACE'?{
         detail:ownership.find(row=>row.raceKey===source.key&&row.stableFormKey===grant.definition.stableFormKey)??{status:'UNSUPPORTED',reason:'RACE_OWNERSHIP_ABSENT'}
-      }:{grantOwner:'AETHERIUS_SERVER',resultOwner:source.kind==='CLASS'?'DISABLED':'NATIVE_CLIENT',resultStatus:source.kind==='CLASS'?'UNSUPPORTED_AWAITS_B5b':'NATIVE_RESULT_NOT_CERTIFIED'})}))})),
+      }:{grantOwner:'AETHERIUS_SERVER',resultOwner:'NATIVE_CLIENT',resultStatus:'NATIVE_RESULT_NOT_CERTIFIED; MULTIPLAYER_DAMAGE_REMAINS_WITH_ITS_EXISTING_OWNER'})}))})),
     portGrants:portGrantSet(set).grants};
 }

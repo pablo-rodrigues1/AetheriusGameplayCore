@@ -4,6 +4,23 @@ import { lockCharacter, withTransaction } from '../../shared/persistence/src/ind
 import type { PoolPort, QueryExecutor } from '../../shared/persistence/src/index.ts';
 import type { ProjectionResult } from './projection/index.ts';
 import { scopedPool } from './persistence-scope.ts';
+import type { DomainData } from '../../shared/record-catalog/src/types.ts';
+
+/** PerkToApply is native magical delivery. Do not add the same PERK separately,
+ * even if another source also lists it. Conditions stay owned by the engine. */
+export function nativeStonePerkKeys(set:GrantSet, data:DomainData|undefined):ReadonlySet<StableFormKey>{
+  const keys=new Set<StableFormKey>();if(!data)return keys;
+  const records=new Map(data.records.map(record=>[record.stableFormKey,record]));
+  for(const grant of set.grants.filter(g=>g.source.kind==='STANDING_STONE'&&g.definition.recordType==='SPEL')){
+    const spell=records.get(grant.definition.stableFormKey);if(!spell||spell.signature!==grant.definition.catalogSignature)continue;
+    const fields=spell.data.fields as Record<string,string>|undefined;
+    for(const [field,key] of Object.entries(fields??{}))if(/^Effects\[[0-9]+\]\.BaseEffect$/.test(field)){
+      const effect=records.get(key as StableFormKey),effectFields=effect?.data.fields as Record<string,string>|undefined;
+      if(effect?.recordType==='MGEF'&&effectFields?.PerkToApply)keys.add(effectFields.PerkToApply as StableFormKey);
+    }
+  }
+  return keys;
+}
 
 export interface CompositionProvider {
   readonly id: string;

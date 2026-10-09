@@ -14,7 +14,8 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 
 ## 2. Tabelas, por migration
 
-Arquivos em `database/migrations/`, aplicados em ordem.
+Arquivos em `database/migrations/`, mais a migration B5b em
+`runtime/src/projection/migration.ts`, incluída pelo mesmo CLI e bundle, aplicados em ordem.
 
 | Migration | Tabelas | Para quê | Quem precisa |
 |---|---|---|---|
@@ -25,6 +26,7 @@ Arquivos em `database/migrations/`, aplicados em ordem.
 | `0005_gc_race_observation.sql` | `gc_race_observation` | a raça que o servidor observou em cada personagem | raças |
 | `0006_gc_character_class.sql` | `gc_character_class` | classe escolhida e revisão por personagem; não altera XP | classes |
 | `0007_gc_leveling_progress.sql` | `gc_leveling_progress` | XP total, nível e estado de fadiga do único writer Leveling | adaptador Leveling e leitura de nível pelas classes |
+| `0008_gc_perk_projection.sql` (runtime) | `gc_perk_projections` | aplicação confirmada de perks, autoria e revisão por personagem; proteção permanente de perks preexistentes | entrega B5b |
 
 D-P1 não cria migration: revestimento e cargas usam o inventário nativo existente; o bônus por ator e os ticks do veneno são transitórios. Não há ledger ou store de efeitos novo.
 
@@ -83,7 +85,21 @@ Valor inválido é tratado como `off`, com aviso no log. Sistema ausente da conf
 | `GAMEPLAY_CORE_CANARY_CHARACTERS` | lista separada por vírgula, no formato `profile:<profile_id>`; vale para os sistemas em modo `canary` |
 | `GAMEPLAY_CORE_DATABASE_SCHEMA` | schema das tabelas `gc_`; padrão `public`. Tem de ser o mesmo usado ao aplicar as migrations |
 
-### Veneno no host nativo (D-P1)
+### Entrega de perks no cliente (B5b)
+
+`GAMEPLAY_CORE_CLIENT_PERKS_MODE=off` por padrão. `active` habilita a conversa
+para bindings autenticados; `canary` só para `GAMEPLAY_CORE_CANARY_CHARACTERS`.
+`audit` e `shadow` não iniciam a conversa nem aplicam perks. A migration 0008
+é obrigatória; sua ausência desabilita só esta entrega, mantendo a fundação
+anterior. A opção não é de desenvolvimento e não contorna a trava B1-fix1.
+
+Instalar o cliente conforme `integrations/client/LEIA-ME.md`. Serviço passivo
+até hello do Core. Cliente antigo: perks `CLIENT_UNSUPPORTED`, readiness pela
+aproximação de três segundos. Cliente novo: begin/challenge/ready acompanha as
+tarefas conhecidas de spawn, nos caminhos com/sem loadGame, e invalida cada
+ciclo anterior. Não muda o removeAllSpells/reaplicação já existente.
+
+### Veneno no host nativo (D-P1) — configuração
 
 A opção `aetheriusCombat.weaponPoison` é um booleano de **server-settings.json**, lido no construtor C++ do addon, não uma variável do `.env`. Ausente ou `false`: comportamento antigo. `true`: habilita o revestimento e o golpe com veneno. Alteração exige reiniciar o processo nativo; recarregar só o gamemode não altera a opção. Não habilita `aetheriusCombat.shadow`.
 
@@ -104,7 +120,7 @@ Fora dessa combinação, **a presença da opção, inclusive vazia ou `false`, �
 | `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV=true` | aplica migrations no boot somente com a trava local acima. Se recusada, não adquire o pool nem aplica migrations e deixa indisponíveis os sistemas dependentes do banco. No oficial as migrations são aplicadas à mão, com backup |
 | `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY=true` | aceita perfil sem autenticação somente em host antigo, sem `aetheriusOfficialIdentity`, com a trava local acima. Recusa bloqueia vínculos nesse host antigo, sem retornar silenciosamente à identidade normal. No host atual sempre exige sessão oficial; esta opção não contorna o login |
 | `ENABLE_STANDING_STONE_SPIKE=true` | liga o protótipo antigo (`spike_*`) somente com a trava local acima. Recusada, não inicia o spike; os sistemas atuais independentes seguem. Nunca junto com pedras em `canary`/`active`: o sistema novo recusa iniciar. No oficial deixe ausente |
-| `GAMEPLAY_CORE_DEV_CLASS_LEVEL=<1..40>` | **Nunca no servidor oficial.** Com a trava local acima, `40` compõe todos os marcos sem gravar nível ou XP. Recusada, vazia, inválida ou fora de 1–40: **ERROR**, classes `UNSUPPORTED`, sem iniciar nem usar nível real em silêncio. Removida a opção, volta ao Leveling. Quando aceita, registra **DEV** e mostra essa origem na capacidade e explicação. **Nenhum perk é entregue antes de B5b** |
+| `GAMEPLAY_CORE_DEV_CLASS_LEVEL=<1..40>` | **Nunca no servidor oficial.** Com a trava local acima, `40` compõe todos os marcos sem gravar nível ou XP. Recusada, vazia, inválida ou fora de 1–40: **ERROR**, classes `UNSUPPORTED`, sem iniciar nem usar nível real em silêncio. Removida a opção, volta ao Leveling. Quando aceita, registra **DEV** e mostra essa origem na capacidade e explicação. Com B5b, a entrega depende também do modo de perks habilitado e do pronto confirmado pelo cliente. |
 
 **Supersessão B1-fix1 (08/10/2026):** a trava anterior de C3a baseada em `offlineMode` e a premissa de B1 de que o oficial não roda offline estão substituídas por esta seção. O critério é exclusivamente o ambiente explícito acima.
 
@@ -136,7 +152,23 @@ A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolviment
 - A escolha é persistida pelo comando idempotente `classes.set`. Staff, inclusive com servidor parado: `node runtime/set-character-class.mjs "<caminho>\gamemode\core\pg.js" profile:<id> elementalista [schema] [requestId]`. O argumento `requestId` opcional permite repetir a mesma operação. Classe desconhecida é recusada. A ferramenta permite troca livre e não muda nível, XP, skills ou atributos.
 - Sem progresso gravado, nível 1. O adaptador `createDurableLeveling(pool, configs).award(...)` calcula XP pelos JSONs e pelas políticas existentes e guarda progresso em `gc_leveling_progress`, usando `gc_commands` para replay por evento e personagem. Nunca cria outro pool ou ledger.
 - **Leveling sem fonte de eventos:** C3a não assina `onDeath` nem aceita relatos de abate do cliente. Ainda faltam dono da confirmação de morte no servidor, cobertura dos inimigos/contextos, descoberta de exclusividade do writer de XP e vínculo autoritativo dos membros do grupo ao `CharacterKey`. Depois de definidos, o integrador poderá encaminhar `aetherius.enemy.killed.v1` e o snapshot de grupo ao adaptador. Até lá, nenhuma opção liga XP automático.
-- **Entrega de perks: `UNSUPPORTED`, aguarda B5b.** Nenhum perk, skill ou atributo é aplicado ao jogador. O port de feitiços mantém a recusa de perks. Raças e pedras continuam funcionando. A explicação mostra a origem `CLASS`, rank e a falta de entrega.
+- **Entrega de perks (B5b, supersede a pendência C3a):** com o protocolo ativo,
+  o único port envia o conjunto completo por revisão e o cliente aplica só a
+  diferença. `CONFIRMED` somente após ACK exato e commit da autoria; antes disso
+  `SENT_UNCONFIRMED`, com reenvio na próxima reconciliação. Sem suporte de cliente,
+  `CLIENT_UNSUPPORTED`; opção desligada/indisponível, `UNSUPPORTED`. Skills e
+  atributos não são aplicados. Feitiços continuam pelo host, com entrega ao
+  cliente não confirmada. A explicação offline mostra o último ACK durável e
+  declara que o estado da sessão atual exige o runtime.
+- O Core remove somente perks de autoria confirmada. Preexistentes são
+  protegidos permanentemente. Reconexão restaura a autoria confirmada do save;
+  adição sem ACK seguida de restart é preservada como externa. RACE e perks
+  ligados por PerkToApply dos MGEF da pedra são entregues pelo motor e não vão
+  separados no pacote. Origem/rank continuam visíveis na composição.
+- O perfil oficial não tem plugin `sweetpie`: os dois writers sweetTaffy já são
+  inertes. Outro perfil com esse plugin requer corte explícito antes de ativar
+  B5b. O ACK não certifica efeitos em combate, pré-requisitos, ranks esparsos ou
+  persistência real após loadGame; resultado nativo e dano mantêm seus donos.
 - No oficial com sessão autenticada, `offlineMode=true` permite pedras, raças e classes normalmente. Se `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` ficar por engano em produção, só classes ficam indisponíveis, com erro explícito; pedras e raças continuam para o jogador autenticado.
 - Rank representa posição na cadeia `NextPerk`, não o `NumRanks` de cada record. A concessão automática segue os marcos de classes; condições nativas de aquisição são evidência e não são avaliadas pelo sistema. Não há complemento automático de ranks/pré-requisitos. Os seis rótulos não resolvidos permanecem no catálogo como `UNSUPPORTED`.
 - Fora de C3a: interface, custo/restrições de troca (incluindo Winterhold), skills, pontos/alocação de atributos, feitiços de classe e entrega B5b. O módulo legado permanece intocado e não é ligado pelo runtime novo.
@@ -153,7 +185,11 @@ A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolviment
 - Ownership dos resultados cobertos: `NATIVE_SERVER`, pelo writer de recursos e inventário do host. O Core decide apenas o bônus derivado dos grants. Parcelas não cobertas ficam `UNSUPPORTED` no host.
 - O dano físico é calculado pela mesma fórmula anterior. Nenhum entry point de dano foi ligado. Fangs (`ModAttackDamage`) e Alkahest (`ModTargetDamageResistance`) aguardam a ordem da fórmula e sua cobertura.
 - `Concentrated Poison`: rank máximo possuído, bônus 2/4/6, mais uma carga base. Viper nível 40: **7 cargas**. Os três ranks coexistem nas concessões, mas as condições de entry point suprimem os inferiores. Condições de aquisição não impedem os marcos. O catálogo incorpora o export profundo oficial; as identidades continuam por plugin de definição e FormID local.
-- O Core reentrega o bônus na composição e no sinal de ator pronto já existente (aproximação de 3 segundos, sem ACK do cliente), limpa no desligamento/desvínculo e recusa epoch antigo. Classe sem esse perk recebe zero. O revestimento já aplicado conserva as cargas obtidas ao usar a dose; trocar a classe altera a próxima dose.
+- O Core reentrega o bônus na composição e no sinal de ator pronto (B5b:
+  ready do cliente com protocolo; aproximação de 3 segundos no cliente antigo),
+  limpa no desligamento/desvínculo e recusa epoch antigo. Classe sem esse perk
+  recebe zero. O revestimento já aplicado conserva as cargas obtidas ao usar a
+  dose; trocar a classe altera a próxima dose.
 - Os ticks são transitórios: não são serializados nem reaplicados como cura ao carregar save. Reiniciar o host perde a porção temporal restante; desligar a opção cancela a continuação no próximo tick. A arma/cargas seguem o formato nativo existente. Persistência de efeito temporal e stacking completo permanecem sem certificação.
 - O cliente compara `poisonId` e `poisonCount` em `extrasEqual`. Se a contagem local divergir, `applyInventory` remove e adiciona a instância, embora transmita o estado equipado por `pushWornState`. Continuidade visual de equipamento exige teste em jogo; não foi alterado o cliente.
 
@@ -192,6 +228,13 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 
 ## 7. Como conferir
 
+- **B5b:** log `perks profile:<id>: CONFIRMED; 19 items` para viper no nível 40
+  autorizado de teste. `SENT_UNCONFIRMED` jamais significa aplicado. Conferir
+  `gc_perk_projections` por personagem (`owned`, `active`, `item_status` e
+  `revision`), sem guardar valores de runtime. A ferramenta offline lê o último
+  ACK; para sessão atual, usar `refreshClass(binding).delivery` e capabilities.
+  Roteiro em jogo e limitações no relatório B5b.
+
 - **No boot**, o log deve ter `[gameplay-core] bundle <versão>; initialized; active instances=1`. Sistemas que não podem subir aparecem com o motivo, por exemplo `[gameplay-core] classes: UNSUPPORTED; Catalog domain classes not delivered` (esperado para os sistemas ainda não entregues). Migration faltando aparece com o comando a rodar.
 - **Raças:** a cada personagem observado, `[races] active: profile:<id> SUPPORTED <raça>`.
 - **No banco:** `SELECT version, applied_at FROM gc_schema_migrations ORDER BY version;` e, por personagem, `gc_standing_stone_choice`, `gc_race_observation`, `gc_commands`.
@@ -204,6 +247,12 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
   Só lê. Mostra pedra, raça, classe, nível, origem do nível, marcos e concessões. Sem as migrations C3a, declara classes não suportadas e preserva pedras e raças. Com `GAMEPLAY_CORE_DEV_CLASS_LEVEL`, exige a mesma trava de ambiente da seção 4 e registra `DEV`. B1-fix1 substitui a prova anterior por `server-settings.json`: esse argumento não autoriza opções de desenvolvimento.
 
 ## 8. Como desligar ou voltar atrás
+
+- **B5b:** definir `GAMEPLAY_CORE_CLIENT_PERKS_MODE=off`, recarregar o Core e
+  restaurar o bundle anterior conforme o guia. Perks já no save não são apagados
+  por desligar. Revogar classes com o protocolo ativo antes de desativá-lo se
+  for necessária remoção por origem; não apagar a autoria no banco. Remoções
+  dependem de confirmação e permanecem pendentes quando o cliente falha.
 
 - **Desligar um sistema:** pôr o modo dele em `off` e reiniciar o servidor (ou recarregar o gamemode). A pedra guardiã volta ao comportamento nativo do jogo; as raças deixam de ser observadas.
 - **As tabelas ficam.** Desligar não apaga nada: a escolha de pedra e o registro do que o Core aplicou continuam no banco, e o sistema retoma de onde parou ao ser religado. Não há migration de remoção, de propósito.
@@ -219,6 +268,7 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 | 08/10/2026 | raças | migration 0005 | `GAMEPLAY_CORE_MODE_RACES=active` |
 | 09/10/2026 | veneno D-P1 | nenhuma alteração em aetherius_dev; testes somente em aetherius_test | compilação Release e sync dos plugins oficiais; opção não ligada; servidor não iniciado; ticks cobertos por teste unitário; stacking e jogo pendentes de revisão |
 | 08/10/2026 | classes (C3a) | migrations 0006 e 0007; classe do personagem de teste definida como `viper` pela ferramenta `runtime/set-character-class.mjs` | `GAMEPLAY_CORE_MODE_CLASSES=active` e, **só neste ambiente de teste**, `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` |
+| 09/10/2026 | perks no cliente B5b | nenhuma alteração em aetherius_dev; migration 0008 somente em schemas descartáveis de aetherius_test | nenhuma opção local alterada; bundle do cliente em evidência, sem instalação; addon e jogo não executados pelo Sol |
 
 As linhas acima registram a configuração histórica anterior à B1-fix1; não comprovam ativação com a trava nova. **Para o revisor manter o teste local:** definir `NODE_ENV=local` e `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS=true`; deixar `GAME_ACCESS_CONTROL` ausente (ou `false`). `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` pode permanecer somente nesse teste. Com login oficial, remover `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY`: o host novo exige sessão oficial mesmo quando ela está presente. Para harness com host antigo sem identidade oficial, conservar essa opção com a trava local.
 

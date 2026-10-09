@@ -7,11 +7,13 @@ if (!['apply', 'status'].includes(operation) || !pgPath || process.argv.length >
 // Compile only the API into memory; no source package outputs are written.
 const result = await build({ absWorkingDir: fileURLToPath(new URL('../', import.meta.url)), entryPoints: ['shared/persistence/src/index.ts'], bundle: true, platform: 'node', format: 'esm', write: false });
 const api = await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`);
+const migrationModule=await build({entryPoints:[fileURLToPath(new URL('./src/projection/migration.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
+const {perkMigration}=await import(`data:text/javascript;base64,${Buffer.from(migrationModule.outputFiles[0].text).toString('base64')}`);
 let pg;
 try {
   pg = createRequire(import.meta.url)(resolve(pgPath));
   const pool = api.poolFromGamemode(pg);
-  const migrations = await api.readMigrations(fileURLToPath(new URL('../database/migrations/', import.meta.url)));
+  const migrations = [...await api.readMigrations(fileURLToPath(new URL('../database/migrations/', import.meta.url))),perkMigration];
   const value = operation === 'apply' ? await api.applyMigrations(pool, migrations, schema) : await api.migrationStatus(pool, migrations, schema);
   console.log(JSON.stringify(value));
 } catch (error) {

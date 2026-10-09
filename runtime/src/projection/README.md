@@ -130,3 +130,51 @@ ainda não persistida. Bookkeeping anterior de autoria do Core é abandonado sem
 remover o spell quando ele passa a ter entrega racial. A observação racial usa
 `ActorComposition.inspect` e não solicita entrega ao port. Contratos e ActorState
 permanecem os da fundação. Detalhes em `modules/race-system/README.md`.
+
+## Atualização B5b (supersede as pendências de perks/readiness acima)
+
+O mesmo `SpellProjection` continua sendo a única implementação de
+`GrantProjectionPort`. Seu adaptador interno `PerkDelivery` usa `CustomPacket`
+existente; SPEL mantém o caminho nativo B5a. Nenhum contrato compartilhado,
+writer de actor values, inventário ou cálculo de dano foi alterado.
+
+`GAMEPLAY_CORE_CLIENT_PERKS_MODE=off` é o padrão. `active` e `canary` habilitam
+a conversa, somente depois da migration 0008. `audit`/`shadow` não publicam.
+Cliente antigo conserva `ONLINE_DELAY_APPROXIMATION`, explicitamente parcial.
+Cliente que envia begin passa a depender exclusivamente do ready desafiado.
+O ACK certifica as chamadas conhecidas de spawn, nunca o estado físico do motor.
+
+Protocolo e operação: [integração do cliente](../../../integrations/client/LEIA-ME.md)
+e [ativação](../../../docs/operations/ATIVACAO_DOS_SISTEMAS.md).
+O ACK do port informa apenas itens PERK; `reason` declara isso explicitamente.
+A entrega dos feitiços continua `UNCONFIRMED`. Nenhum ACK sintético é emitido.
+
+O registro `gc_perk_projections` contém CharacterKey, StableFormKey, definição,
+revisão, autoria e atividade. Só um ACK exato e atual confirma aplicação e grava
+autoria, numa transação do pool existente. Não contém epoch, userId, actorId,
+desafio, índice de plugin ou FormID runtime. Um item preexistente é protegido
+permanentemente; registros sem autoria nunca autorizam remover. No reconnect,
+autoria confirmada pelo servidor permite recuperar o conjunto gerenciado do save;
+presença sozinha nunca concede autoria. Adição sem ACK seguida de restart é
+preservada como externa, mesmo que deixe um perk antigo no save.
+
+Cada publicação leva conjunto completo de ensures e remoções autorizadas;
+o cliente realiza só a diferença. Rank > 1 requer a ocorrência auditada do record
+distinto em classes.json. Não repete AddPerk para fabricar rank. RACE e perks
+aplicados pelos MGEF das pedras são suprimidos na entrega separada, mesmo quando
+outra origem também lista o record. A composição conserva todas as origens.
+
+`ClientDelivery` valida JSON UTF-8 até 65536 bytes, canal/versão/forma exatos,
+usuário do callback nativo, mapa bidirecional usuário/ator, binding e identidade
+oficial atuais, ciclo, desafio, id da publicação, revisão completa e cada item.
+São até 512 itens, quatro begins por dez segundos e 256 ciclos por binding.
+Um listener nativo permanente com assinantes descartáveis evita duplicação em
+reload. Novo begin/respawn/desvínculo invalida readiness e publicação anteriores.
+Timeout de ACK: 10 segundos; permanece `SENT_UNCONFIRMED`, e a próxima
+reconciliação envia novo id. Confirmação repetida/expirada/fora de ordem não grava.
+Sem gatilho de reconciliação não há retry automático em laço.
+
+Limites observáveis: concessões externas posteriores à adição do Core são
+indistinguíveis na API; post-load, ranks esparsos e persistência real no save
+precisam de jogo. Load local que não pertence ao spawn instrumentado invalida o
+ciclo e deixa readiness indisponível até novo spawn, pois suas tarefas são desconhecidas.

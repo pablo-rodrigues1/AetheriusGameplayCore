@@ -117,7 +117,7 @@ test('DEV 40: all milestones, warning/capability/explanation, no XP row; remove 
   assert.equal((await f.core.inspectActor(f.binding)).grants.length,19);assert.equal(await progress(f.binding.characterKey),undefined);assert(f.log.messages.some(m=>m.includes('DEV')));
   const capability=f.core.capabilityReport().systems.find(s=>s.id==='classes');assert.equal(capability.levelOrigin,'DEV');assert.equal(capability.devClassLevel,40);assert.equal(capability.perkDelivery.status,'UNSUPPORTED');
   const explain=await api.withTransaction(pool,tx=>api.explainCharacter(tx,f.binding.characterKey,stones,races,load('modules/race-system/ownership.json'),classes,40));
-  assert.equal(explain.facts.level.origin,'DEV');assert(explain.classMilestones.every(s=>s.reached));assert(explain.grants.every(g=>g.delivery.includes('B5b')));
+  assert.equal(explain.facts.level.origin,'DEV');assert(explain.classMilestones.every(s=>s.reached));assert(explain.grants.every(g=>g.delivery.includes('PERK_MIGRATION_UNAVAILABLE')));
   const actual=await api.withTransaction(pool,tx=>api.explainCharacter(tx,f.binding.characterKey,stones,races,[],classes));assert.equal(actual.facts.level.level,1);assert.equal(actual.grants.length,4);assert.equal(actual.facts.level.origin,'LEVELING_DEFAULT');
   assert.equal(f.core.capabilityReport().systems.find(s=>s.id==='leveling').status,'UNSUPPORTED');assert.equal(f.mp.mutations().length,0);
 });

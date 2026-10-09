@@ -8,8 +8,9 @@ import type { ActorReady, Actors } from '../actors.js';
 import type { RuntimeMp } from '../host.js';
 import { ProjectionError, SpellHost } from './host.js';
 import { nativeGrantKeys, portGrantSet } from '../composition.ts';
+import type { PerkDelivery } from './perks.ts';
 
-export type ItemStatus = 'APPLIED_HOST' | 'REMOVED_HOST' | 'ALREADY_PRESENT' | 'ALREADY_ABSENT' | 'UNSUPPORTED' | 'FAILED' | 'PENDING';
+export type ItemStatus = 'APPLIED_HOST' | 'REMOVED_HOST' | 'APPLIED_CLIENT' | 'REMOVED_CLIENT' | 'SENT_UNCONFIRMED' | 'ALREADY_PRESENT' | 'ALREADY_ABSENT' | 'UNSUPPORTED' | 'FAILED' | 'PENDING';
 export interface ProjectionItem {
   readonly definition: DefinitionRef;
   readonly status: ItemStatus;
@@ -20,6 +21,7 @@ export interface ProjectionOutcome extends ProjectionReceipt {
   readonly state: ProjectionState;
   readonly items: readonly ProjectionItem[];
   readonly delivery: 'UNCONFIRMED';
+  readonly perkDelivery?: ReturnType<PerkDelivery['status']>;
 }
 export type ProjectionResult =
   | { readonly status: 'SUPPORTED'; readonly value: ProjectionOutcome }
@@ -38,6 +40,7 @@ interface Options {
   readonly actors: Pick<Actors, 'onReady' | 'onUnbound'>;
   readonly signal: AbortSignal;
   readonly warn: (message: string) => void;
+  readonly perks?: PerkDelivery;
 }
 const rejected = (reason: string, items: readonly ProjectionItem[] = [], state: ProjectionState = 'REJECTED'): ProjectionResult =>
   Object.freeze({ status: 'UNSUPPORTED', reason, state, items: Object.freeze([...items]) });
@@ -62,14 +65,18 @@ export class SpellProjection implements GrantProjectionPort {
       if (this.ready.get(binding.characterKey) === binding.epoch) this.ready.delete(binding.characterKey);
       if (this.pending.get(binding.characterKey)?.binding.epoch === binding.epoch) this.pending.delete(binding.characterKey);
     })];
+    const invalidation = options.actors as Pick<Actors, 'onReady' | 'onUnbound'> & Partial<Pick<Actors, 'onInvalidated'>>;
+    if (invalidation.onInvalidated) this.unsubscribers.push(invalidation.onInvalidated(binding => this.ready.delete(binding.characterKey)));
   }
   capability() {
     return Object.freeze({ status: !this.closed && this.options.pool && this.host ? 'PARTIAL' : 'UNSUPPORTED',
       reason: this.closed ? 'PROJECTION_CLOSED' : !this.options.pool ? this.options.unavailableReason ?? 'DATABASE_UNAVAILABLE' : !this.host ? 'HOST_UNAVAILABLE' : 'HOST_APPLICATION_ONLY',
       proof: ['runtime/tests/projection.test.mjs'],
-      limitations: ['NO_CLIENT_ACK', 'ONLINE_DELAY_APPROXIMATION', 'PERKS_UNSUPPORTED', 'UNRECORDED_ADDITIONS_PRESERVED', 'EXTERNAL_GRANTS_AFTER_CORE_ADDITION_UNOBSERVABLE'] });
+      perks: this.options.perks?.capability() ?? {status:'UNSUPPORTED',reason:'CLIENT_PERK_DELIVERY_OFF_OR_UNAVAILABLE'},
+      limitations: ['SPELL_DELIVERY_UNCONFIRMED', 'ONLINE_DELAY_APPROXIMATION_FOR_LEGACY_CLIENTS', ...this.options.perks ? [] : ['PERKS_UNSUPPORTED'], 'UNRECORDED_ADDITIONS_PRESERVED', 'EXTERNAL_GRANTS_AFTER_CORE_ADDITION_UNOBSERVABLE'] });
   }
-  onAck(_listener: (ack: GrantProjectionAck) => void): () => void { return () => {}; } // No fabricated ACKs.
+  onAck(listener: (ack: GrantProjectionAck) => void): () => void { return this.options.perks?.onAck(listener) ?? (() => {}); }
+  perkStatus(binding: SessionBinding) { return this.options.perks?.status(binding) ?? { state:'UNSUPPORTED' as const, items:[], reason:'CLIENT_PERK_DELIVERY_OFF_OR_UNAVAILABLE' }; }
   private check(binding: SessionBinding): void {
     if (this.closed || this.options.signal.aborted || !this.options.identity.isCurrent(binding)) throw new ProjectionError('STALE_BINDING');
     if (this.options.canProject && !this.options.canProject(binding)) throw new ProjectionError('FEATURE_MODE_REFUSED');
@@ -98,7 +105,7 @@ export class SpellProjection implements GrantProjectionPort {
       if (prior) this.acceptRevision(prior.set, set);
       this.pending.set(set.characterKey, projection);
     } catch (error) { return Promise.resolve(rejected(error instanceof ProjectionError ? error.code : 'INVALID_PROJECTION')); }
-    return this.serial(projection.set.characterKey, () => this.run(projection, false));
+    return this.serial(projection.set.characterKey, () => this.runAndDeliver(projection, false));
   }
   private acceptRevision(previous: GrantSet, next: GrantSet): void {
     const relation = compareRevisions(next.revision, previous.revision);
@@ -110,16 +117,28 @@ export class SpellProjection implements GrantProjectionPort {
     this.ready.set(binding.characterKey, binding.epoch);
     const pending = this.pending.get(binding.characterKey);
     const input = pending?.binding.epoch === binding.epoch ? pending : { binding, set: undefined };
-    void this.serial(binding.characterKey, () => this.run(input, true)).then(result => {
+    void this.serial(binding.characterKey, () => this.runAndDeliver(input, true)).then(result => {
       if (result.status === 'UNSUPPORTED') this.options.warn(`spell reconciliation: ${result.reason}`);
     }).catch(() => this.options.warn('spell reconciliation: PROJECTION_FAILED'));
+  }
+  private async runAndDeliver(input: { binding: SessionBinding; set: GrantSet | undefined }, reconcile: boolean): Promise<ProjectionResult> {
+    const result = await this.run(input, reconcile);
+    if (!this.options.perks || result.status !== 'SUPPORTED' || result.value.state === 'PENDING' || input.set===undefined) return result;
+    const set = this.pending.get(input.binding.characterKey)?.set;
+    if (!set) return result;
+    try {
+      this.check(input.binding);
+      const perkDelivery = await this.options.perks.publish({binding:input.binding,set},reconcile);
+      return {status:'SUPPORTED',value:{...result.value,perkDelivery,items:[...result.value.items,...perkDelivery.items]}};
+    } catch { return rejected('PERK_DELIVERY_FAILED', result.value.items, 'FAILED'); }
   }
   private async run(input: { binding: SessionBinding; set: GrantSet | undefined }, reconcile: boolean): Promise<ProjectionResult> {
     const { binding } = input;
     let client: PoolClient | undefined;
     let locked = false, discard = false;
     const items: ProjectionItem[] = [];
-    const check = () => this.check(binding);
+    let applying=false;
+    const check = () => { this.check(binding); if(applying&&this.ready.get(binding.characterKey)!==binding.epoch)throw new ProjectionError('ACTOR_NOT_READY'); };
     const table = (name: string) => `"${this.schema}".${name}`;
     try {
       check();
@@ -132,15 +151,18 @@ export class SpellProjection implements GrantProjectionPort {
       const set = input.set ?? (head ? compose(head.grant_set.characterKey, [head.grant_set.grants], head.grant_set.revision) : undefined);
       if (!set) return rejected('NO_PUBLISHED_SET');
       const projection = { binding, set };
+      this.pending.set(binding.characterKey, projection);
       if (head) this.acceptRevision(compose(head.grant_set.characterKey, [head.grant_set.grants], head.grant_set.revision), set);
       if (this.ready.get(binding.characterKey) !== binding.epoch) {
         return this.receipt(projection, 'PENDING', effectiveSet(portGrantSet(set, head?.grant_set)).grants.map(g => ({ definition: g.definition, status: 'PENDING', reason: 'ACTOR_NOT_READY' })));
       }
+      applying=true;
       const observed = this.options.nativeRecords?.(binding) ?? new Set<StableFormKey>();
       const native = new Set([...nativeGrantKeys(set, head?.grant_set), ...observed]);
       const effective = effectiveSet(portGrantSet(set, head?.grant_set, observed));
       const desired = new Map<StableFormKey, DefinitionRef>();
       for (const item of effective.grants) {
+        if (item.kind === 'perk' && this.options.perks) continue;
         if (!['spell', 'ability', 'power'].includes(item.kind) || item.definition.recordType !== 'SPEL') {
           items.push({ definition: item.definition, status: 'UNSUPPORTED', reason: 'B5A_SPEL_ONLY' });
         } else desired.set(item.definition.stableFormKey, item.definition);
@@ -240,5 +262,6 @@ export class SpellProjection implements GrantProjectionPort {
     this.closed = true; for (const fn of this.unsubscribers.splice(0)) fn();
     this.ready.clear(); this.pending.clear();
     await Promise.allSettled([...this.tails.values()]);
+    await this.options.perks?.shutdown();
   }
 }
