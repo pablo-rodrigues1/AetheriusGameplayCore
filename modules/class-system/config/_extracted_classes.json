@@ -151,7 +151,7 @@
       "perks": [
         "Destruction Mastery",
         "Destruction Dual Casting",
-        "Rune Mestre (1)",
+        "Rune Master",
         "Augmented Frost (2)",
         "Chilling Frost",
         "Winter's Grasp",
@@ -278,7 +278,7 @@
       "perks": [
         "Destruction Mastery",
         "Destruction Dual Casting",
-        "Rune Mestre (1)",
+        "Rune Master",
         "Augmented Shock (2)",
         "Deafening Shock",
         "Crackling Sphere",
@@ -410,7 +410,7 @@
       "perks": [
         "Destruction Mastery",
         "Destruction Dual Casting",
-        "Rune Mestre (1)",
+        "Rune Master",
         "Augmented Flames (2)",
         "Devouring Flames",
         "Scorched Earth",
@@ -1470,7 +1470,7 @@
       ],
       "perks": [
         "Illusion Mastery",
-        "Anímage (2)",
+        "Animage (2)",
         "Quiet Casting",
         "Blur",
         "Alteration Mastery",
@@ -1615,7 +1615,7 @@
     "Vigilant Ward (1)": "Wards cost 50/80% less Magicka and reduce incoming damage by 30/60%.",
     "Ward Absorb": "When your ward blocks a spell, you gain Magicka equal to 30% of that spell's cost.",
     "One-Handed Mastery": "One-handed weapons do 1% more damage and 5% more critical damage per level of One-Handed.",
-    "Rune Mestre (1)": "Can place runes three times as far away/at any distance, and runes are 10/20% more powerful.",
+    "Rune Master": "Can place runes three times as far away/at any distance, and runes are 10/20% more powerful.",
     "Augmented Frost (2)": "Augmented Frost (2): Frost spells and effects are 20/40% more powerful.",
     "Chilling Frost": "Frost spells reduce attack speed by 20% and inflict 15% weakness to frost for 10 seconds.",
     "Winter's Grasp": "Frost spells freeze targets below 20% Health in a block of ice for 5 seconds.",
@@ -1730,7 +1730,7 @@
     "Vigilant Ward (2)": "Wards cost 50/80% less Magicka and reduce incoming damage by 30/60%.",
     "Inspire (2)": "Nearby living allies within 15 feet are healed 5/10 points per second.",
     "Enduring Flame": "Healing spells grant armor equal to 4 times their magnitude while concentrating or for 5 seconds after casting.",
-    "Anímage (2)": "Mind affecting spells and effects work on creatures and people up to 10/20/40 levels higher, and other targets up to 5/10/20 levels higher.",
+    "Animage (2)": "Mind affecting spells and effects work on creatures and people up to 10/20/40 levels higher, and other targets up to 5/10/20 levels higher.",
     "Alteration Dual Casting": "Dual casting an Alteration spell overcharges its effects, increasing power and casting cost.",
     "Magic Resistance (1)": "Increases Magic Resistance by 10/20/30%.",
     "Hethoth's Escape": "Once every 10 minutes, paralyzes a melee attacker that is about to deal lethal damage to you.",
@@ -1793,7 +1793,7 @@
         "Magic Resistance (1)"
       ],
       "15": [
-        "Rune Mestre",
+        "Rune Master",
         "Mage Armor (2)",
         "Vigilant Ward (1)"
       ],
@@ -1833,7 +1833,7 @@
         "Magic Resistance (1)"
       ],
       "15": [
-        "Rune Mestre",
+        "Rune Master",
         "Mage Armor (2)",
         "Vigilant Ward (1)"
       ],
@@ -1873,7 +1873,7 @@
         "Magic Resistance (1)"
       ],
       "15": [
-        "Rune Mestre",
+        "Rune Master",
         "Mage Armor (2)",
         "Vigilant Ward (1)"
       ],
@@ -2016,7 +2016,7 @@
     },
     "CAVALEIRO NEGRO": {
       "0": [
-        "Heavy Armor Mestre",
+        "Heavy Armor Mastery",
         "Two-Handed Mastery",
         "Destruction Mastery"
       ],
@@ -2138,7 +2138,7 @@
         "Archery Mastery",
         "Light Armor Mastery",
         "Sneak Mastery",
-        "One-Hand Mastery"
+        "One-Handed Mastery"
       ],
       "5": [
         "Far Shot (1)",
@@ -2418,7 +2418,7 @@
         "Alteration Mastery"
       ],
       "5": [
-        "Anímage (1)",
+        "Animage (1)",
         "Agility",
         "Magic Resistance (1)"
       ],
@@ -2428,7 +2428,7 @@
       ],
       "15": [
         "Shadow Warrior",
-        "Anímage (2)"
+        "Animage (2)"
       ],
       "20": [
         "Windrunner",
@@ -2436,7 +2436,7 @@
       ],
       "25": [
         "Shadowcaster",
-        "Anímage (3)"
+        "Animage (3)"
       ],
       "30": [
         "Dodge Roll",

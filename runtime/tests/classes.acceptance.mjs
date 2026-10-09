@@ -47,6 +47,15 @@ test('catalog deterministic, preserves every old signature, dynamically resolves
   const exportsDir=process.env.GAMEPLAY_CORE_TEST_EXPORTS,config=`${root}/modules/class-system/config/classes-config.json`;
   const generated=api.buildClasses(exportsDir,config,plugins);assert.deepEqual(generated,classes);assert.deepEqual(api.buildClasses(exportsDir,config,[...plugins].reverse()),classes);
   for(const old of [...stones.records,...races.records]){const current=classes.records.find(r=>r.stableFormKey===old.stableFormKey);if(current)assert.equal(current.signature,old.signature);}
+  const corrected=['Heavy Armor Mastery','Rune Master','Animage (1)','Animage (2)','Animage (3)','One-Handed Mastery'];
+  const classPerks=classes.classes.flatMap(c=>c.stages.flatMap(s=>s.perks));
+  const labels=classPerks.map(p=>p.label);
+  for(const label of corrected)assert(labels.includes(label),`corrected perk label missing: ${label}`);
+  assert(!classPerks.some(p=>p.status==='UNSUPPORTED'&&corrected.includes(p.label)));
+  const rune=classPerks.find(p=>p.label==='Rune Master');
+  assert.equal(rune.rank,1,'unranked Rune Master label maps to the assumed rank 1 record');
+  const animage=classPerks.filter(p=>/^Animage \([123]\)$/.test(p.label));
+  assert.deepEqual(animage.map(p=>p.rank),[1,2,3]);
   function host(reverse){const ids=new Map(),types=new Map();let n=10000;for(const r of reverse?[...classes.records].reverse():classes.records){ids.set(r.stableFormKey,++n);types.set(n,r.recordType);}
     return {plugins:()=>reverse?[...classes.dependencies].reverse():classes.dependencies,getIdFromDesc:d=>{const [hex,p]=d.split(':');return ids.get(`${p.toLowerCase()}|${hex.padStart(6,'0').toUpperCase()}`);},lookupEspmRecordById:id=>({type:types.get(id)})};}
   const a=api.loadDomain(classes,host(false)),b=api.loadDomain(classes,host(true));assert.equal(a.status,'SUPPORTED');assert.equal(b.status,'SUPPORTED');

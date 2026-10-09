@@ -6,6 +6,7 @@ import {createRequire} from 'node:module';
 import {randomBytes} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
+import {performance} from 'node:perf_hooks';
 import {build} from 'esbuild';
 import {raceHost} from './race-host.mjs';
 import {logger} from './host.mjs';
@@ -37,7 +38,7 @@ async function setup(t,{mode='active',shift=0,catalogAvailable=true,pgPool=pool,
   return {mp,log,core,binding,observe};
 }
 const fact=async b=>(await pool.query(`SELECT * FROM ${table('gc_race_observation')} WHERE character_key=$1`,[b.characterKey])).rows[0];
-async function until(fn){for(let i=0;i<250;i++){if(await fn())return;await pool.query('SELECT 1');}throw Error('condition timeout');}
+async function until(fn,timeoutMs=60_000){const deadline=performance.now()+timeoutMs;while(true){if(await fn())return;if(performance.now()>=deadline)throw Error('condition timed out');await new Promise(resolve=>setImmediate(resolve));}}
 test('actor ready observes Nord, rehydrates on reconnect and changes race; no host mutation',async t=>{
   const f=await setup(t);t.mock.timers.tick(3000);await until(async()=>!!await fact(f.binding));
   assert.equal((await fact(f.binding)).race_key,'skyrim.esm|013746');assert.equal(f.mp.mutations().length,0);

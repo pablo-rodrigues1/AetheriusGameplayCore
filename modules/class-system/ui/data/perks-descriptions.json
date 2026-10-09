@@ -95,8 +95,8 @@
     "descriptionPt": "Armas de uma mão causam 1% a mais de dano e 5% a mais de dano crítico por nível em Uma Mão.",
     "originalDesc": "One-handed weapons do 1% more damage and 5% more critical damage per level of One-Handed."
   },
-  "Rune Mestre (1)": {
-    "name": "Rune Mestre (1)",
+  "Rune Master": {
+    "name": "Rune Master",
     "namePt": "Mestre das Runas I",
     "descriptionPt": "Permite posicionar runas três vezes mais longe, e as runas são 10% mais poderosas.",
     "originalDesc": "Can place runes three times as far away/at any distance, and runes are 10/20% more powerful."
@@ -785,8 +785,8 @@
     "descriptionPt": "Feitiços de cura concedem armadura equivalente a 4 vezes a sua magnitude enquanto você se concentra ou por 5 segundos após a conjuração.",
     "originalDesc": "Healing spells grant armor equal to 4 times their magnitude while concentrating or for 5 seconds after casting."
   },
-  "Anímage (2)": {
-    "name": "Anímage (2)",
+  "Animage (2)": {
+    "name": "Animage (2)",
     "namePt": "Animago II",
     "descriptionPt": "Feitiços e efeitos que afetam a mente funcionam em criaturas e pessoas de até 20 níveis mais altos, e em outros alvos de até 10 níveis mais altos.",
     "originalDesc": "Mind affecting spells and effects work on creatures and people up to 10/20/40 levels higher, and other targets up to 5/10/20 levels higher."
@@ -833,12 +833,6 @@
     "descriptionPt": "Feitiços de proteção como Carne de Ferro são 150% mais fortes se você não estiver usando armadura.",
     "originalDesc": "Protection spells like Ironflesh are 150% stronger if not wearing armor."
   },
-  "Rune Mestre": {
-    "name": "Rune Mestre",
-    "namePt": "Mestre das Runas",
-    "descriptionPt": "Permite posicionar runas a qualquer distância, e as runas são 20% mais poderosas.",
-    "originalDesc": "Can place runes at any distance, and runes are 20% more powerful."
-  },
   "Deafening Shock:": {
     "name": "Deafening Shock:",
     "namePt": "Choque Ensurdecedor",
@@ -863,12 +857,6 @@
     "descriptionPt": "Você sofre metade do dano de queda se estiver vestindo apenas Armadura Pesada.",
     "originalDesc": "You take half damage from falling if wearing all Heavy Armor."
   },
-  "Heavy Armor Mestre": {
-    "name": "Heavy Armor Mestre",
-    "namePt": "Maestria em Armadura Pesada",
-    "descriptionPt": "O índice de armadura das peças de Armadura Pesada aumenta em 1% por nível em Armadura Pesada.",
-    "originalDesc": "Armor rating of Heavy Armor pieces increased by 1% per level of Heavy Armor."
-  },
   "Overbearing Assault (1)": {
     "name": "Overbearing Assault (1)",
     "namePt": "Assalto Opressor I",
@@ -892,12 +880,6 @@
     "namePt": "Repelir Mortos-Vivos",
     "descriptionPt": "Feitiços solares e feitiços de Expulsar Mortos-Vivos são 25% mais poderosos.",
     "originalDesc": "Sun spells and Turn Undead spells are 25% more powerful."
-  },
-  "One-Hand Mastery": {
-    "name": "One-Hand Mastery",
-    "namePt": "Maestria em Uma Mão",
-    "descriptionPt": "Armas de uma mão causam 1% a mais de dano e 5% a mais de dano crítico por nível em Uma Mão.",
-    "originalDesc": "One-handed weapons do 1% more damage and 5% more critical damage per level of One-Handed."
   },
   "Far Shot (1)": {
     "name": "Far Shot (1)",
@@ -953,8 +935,8 @@
     "descriptionPt": "Aliados vivos a até 15 pés recebem 5 pontos de cura por segundo.",
     "originalDesc": "Nearby living allies within 15 feet are healed 5 points per second."
   },
-  "Anímage (1)": {
-    "name": "Anímage (1)",
+  "Animage (1)": {
+    "name": "Animage (1)",
     "namePt": "Animago I",
     "descriptionPt": "Feitiços e efeitos que afetam a mente funcionam em criaturas e pessoas de até 10 níveis mais altos, e em outros alvos de até 5 níveis mais altos.",
     "originalDesc": "Mind affecting spells and effects work on creatures and people up to 10 levels higher, and other targets up to 5 levels higher."
@@ -965,8 +947,8 @@
     "descriptionPt": "Disparar enquanto agachado executa um rolamento silencioso para a frente ao custo de 15 de Vigor.",
     "originalDesc": "Sprinting while sneaking executes a silent forward roll for 15 Stamina."
   },
-  "Anímage (3)": {
-    "name": "Anímage (3)",
+  "Animage (3)": {
+    "name": "Animage (3)",
     "namePt": "Animago III",
     "descriptionPt": "Feitiços e efeitos que afetam a mente funcionam em criaturas e pessoas de até 40 níveis mais altos, e em outros alvos de até 20 níveis mais altos.",
     "originalDesc": "Mind affecting spells and effects work on creatures and people up to 40 levels higher, and other targets up to 20 levels higher."

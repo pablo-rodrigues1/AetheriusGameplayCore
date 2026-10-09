@@ -1,7 +1,10 @@
 import json
 import os
 
-with open('sistema-classes/config/_extracted_classes.json', encoding='utf-8') as f:
+MODULE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CONFIG_DIR = os.path.join(MODULE_DIR, 'config')
+
+with open(os.path.join(CONFIG_DIR, '_extracted_classes.json'), encoding='utf-8') as f:
     raw = json.load(f)
 
 all_perks_raw = raw['all_perks']
@@ -17,9 +20,7 @@ pt_translations = {
     'Augmented Shock (1)': ('Raios Aumentados I', 'Feitiços e efeitos elétricos causam 20% a mais de dano à Vida e à Mágicka.'),
     'Augmented Shock (2)': ('Raios Aumentados II', 'Feitiços e efeitos elétricos causam 40% a mais de dano à Vida e à Mágicka.'),
     'Impact': ('Impacto', 'Feitiços de projétil de Destruição lançados com ambas as mãos têm 30% de chance de desestabilizar (stagger) o alvo.'),
-    'Rune Mestre': ('Mestre das Runas', 'Permite posicionar runas até três vezes mais longe e aumenta a potência das runas em 20%.'),
-    'Rune Mestre (1)': ('Mestre das Runas I', 'Permite posicionar runas até três vezes mais longe e aumenta a potência das runas em 10%.'),
-    'Rune Mestre (2)': ('Mestre das Runas II', 'Permite posicionar runas a qualquer distância e aumenta a potência das runas em 20%.'),
+    'Rune Master': ('Mestre das Runas', 'Permite posicionar runas até três vezes mais longe e aumenta a potência das runas em 10%. O rank 1 foi assumido; confirmar com o dono do projeto.'),
     'Chilling Frost': ('Geada Enregelante', 'Feitiços de gelo reduzem a velocidade de ataque dos inimigos em 20% e infligem 15% de fraqueza a gelo por 10 segundos.'),
     "Winter's Grasp": ('Abraço do Inverno', 'Feitiços de gelo congelam inimigos com menos de 20% de vida em um bloco sólido de gelo por 5 segundos.'),
     'Deafening Shock:': ('Choque Ensurdecedor', 'Feitiços de eletricidade paralisam inimigos com menos de 20% de vida por 5 segundos.'),
@@ -74,7 +75,6 @@ pt_translations = {
 
     # Heavy Armor & Block
     'Heavy Armor Mastery': ('Maestria em Armadura Pesada', 'Aumenta o índice de armadura pesada em 1% por nível de Armadura Pesada.'),
-    'Heavy Armor Mestre': ('Maestria em Armadura Pesada', 'Aumenta o índice de armadura pesada em 1% por nível de Armadura Pesada.'),
     'Heavy Armor Fit': ('Ajuste de Armadura Pesada', 'Aumenta o índice de armadura em 25% ao vestir um conjunto completo de Armadura Pesada.'),
     'Heavy Armor Training': ('Treinamento de Armadura Pesada', 'Armaduras pesadas pesam 50% menos quando equipadas e não penalizam a velocidade de movimento.'),
     'Cushioned (1)': ('Amortecimento I', 'Reduz o dano recebido de quedas em 50% ao usar conjunto pesado.'),
@@ -165,9 +165,9 @@ pt_translations = {
     'Cloak and Dagger': ('Capa e Adaga', 'Romper a invisibilidade com um ataque furtivo garante 100% de chance de acerto crítico.'),
     'Shadow Warrior': ('Guerreiro das Sombras', 'Agachar-se durante o combate faz com que os inimigos percam seu rastro temporariamente.'),
     'Quiet Casting': ('Conjuração Silenciosa', 'Todos os feitiços e gritos lançados por você são completamente silenciosos.'),
-    'Anímage (1)': ('Animago I', 'Feitiços de ilusão afetam animais e feras de níveis mais elevados.'),
-    'Anímage (2)': ('Animago II', 'Feitiços de ilusão pacificam ou enfurecem bestas ferozes sem resistência.'),
-    'Anímage (3)': ('Animago III', 'Domínio absoluto da mente de criaturas da fauna de Skyrim.'),
+    'Animage (1)': ('Animago I', 'Mind affecting spells and effects work on creatures and people up to 10/20/40 levels higher, and other targets up to 5/10/20 levels higher.'),
+    'Animage (2)': ('Animago II', 'Mind affecting spells and effects work on creatures and people up to 10/20/40 levels higher, and other targets up to 5/10/20 levels higher.'),
+    'Animage (3)': ('Animago III', 'Mind affecting spells and effects work on creatures and people up to 10/20/40 levels higher, and other targets up to 5/10/20 levels higher.'),
     'Silent Roll (1)': ('Rolamento Silencioso', 'Permite realizar rolamentos furtivos em velocidade rápida sem fazer barulho.'),
     'Shadowcaster': ('Conjurador das Sombras', 'Lançar feitiços de ilusão sob a escuridão reduz o custo em 50%.'),
     'Blur': ('Desfoque', 'Cria distorções ao seu redor que desviam 30% das flechas e golpes desferidos.'),
@@ -204,8 +204,8 @@ for c_name, st_map in raw['prog_perks'].items():
                     'originalDesc': ''
                 }
 
-os.makedirs('sistema-classes/config', exist_ok=True)
-with open('sistema-classes/config/perks-descriptions.json', 'w', encoding='utf-8') as f:
+os.makedirs(CONFIG_DIR, exist_ok=True)
+with open(os.path.join(CONFIG_DIR, 'perks-descriptions.json'), 'w', encoding='utf-8') as f:
     json.dump(final_perks_descriptions, f, indent=2, ensure_ascii=False)
 print('Generated config/perks-descriptions.json')
 
@@ -231,7 +231,7 @@ for p_name in final_perks_descriptions.keys():
         ]
     }
 
-with open('sistema-classes/config/perk-mappings.json', 'w', encoding='utf-8') as f:
+with open(os.path.join(CONFIG_DIR, 'perk-mappings.json'), 'w', encoding='utf-8') as f:
     json.dump(perk_mappings, f, indent=2, ensure_ascii=False)
 print('Generated config/perk-mappings.json')
 
@@ -300,6 +300,6 @@ for c_key, c_val in raw['classes'].items():
         'spellsRPNotice': 'Os feitiços desta classe não são concedidos automaticamente pelo sistema. Devem ser aprendidos através de Roleplay junto ao Colégio de Winterhold com os professores e livros mágicos.'
     }
 
-with open('sistema-classes/config/classes-config.json', 'w', encoding='utf-8') as f:
+with open(os.path.join(CONFIG_DIR, 'classes-config.json'), 'w', encoding='utf-8') as f:
     json.dump(classes_config, f, indent=2, ensure_ascii=False)
 print('Generated config/classes-config.json. Total classes:', len(classes_config))

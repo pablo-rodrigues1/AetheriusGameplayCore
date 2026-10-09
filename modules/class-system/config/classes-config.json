@@ -302,7 +302,7 @@
         "level": 15,
         "stageNumber": 4,
         "perks": [
-          "Rune Mestre",
+          "Rune Master",
           "Mage Armor (2)",
           "Vigilant Ward (1)"
         ],
@@ -566,7 +566,7 @@
         "level": 15,
         "stageNumber": 4,
         "perks": [
-          "Rune Mestre",
+          "Rune Master",
           "Mage Armor (2)",
           "Vigilant Ward (1)"
         ],
@@ -838,7 +838,7 @@
         "level": 15,
         "stageNumber": 4,
         "perks": [
-          "Rune Mestre",
+          "Rune Master",
           "Mage Armor (2)",
           "Vigilant Ward (1)"
         ],
@@ -1586,7 +1586,7 @@
         "level": 1,
         "stageNumber": 1,
         "perks": [
-          "Heavy Armor Mestre",
+          "Heavy Armor Mastery",
           "Two-Handed Mastery",
           "Destruction Mastery"
         ],
@@ -2012,7 +2012,7 @@
           "Archery Mastery",
           "Light Armor Mastery",
           "Sneak Mastery",
-          "One-Hand Mastery"
+          "One-Handed Mastery"
         ],
         "skills": "Todas 0",
         "attributePoints": 15
@@ -3175,7 +3175,7 @@
         "level": 5,
         "stageNumber": 2,
         "perks": [
-          "Anímage (1)",
+          "Animage (1)",
           "Agility",
           "Magic Resistance (1)"
         ],
@@ -3197,7 +3197,7 @@
         "stageNumber": 4,
         "perks": [
           "Shadow Warrior",
-          "Anímage (2)"
+          "Animage (2)"
         ],
         "skills": "Alteração 40, Armadura Leve 40, Ilusão 40, Furtividade 40",
         "attributePoints": 15
@@ -3217,7 +3217,7 @@
         "stageNumber": 6,
         "perks": [
           "Shadowcaster",
-          "Anímage (3)"
+          "Animage (3)"
         ],
         "skills": "Alteração 60, Armadura Leve 60, Ilusão 60, Furtividade 60",
         "attributePoints": 15

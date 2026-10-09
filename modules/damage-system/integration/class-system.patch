@@ -45,7 +45,7 @@ index 2978583..9c8b907 100644
 +      "VKR_One_000_OneHandedMastery_Perk_WasArmsman1"
      ]
    },
-   "Rune Mestre (1)": {
+   "Rune Master": {
 @@ -613,19 +606,12 @@
    },
    "Heavy Armor Mastery": {
@@ -162,7 +162,7 @@ index 2978583..9c8b907 100644
    },
    "Far Shot (2)": {
 @@ -2753,4 +2711,4 @@
-       "Anímage (3)"
+       "Animage (3)"
      ]
    }
 -}

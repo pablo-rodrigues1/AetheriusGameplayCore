@@ -258,14 +258,22 @@
     "name": "One-Handed Mastery",
     "localId": "0x0BABE4",
     "candidatePlugins": [
-      "Skyrim.esm"
+      "Skyrim.esm",
+      "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "Vokrii.esp",
+      "Vokrii.esl",
+      "Update.esm"
     ],
     "editorIdAliases": [
-      "VKR_One_000_OneHandedMastery_Perk_WasArmsman1"
+      "VKR_One_000_OneHandedMastery_Perk_WasArmsman1",
+      "VKR_One_HandMastery",
+      "One_HandMastery",
+      "Perk_One_HandMastery",
+      "One-Handed Mastery"
     ]
   },
-  "Rune Mestre (1)": {
-    "name": "Rune Mestre (1)",
+  "Rune Master": {
+    "name": "Rune Master",
     "localId": "0x000000",
     "candidatePlugins": [
       "Vokrii - Minimalistic Perks of Skyrim.esp",
@@ -278,7 +286,10 @@
       "VKR_RuneMestre1",
       "RuneMestre1",
       "Perk_RuneMestre1",
-      "Rune Mestre (1)"
+      "Rune Master",
+      "VKR_RuneMestre",
+      "RuneMestre",
+      "Perk_RuneMestre"
     ]
   },
   "Augmented Frost (2)": {
@@ -608,10 +619,18 @@
     "name": "Heavy Armor Mastery",
     "localId": "0x0BCD2A",
     "candidatePlugins": [
-      "Skyrim.esm"
+      "Skyrim.esm",
+      "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "Vokrii.esp",
+      "Vokrii.esl",
+      "Update.esm"
     ],
     "editorIdAliases": [
-      "VKR_Hea_000_HeavyArmorMastery_Perk_WasJuggernaut1"
+      "VKR_Hea_000_HeavyArmorMastery_Perk_WasJuggernaut1",
+      "VKR_HeavyArmorMestre",
+      "HeavyArmorMestre",
+      "Perk_HeavyArmorMestre",
+      "Heavy Armor Mastery"
     ]
   },
   "Cushioned (2)": {
@@ -2184,8 +2203,8 @@
       "Enduring Flame"
     ]
   },
-  "Anímage (2)": {
-    "name": "Anímage (2)",
+  "Animage (2)": {
+    "name": "Animage (2)",
     "localId": "0x000000",
     "candidatePlugins": [
       "Vokrii - Minimalistic Perks of Skyrim.esp",
@@ -2195,10 +2214,10 @@
       "Update.esm"
     ],
     "editorIdAliases": [
-      "VKR_Anímage2",
-      "Anímage2",
-      "Perk_Anímage2",
-      "Anímage (2)"
+      "VKR_Animage2",
+      "Animage2",
+      "Perk_Animage2",
+      "Animage (2)"
     ]
   },
   "Alteration Dual Casting": {
@@ -2320,23 +2339,6 @@
       "Mage Armor (2)"
     ]
   },
-  "Rune Mestre": {
-    "name": "Rune Mestre",
-    "localId": "0x000000",
-    "candidatePlugins": [
-      "Vokrii - Minimalistic Perks of Skyrim.esp",
-      "Vokrii.esp",
-      "Vokrii.esl",
-      "Skyrim.esm",
-      "Update.esm"
-    ],
-    "editorIdAliases": [
-      "VKR_RuneMestre",
-      "RuneMestre",
-      "Perk_RuneMestre",
-      "Rune Mestre"
-    ]
-  },
   "Deafening Shock:": {
     "name": "Deafening Shock:",
     "localId": "0x000000",
@@ -2405,23 +2407,6 @@
       "Cushioned (1)"
     ]
   },
-  "Heavy Armor Mestre": {
-    "name": "Heavy Armor Mestre",
-    "localId": "0x000000",
-    "candidatePlugins": [
-      "Vokrii - Minimalistic Perks of Skyrim.esp",
-      "Vokrii.esp",
-      "Vokrii.esl",
-      "Skyrim.esm",
-      "Update.esm"
-    ],
-    "editorIdAliases": [
-      "VKR_HeavyArmorMestre",
-      "HeavyArmorMestre",
-      "Perk_HeavyArmorMestre",
-      "Heavy Armor Mestre"
-    ]
-  },
   "Overbearing Assault (1)": {
     "name": "Overbearing Assault (1)",
     "localId": "0x000000",
@@ -2488,23 +2473,6 @@
       "RebukeUndead",
       "Perk_RebukeUndead",
       "Rebuke Undead"
-    ]
-  },
-  "One-Hand Mastery": {
-    "name": "One-Hand Mastery",
-    "localId": "0x000000",
-    "candidatePlugins": [
-      "Vokrii - Minimalistic Perks of Skyrim.esp",
-      "Vokrii.esp",
-      "Vokrii.esl",
-      "Skyrim.esm",
-      "Update.esm"
-    ],
-    "editorIdAliases": [
-      "VKR_One_HandMastery",
-      "One_HandMastery",
-      "Perk_One_HandMastery",
-      "One-Hand Mastery"
     ]
   },
   "Far Shot (1)": {
@@ -2660,8 +2628,8 @@
       "Inspire (1)"
     ]
   },
-  "Anímage (1)": {
-    "name": "Anímage (1)",
+  "Animage (1)": {
+    "name": "Animage (1)",
     "localId": "0x000000",
     "candidatePlugins": [
       "Vokrii - Minimalistic Perks of Skyrim.esp",
@@ -2671,10 +2639,10 @@
       "Update.esm"
     ],
     "editorIdAliases": [
-      "VKR_Anímage1",
-      "Anímage1",
-      "Perk_Anímage1",
-      "Anímage (1)"
+      "VKR_Animage1",
+      "Animage1",
+      "Perk_Animage1",
+      "Animage (1)"
     ]
   },
   "Silent Roll (1)": {
@@ -2694,8 +2662,8 @@
       "Silent Roll (1)"
     ]
   },
-  "Anímage (3)": {
-    "name": "Anímage (3)",
+  "Animage (3)": {
+    "name": "Animage (3)",
     "localId": "0x000000",
     "candidatePlugins": [
       "Vokrii - Minimalistic Perks of Skyrim.esp",
@@ -2705,10 +2673,10 @@
       "Update.esm"
     ],
     "editorIdAliases": [
-      "VKR_Anímage3",
-      "Anímage3",
-      "Perk_Anímage3",
-      "Anímage (3)"
+      "VKR_Animage3",
+      "Animage3",
+      "Perk_Animage3",
+      "Animage (3)"
     ]
   }
 }

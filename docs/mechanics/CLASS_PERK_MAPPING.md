@@ -1,6 +1,6 @@
 # Rastreabilidade de todas as perks das classes
 
-Os IDs `0x000000` são placeholders. Igualdade de nome/alias fornece candidatos, nunca prova semântica. As seis entradas do manifesto histórico precisam de revalidação no snapshot atual antes de produção. `Rank` textual da classe não é convertido automaticamente no índice de Effects.
+Os placeholders restantes e candidatos históricos ainda exigem revisão própria. As seis correções de nome do C3a-fix1 estão resolvidas no catálogo gerado; Rune Master usa rank 1 assumido, pendente de confirmação do dono. `Rank` textual da classe não é convertido automaticamente no índice de Effects.
 
 |Nome configurado|ID configurado|Classificação|Chave / candidatos observados|
 |---|---|---|---|
@@ -20,7 +20,7 @@ Os IDs `0x000000` são placeholders. Igualdade de nome/alias fornece candidatos,
 |Vigilant Ward (1)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`2BBF34:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_056.md#r-3e924e19b60d)<br>[`35E12F:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_056.md#r-6f1b672f0c61)|
 |Ward Absorb|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`068BCC:Skyrim.esm`](perks/PERKS_056.md#r-f6de31fd0908)|
 |One-Handed Mastery|`0x0BABE4`|MANIFESTO VERIFICADO HISTÓRICO|[`0BABE4:Skyrim.esm`](perks/PERKS_054.md#r-877bfe6db601)|
-|Rune Mestre (1)|`0x000000`|SEM CORRESPONDÊNCIA EXATA|pendente|
+|Rune Master|`0x105F32`|RESOLVIDO C3a-fix1|`skyrim.esm\|105F32`|
 |Augmented Frost (2)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`0581EA:Skyrim.esm`](perks/PERKS_050.md#r-fd63aa6f292c)<br>[`10FCF9:Skyrim.esm`](perks/PERKS_050.md#r-72c822ec1051)|
 |Chilling Frost|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`0F3933:Skyrim.esm`](perks/PERKS_050.md#r-8635c413dd54)|
 |Winter's Grasp|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`02A503:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_050.md#r-42cb30a1904e)|
@@ -135,7 +135,7 @@ Os IDs `0x000000` são placeholders. Igualdade de nome/alias fornece candidatos,
 |Vigilant Ward (2)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`2BBF34:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_056.md#r-3e924e19b60d)<br>[`35E12F:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_056.md#r-6f1b672f0c61)|
 |Inspire (2)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`014362:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_056.md#r-14112127641d)<br>[`24776B:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_056.md#r-c120684fd9ee)|
 |Enduring Flame|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`0B2852:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_013.md#r-7224dca29788)|
-|Anímage (2)|`0x000000`|SEM CORRESPONDÊNCIA EXATA|pendente|
+|Animage (2)|`0x0581E2`|RESOLVIDO C3a-fix1|`skyrim.esm\|0581E2`|
 |Alteration Dual Casting|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`0153CD:Skyrim.esm`](perks/PERKS_046.md#r-7d161c732c87)|
 |Magic Resistance (1)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`053128:Skyrim.esm`](perks/PERKS_046.md#r-c0d2f8c1202c)<br>[`053129:Skyrim.esm`](perks/PERKS_046.md#r-ebf6e0c97936)<br>[`05312A:Skyrim.esm`](perks/PERKS_046.md#r-76de91cd28b2)|
 |Hethoth's Escape|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`395C75:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_046.md#r-7f87c815a374)|
@@ -143,17 +143,17 @@ Os IDs `0x000000` são placeholders. Igualdade de nome/alias fornece candidatos,
 |Shadowcaster|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`03799E:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_057.md#r-43092c0d7cfb)|
 |Mage Armor (1)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`0D7999:Skyrim.esm`](perks/PERKS_046.md#r-7ce9164c62bb)<br>[`0D799A:Skyrim.esm`](perks/PERKS_046.md#r-872158b13447)<br>[`0D799B:Skyrim.esm`](perks/PERKS_046.md#r-71e49c2b6f93)|
 |Mage Armor (2)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`0D7999:Skyrim.esm`](perks/PERKS_046.md#r-7ce9164c62bb)<br>[`0D799A:Skyrim.esm`](perks/PERKS_046.md#r-872158b13447)<br>[`0D799B:Skyrim.esm`](perks/PERKS_046.md#r-71e49c2b6f93)|
-|Rune Mestre|`0x000000`|SEM CORRESPONDÊNCIA EXATA|pendente|
+|Rune Master|`0x105F32`|RESOLVIDO C3a-fix1|`skyrim.esm\|105F32`|
 |Deafening Shock:|`0x000000`|SEM CORRESPONDÊNCIA EXATA|pendente|
 |Oblivion Stone (1)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`36833B:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_049.md#r-2d3835186ac4)<br>[`36D44A:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_049.md#r-6bfb6f31f726)<br>[`372556:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_049.md#r-9afe08908d6d)|
 |Rift Summoner (1)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`105F30:Skyrim.esm`](perks/PERKS_049.md#r-7198fbd4e54e)<br>[`105F31:Skyrim.esm`](perks/PERKS_049.md#r-cab530f8d8bf)|
 |Cushioned (1)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`0008A1:PuddingFace_SimpleSpellsPackage.esp`](perks/PERKS_018.md#r-2d96f55a875f)<br>[`008029:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_052.md#r-da25e48b436c)<br>[`0BCD2B:Skyrim.esm`](perks/PERKS_052.md#r-a20f4ca06339)|
-|Heavy Armor Mestre|`0x000000`|SEM CORRESPONDÊNCIA EXATA|pendente|
+|Heavy Armor Mastery|`0x0BCD2A`|RESOLVIDO C3a-fix1|`skyrim.esm\|0BCD2A`|
 |Overbearing Assault (1)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`03AF83:Skyrim.esm`](perks/PERKS_044.md#r-78c21eec94d2)<br>[`0C1E94:Skyrim.esm`](perks/PERKS_044.md#r-a13403527975)|
 |Raw Power (1)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`63237F:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_050.md#r-f81a8792668a)<br>[`632380:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_050.md#r-b4ef2ab47366)<br>[`632381:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_050.md#r-3271a82c45b6)|
 |Denting Blows (1)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`05F592:Skyrim.esm`](perks/PERKS_044.md#r-afbd60a632b3)<br>[`0C1E92:Skyrim.esm`](perks/PERKS_044.md#r-0bc7d54ef774)|
 |Rebuke Undead|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`02D633:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_056.md#r-cd334dc4a3ee)|
-|One-Hand Mastery|`0x000000`|SEM CORRESPONDÊNCIA EXATA|pendente|
+|One-Handed Mastery|`0x0BABE4`|RESOLVIDO C3a-fix1|`skyrim.esm\|0BABE4`|
 |Far Shot (1)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`105F1C:Skyrim.esm`](perks/PERKS_047.md#r-a9c05b2a19ac)<br>[`105F1E:Skyrim.esm`](perks/PERKS_047.md#r-1955ae67639f)|
 |Steady Aim (1)|`0x000000`|SEM CORRESPONDÊNCIA EXATA|pendente|
 |Silent Movement|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`058213:Skyrim.esm`](perks/PERKS_057.md#r-89af1b779dd9)<br>[`105F24:Skyrim.esm`](perks/PERKS_057.md#r-7c0d7b1ff215)|
@@ -163,6 +163,6 @@ Os IDs `0x000000` são placeholders. Igualdade de nome/alias fornece candidatos,
 |Concentrated Poison (2)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`105F2F:Skyrim.esm`](perks/PERKS_045.md#r-f96601810cc4)<br>[`3120F8:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_045.md#r-c7dcabdc180e)<br>[`3120F9:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_045.md#r-e7b86c7ab02c)|
 |Silent Movement (1)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`058213:Skyrim.esm`](perks/PERKS_057.md#r-89af1b779dd9)<br>[`105F24:Skyrim.esm`](perks/PERKS_057.md#r-7c0d7b1ff215)|
 |Inspire (1)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`014362:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_056.md#r-14112127641d)<br>[`24776B:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_056.md#r-c120684fd9ee)|
-|Anímage (1)|`0x000000`|SEM CORRESPONDÊNCIA EXATA|pendente|
+|Animage (1)|`0x0581E1`|RESOLVIDO C3a-fix1|`skyrim.esm\|0581E1`|
 |Silent Roll (1)|`0x000000`|CANDIDATO POR NOME — VALIDAR RANK/SEMÂNTICA|[`105F23:Skyrim.esm`](perks/PERKS_057.md#r-2aeea1636bce)<br>[`302DB8:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_058.md#r-30bc75866165)<br>[`302DB9:Vokrii - Minimalistic Perks of Skyrim.esp`](perks/PERKS_057.md#r-b5a9076ef3d9)|
-|Anímage (3)|`0x000000`|SEM CORRESPONDÊNCIA EXATA|pendente|
+|Animage (3)|`0x3B4293`|RESOLVIDO C3a-fix1|`vokrii - minimalistic perks of skyrim.esp\|3B4293`|

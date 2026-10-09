@@ -6,6 +6,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { spawnSync } from 'node:child_process';
+import { performance } from 'node:perf_hooks';
 import { standingHost } from './standing-host.mjs';
 import { logger } from './host.mjs';
 const require=createRequire(import.meta.url), {Pool}=require('pg');
@@ -28,7 +29,7 @@ const pool=new Pool({connectionString:databaseUrl,max:8,idleTimeoutMillis:0,conn
 const roots=['skyrim.esm|0D232D','skyrim.esm|0D232E','skyrim.esm|0D232F'];
 const cores=[];let profile=80000;
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return{promise,resolve};};
-async function until(predicate){for(let i=0;i<180;i++){if(await predicate())return;await pool.query('SELECT 1');}throw Error('test condition did not complete');}
+async function until(predicate,timeoutMs=60_000){const deadline=performance.now()+timeoutMs;while(true){if(await predicate())return;if(performance.now()>=deadline)throw Error('test condition timed out');await new Promise(resolve=>setImmediate(resolve));}}
 before(async()=>{await pool.query(`CREATE SCHEMA "${schema}"`);await api.applyMigrations(pool,await api.readMigrations(fileURLToPath(new URL('../../database/migrations/',import.meta.url))),schema);});
 after(async()=>{await Promise.all(cores.map(core=>core.shutdown()));await pool.query(`DROP SCHEMA "${schema}" CASCADE`);await pool.end();});
 async function setup(t,{mode='active',catalogAvailable=true,shift=0,characterProfile,pgPool=pool,env={}}={}){
