@@ -169,8 +169,8 @@ E `offlineMode` tem de estar desligado nas configurações do servidor. No log d
 |---|---|---|---|
 | 08/10/2026 | pedras guardiãs | migrations 0001 a 0004; adoção da pedra do personagem de teste, vinda do protótipo | `ENABLE_STANDING_STONE_SPIKE=false`, `GAMEPLAY_CORE_MODE_STANDING_STONES=active`, `GAMEPLAY_CORE_DATABASE_SCHEMA=public`, `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV=false`, `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY=true` |
 | 08/10/2026 | raças | migration 0005 | `GAMEPLAY_CORE_MODE_RACES=active` |
-| 08/10/2026 | classes C3a (entrega para revisão) | 0006/0007 exercitadas somente em schemas isolados de `aetherius_test`; **não aplicadas em `aetherius_dev` pelo executor** | nenhuma configuração local alterada. Para teste pelo revisor: aplicar migrations, `GAMEPLAY_CORE_MODE_CLASSES=active`, `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40`, `offlineMode:true` e opt-in de identidade offline; remover DEV e desligar classes desfaz a ativação sem apagar fatos |
+| 08/10/2026 | classes (C3a) | migrations 0006 e 0007; classe do personagem de teste definida como `viper` pela ferramenta `runtime/set-character-class.mjs` | `GAMEPLAY_CORE_MODE_CLASSES=active` e, **só neste ambiente de teste**, `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` |
 
-O que difere no servidor oficial: sem adoção, sem `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY`, sem a opção do protótipo, e com a passagem por `audit` e `canary` antes de `active`.
+O que difere no servidor oficial: sem adoção, sem `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY`, sem a opção do protótipo, **sem `GAMEPLAY_CORE_DEV_CLASS_LEVEL`** (o nível vem do leveling), e com a passagem por `audit` e `canary` antes de `active`.
 
 Cada sistema novo acrescenta uma linha a esta tabela e uma subseção à seção 5.
