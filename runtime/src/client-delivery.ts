@@ -24,6 +24,7 @@ export class ClientDelivery {
   private cycles = new Map<number, DeliveryCycle>();
   private ackListeners = new Set<(cycle: DeliveryCycle, packet: Packet) => void>();
   private resets = new Set<(binding: SessionBinding) => void>();
+  private intents = new Set<(cycle: DeliveryCycle, packet: Packet) => void>();
   constructor(private mp: RuntimeMp, private actors: Actors, private scope: Scope,
     private allowed: (binding: SessionBinding) => boolean, private warn: (s: string) => void) {}
   start(hooks: Hooks): void {
@@ -45,7 +46,7 @@ export class ClientDelivery {
         if (previous) { previous.ready = false; delete previous.cycle; delete previous.challenge; this.reset(live.value); }
       }
     });
-    this.scope.add(() => { this.cycles.clear(); this.ackListeners.clear(); this.resets.clear(); });
+    this.scope.add(() => { this.cycles.clear(); this.ackListeners.clear(); this.resets.clear(); this.intents.clear(); });
   }
   private bind(binding: SessionBinding): void {
     if (!this.allowed(binding)) return;
@@ -91,13 +92,19 @@ export class ClientDelivery {
       if (!exact(p, ['channel', 'v', 'session', 'type', 'cycle', 'challenge']) || state.ready || !state.challenge
         || p.cycle !== state.cycle || p.challenge !== state.challenge) return;
       state.ready = true; this.actors.clientReady(state.binding);
+      if (this.mp.getServerSettings().aetheriusCombat?.weaponPoison === true)
+        this.send(state, { type: 'weaponPoisonCapability', cycle: state.cycle, challenge: state.challenge, enabled: true });
     } else if (p.type === 'ack') {
       if (!state.ready || !state.challenge || p.cycle !== state.cycle || p.challenge !== state.challenge) return;
       for (const fn of [...this.ackListeners]) fn(state, p);
+    } else if (p.type === 'weaponPoison') {
+      if (!state.ready || !state.challenge || p.cycle !== state.cycle || p.challenge !== state.challenge) return;
+      for (const fn of [...this.intents]) fn(state, p);
     }
   }
   private reset(binding: SessionBinding): void { for (const fn of [...this.resets]) fn(binding); }
   onReset(fn: (binding: SessionBinding) => void): () => void { this.resets.add(fn); return this.scope.add(() => this.resets.delete(fn)); }
   onAck(fn: (cycle: DeliveryCycle, packet: Packet) => void): () => void { this.ackListeners.add(fn); return this.scope.add(() => this.ackListeners.delete(fn)); }
+  onWeaponPoison(fn: (cycle: DeliveryCycle, packet: Packet) => void): () => void { this.intents.add(fn); return this.scope.add(() => this.intents.delete(fn)); }
   capability() { return { status: 'SUPPORTED', protocol: `${CHANNEL}/1`, readiness: 'CLIENT_SPAWN_TASKS_COMPLETED', legacy: 'ONLINE_DELAY_APPROXIMATION', proof: ['runtime/tests/client-delivery.test.mjs'] }; }
 }

@@ -1,6 +1,6 @@
 # Ativação dos sistemas do GameplayCore num servidor
 
-Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 09/10/2026.
+Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 10/10/2026 (D-P1-fix2).
 
 Cada sistema do Core (pedras guardiãs, raças, e os que vierem) precisa de duas coisas no servidor onde roda: **tabelas próprias no PostgreSQL** e **uma opção de configuração que o liga**. No ambiente de desenvolvimento local esses dois passos foram feitos à mão a cada sistema. Este documento descreve o que foi feito, para ser repetido no servidor oficial com as diferenças necessárias.
 
@@ -29,6 +29,8 @@ Arquivos em `database/migrations/`, mais a migration B5b em
 | `0008_gc_perk_projection.sql` (runtime) | `gc_perk_projections` | aplicação confirmada de perks, autoria e revisão por personagem; proteção permanente de perks preexistentes | entrega B5b |
 
 D-P1 não cria migration: revestimento e cargas usam o inventário nativo existente; o bônus por ator e os ticks do veneno são transitórios. Não há ledger ou store de efeitos novo.
+
+D-P1-fix2 também não cria migration nem pool/ledger: a intenção é transitória, autenticada pelo canal da B5b; request id é deduplicado por sessão/ciclo em memória. O host continua sendo o único writer do revestimento e do consumo no inventário nativo. Nenhum acesso a `aetherius_dev`.
 
 FIX-1010 também não cria migration: a revisão da composição usa a cabeça já existente em `gc_spell_projection_heads`. Nenhuma tabela legada ou dado de `aetherius_dev` foi alterado pelo executor.
 
@@ -111,6 +113,24 @@ A opção `aetheriusCombat.weaponPoison` é um booleano de **server-settings.jso
 
 Sem Core, o host usa uma carga por dose. Com Core e classes em `active` (ou personagem selecionado em `canary`), a composição entrega `aetheriusPoisonDoseBonus`, propriedade nativa em memória, inteira de 0 a 65534. `mp.get(actorId, 'aetheriusPoisonStatus')` expõe resultado e máscara das famílias recusadas, para diagnóstico. O cliente não escreve esses valores. Os modos de classe não habilitam o C++ por si só.
 
+### Gatilho e diagnóstico do veneno (D-P1-fix2)
+
+Recompilar também o Core e instalar o patch cumulativo do cliente (ver
+`integrations/client/LEIA-ME.md`). `weaponPoison=true` habilita o canal mesmo se
+`GAMEPLAY_CORE_CLIENT_PERKS_MODE=off`; os perks só são enviados se seu próprio modo,
+banco e migration estiverem disponíveis. O protocolo requer a sessão oficial
+vigente, begin/challenge/ready. Sem contexto oficial ou binding nativo, o resultado
+é `UNSUPPORTED`. O bônus continua vindo da composição; não nasce no cliente.
+Nenhuma nova opção do gamemode, migration ou alteração de economia.
+
+Diagnóstico opcional no arquivo existente de settings do plugin cliente
+`skymp5-client-settings.txt` (JSON): acrescentar `"aetheriusWeaponPoisonTrace": true`
+no objeto desse plugin. A opção é ausente/desligada por padrão. Ela habilita linhas
+`[AETHERIUS poison]` no console/registro da Skyrim Platform para equip, unequip,
+mudanças dos extras, intenção, resposta e reconstrução. Reverter removendo a chave
+ou usando false e reiniciando o cliente. Não contém credenciais. O executor não
+alterou settings no jogo/MO2 nem instalou o cliente.
+
 ### Só desenvolvimento: **não usar no servidor oficial**
 
 Todas as opções abaixo usam a mesma trava: `NODE_ENV=local` explicitamente, `GAME_ACCESS_CONTROL` diferente de `true` e `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS=true`. Ausência de `NODE_ENV` nunca conta como local, mesmo que `server-options.js` escolha o arquivo local por padrão. `production` e `staging` recusam as opções. O ambiente vem de `env: process.env` no descriptor do gamemode, depois de carregar seu `.env`; `GAME_ACCESS_CONTROL` é a mesma variável lida pelo AccessControl do host.
@@ -178,6 +198,51 @@ A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolviment
 - Fora de C3a: interface, custo/restrições de troca (incluindo Winterhold), skills, pontos/alocação de atributos, feitiços de classe e entrega B5b. O módulo legado permanece intocado e não é ligado pelo runtime novo.
 
 ### Veneno em arma (D-P1)
+
+**Fonte atual: D-P1-fix2.** Os parágrafos históricos de convergência D-P1/fix1 abaixo
+explicam o host, mas não provaram o gatilho nem a convergência do cliente. A leitura
+prova que TESEquipEvent é repassado, sem provar que Skyrim emite esse evento quando
+um veneno é aplicado. A nova intenção nasce da observação de ExtraPoison na arma
+empunhada a cada update, usando o mesmo leitor do inventário existente. Também
+observa antes da reaplicação de cinco segundos, que continua esperando o fechamento
+dos menus. Assim, não depende de esperar esse ciclo para perceber a aplicação.
+
+O cliente envia `weaponPoison/id/weaponId/poisonId/hand` no canal
+`aetherius.gameplay.grants/1`, com session/cycle/challenge. Os ids numéricos são
+**evidência de runtime, válida só nessa sessão**: não são gravados, catalogados ou
+usados como identidade persistente. Não envia contagem, bônus ou resultado. O Core
+usa o remetente nativo, verifica a sessão oficial atual e deduplica o id; invoca
+`mp.set(actor, 'aetheriusWeaponPoisonIntent', {weaponId, poisonId, hand})`. Esse
+binding nativo não é uma propriedade persistida. O host valida arma/mão e ALCH
+vencedor, posse da dose e demais recusas existentes; executa a mesma `Coat`.
+
+Durante o pedido, o cliente deixa as bases da arma/dose pendentes na reaplicação
+existente, para não apagar a evidência antes da resposta; o ciclo continua a cada
+cinco segundos para o resto. `weaponPoisonResult` substitui a projeção `pcInv`
+existente pelo snapshot do host. Não cria inventário novo. Réplica do id não consome
+outra dose, e a resposta usa o inventário **atual**, não cargas antigas do pedido.
+Após 256 ids por sessão de entrega, novos pedidos retornam UNSUPPORTED sem
+consumir dose. Sem resposta em dez segundos, o cliente volta à projeção que tem e registra
+UNSUPPORTED se a instrumentação estiver ligada; não insiste no consumo. Inventário
+que exceda o limite de 65.536 bytes impede essa resposta e produz UNSUPPORTED no
+servidor; a publicação nativa continua existindo. O limite é declarado, sem fallback.
+
+Para bases com diferença de veneno, `RemoveItem` sem extras remove o total das cópias
+da base; `addItemEx` reconstrói as cópias autoritativas, sobressalentes antes da
+empunhada. É no máximo uma substituição da cópia empunhada por transição (aceite,
+recusa ou gasto/esgotamento), preservando mão, nome/carga locais quando não vierem
+do host. Após esgotamento, a comparação de multiconjunto dessas bases evita o
++1/-1 espúrio de `getDiff(ignoreWorn)`. Bases nunca corrigidas por veneno conservam
+o caminho anterior. `remoteServer.ts` e a cadência de cinco segundos não mudaram.
+
+**Prova automatizada e limite:** testes do cliente executam o código real em uma
+imitação documentada da API e passam por ClientDelivery/PoisonIntents; tests nativos
+executam RequestWeaponPoison/Coat no PartOne real com os winners e a adaga encantada
+do registro em jogo. O harness `runtime/harness/weapon-poison-client-native.mjs`
+acopla ambos ao addon real, mas exige servidor local e fica para o Opus. A seleção
+opaca do motor, execução das filas, som, mão visual e conjunto de golpes precisam
+da sessão do dono. Não há declaração de validação em jogo nesta entrega.
+
 
 **Proteções FIX-1010:** o agressor deve ser um ator criado como jogador pelo host e ter usuário associado. NPC, ator sem usuário/mundo, fonte de golpe que não resolve e efeito sem MGEF válido não entram na aplicação de veneno. Alvo NPC hospedado continua possível quando o agressor é jogador; ausência de destinatário conectado é `UNSUPPORTED`, sem gasto de carga. Os timers mantêm referências fracas à origem e ao alvo e cessam na próxima execução se a origem se desconectar ou for destruída. Atualização de equipamento de NPC conserva o encaminhamento original; destinatários são deduplicados depois de resolver o hoster, sem eco ao dono por meio de listener NPC.
 
@@ -285,6 +350,7 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 | 08/10/2026 | pedras guardiãs | migrations 0001 a 0004; adoção da pedra do personagem de teste, vinda do protótipo | `ENABLE_STANDING_STONE_SPIKE=false`, `GAMEPLAY_CORE_MODE_STANDING_STONES=active`, `GAMEPLAY_CORE_DATABASE_SCHEMA=public`, `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV=false`, `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY=true` |
 | 08/10/2026 | raças | migration 0005 | `GAMEPLAY_CORE_MODE_RACES=active` |
 | 09/10/2026 | veneno D-P1 | nenhuma alteração em aetherius_dev; testes somente em aetherius_test | compilação Release e sync dos plugins oficiais; opção não ligada; servidor não iniciado; ticks cobertos por teste unitário; stacking e jogo pendentes de revisão |
+| 10/10/2026 | D-P1-fix2 | nenhuma migration nova; testes só em aetherius_test; aetherius_dev intocado | Release host e cliente compilados, Core reconstruído e sync conferido; weaponPoison=false; servidor parado; cliente só em evidência, sem jogo/MO2; diagnóstico desligado |
 | 10/10/2026 | FIX-1010 | nenhuma migration nova; testes do Core somente em schemas descartáveis de aetherius_test | proteção de veneno e revisão derivada; rebuild Release e bundle; servidor mantido parado; weaponPoison desligado; queda não reproduzida; servidor e jogo pendentes do revisor/dono |
 | 08/10/2026 | classes (C3a) | migrations 0006 e 0007; classe do personagem de teste definida como `viper` pela ferramenta `runtime/set-character-class.mjs` | `GAMEPLAY_CORE_MODE_CLASSES=active` e, **só neste ambiente de teste**, `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` |
 | 09/10/2026 | perks no cliente B5b | nenhuma alteração em aetherius_dev; migration 0008 somente em schemas descartáveis de aetherius_test | nenhuma opção local alterada; bundle do cliente em evidência, sem instalação; addon e jogo não executados pelo Sol |

@@ -1,4 +1,4 @@
-# Cliente B5b
+# Cliente B5b + D-P1-fix2 (cumulativo)
 
 Patch `B5b-aa864cb.patch`, gerado com `git diff --binary --full-index` contra
 `aa864cbf0a7f026dd1b0c2d373640ddedf030369` mais o diff de criação do serviço.
@@ -68,3 +68,52 @@ Usa o bot nativo para o retorno CustomPacket autenticado. A API do bot não exp�
 recepção: observa saída após a chamada nativa sendCustomPacket. Não certifica
 o recebimento dentro do jogo, a aplicação de perks ou o save. Nunca executado
 pelo Sol; apenas conferência de sintaxe.
+
+## D-P1-fix2 — intenção de veneno e convergência
+
+O **mesmo** `B5b-aa864cb.patch` foi regenerado: inclui toda a B5b e a D-P1-fix2,
+contra a mesma base aa864cb. Aplicar apenas uma vez em clone da base; quem já
+aplicou a B5b deve revisar o delta com o mantenedor, não reaplicar a parte antiga.
+Não há segundo patch cumulativo concorrente. Acrescenta `gameplayWeaponPoison.ts`
+e altera `sync/inventory.ts` por meio do leitor existente e de um hook limitado
+a diferenças de veneno. O delta desta ordem **não** altera remoteServer nem sua
+cadência de cinco segundos. Lista linha a linha em
+`_work/evidence/D-P1-fix2/linhas-tocadas.md`, SHA do bundle em
+`_work/evidence/D-P1-fix2/client-sha256.txt`.
+
+A extensão usa o canal/session/cycle/challenge existentes. O host anuncia
+`weaponPoisonCapability` apenas quando sua opção está ligada; o cliente observa
+ExtraPoison em cada update e envia `weaponPoison/id/weaponId/poisonId/hand`, reliable,
+uma vez por aplicação observada. Esses ids são evidência de runtime somente: não
+há máscara de índice de plugin, configuração com slots ou identidade persistida.
+O remetente e a sessão oficial são verificados pelo Core, e o binding
+`aetheriusWeaponPoisonIntent` valida a arma da mão no host. Só o servidor decide
+consumo e cargas. `weaponPoisonResult` atualiza a projeção pcInv existente.
+
+Correções de veneno removem todas as cópias da base e adicionam as cópias do host,
+com a equipada por último, evitando a seleção por uma lista de extras fabricada.
+Para bases que passaram por essa correção, a comparação de multiconjunto evita o
++1/-1 de getDiff após esgotar. Sem diferença de veneno e sem correção anterior,
+a operação segue o caminho do mantenedor. O serviço de perks conserva seu protocolo.
+
+Diagnóstico: no `skymp5-client-settings.txt` vencedor dos diretórios de plugins,
+acrescentar a chave JSON `"aetheriusWeaponPoisonTrace": true`. Ausente/false é o
+padrão; reiniciar o cliente. Capturar `[AETHERIUS poison]` equip, unequip,
+extra-changes, intent, result e replace-base durante aplicação, fechamento do menu
+e três ciclos de cinco segundos. Retirar/false e reiniciar para desligar.
+Isso é procedimento para revisor/dono: o executor não instalou nem alterou MO2/jogo.
+
+Harness novo, somente revisor, sem OnEquip de veneno:
+
+```powershell
+node "<Core>\runtime\harness\weapon-poison-client-native.mjs" --port <porta-isolada> --work-dir <pasta-isolada> --addon "<build>\dist\server\scam_native.node" --settings "<build>\dist\server\server-settings.json" --fixture "<workspace>\_work\evidence\D-P1-fix1\session-fixture.json"
+```
+
+Usa addon e bot reais, identidade oficial da implementação upstream com token
+exclusivo do harness, e o código real do cliente com a imitação documentada da API
+do jogo. Nenhum banco/login real; a saída é observada após sendCustomPacket nativo,
+não dentro do jogo. A fixture vem da sessão do dono e remapeia todos os StableFormKeys
+pela API do host. Só a sintaxe foi conferida pelo executor: **não executado, exige
+servidor local**. O roteiro completo e os limites estão em
+`_work/evidence/D-P1-fix2/PARTE-1.md` e na seção 5 de
+`docs/operations/ATIVACAO_DOS_SISTEMAS.md`.

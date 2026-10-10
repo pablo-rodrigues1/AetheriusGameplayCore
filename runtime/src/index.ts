@@ -24,6 +24,8 @@ import { StandingStoneSystem } from './standing-stones.ts';
 import { RaceSystem } from './races.ts';
 import { ClassSystem } from './classes.ts';
 import { PoisonProjection } from './poison.ts';
+import { PoisonIntents } from './poison-intents.ts';
+export { PoisonIntents } from './poison-intents.ts';
 export { poisonDoseBonus } from './poison.ts';
 import { developmentLevel } from '../../modules/class-progression-system/src/index.ts';
 export { classGrants, readClass, createClassCommands, developmentLevel, withDevelopmentLevel } from '../../modules/class-progression-system/src/index.ts';
@@ -255,8 +257,12 @@ export function createGameplayCore(host: HostContext) {
     const canary = new Set((env.GAMEPLAY_CORE_CANARY_CHARACTERS ?? '').split(',').map(s => s.trim()).filter(s => /^profile:[1-9][0-9]*$/.test(s)));
     const deliveryAllowed=(binding:SessionBinding)=>current()&&actors.isCurrent(binding)&&(deliveryMode==='active'||deliveryMode==='canary'&&canary.has(binding.characterKey));
     let perks:PerkDelivery|undefined;
-    if(['active','canary'].includes(deliveryMode)&&db.status==='SUPPORTED'&&!perkDeliveryFailure&&pool&&host.mp?.on&&host.mp.getUserActor&&host.mp.getUserByActor&&host.mp.sendCustomPacket){
-      clientDelivery=new ClientDelivery(host.mp,actors,scope,deliveryAllowed,warn);clientDelivery.start(hooks);
+    const poisonEnabled = host.mp?.getServerSettings().aetheriusCombat?.weaponPoison === true;
+    const perkEnabled = ['active','canary'].includes(deliveryMode)&&db.status==='SUPPORTED'&&!perkDeliveryFailure&&!!pool;
+    if((perkEnabled || poisonEnabled)&&host.mp?.on&&host.mp.getUserActor&&host.mp.getUserByActor&&host.mp.sendCustomPacket){
+      clientDelivery=new ClientDelivery(host.mp,actors,scope,binding=>poisonEnabled&&current()&&actors.isCurrent(binding)||deliveryAllowed(binding),warn);clientDelivery.start(hooks);
+      if (poisonEnabled) new PoisonIntents(host.mp, clientDelivery, warn);
+      if (perkEnabled && pool) {
       const ranks=new Map<import('../../shared/contracts/src/identity.js').StableFormKey,Set<number>>();
       const classData=BUILD_DOMAINS.find(d=>d.domain==='classes');
       for(const cls of classData?.classes??[])for(const stage of cls.stages)for(const perk of stage.perks)if(perk.stableFormKey&&perk.rank){
@@ -265,6 +271,7 @@ export function createGameplayCore(host: HostContext) {
       perks=new PerkDelivery({pool,schema:env.GAMEPLAY_CORE_DATABASE_SCHEMA??'public',channel:clientDelivery,catalogs:[...catalogs.values()],rankRecords:ranks,
         check:binding=>{if(!deliveryAllowed(binding))throw Error('STALE_BINDING_OR_CLIENT_MODE');},nativeRecords:(binding,set)=>new Set([
           ...races?.nativeKeys(binding)??[],...nativeStonePerkKeys(set,BUILD_DOMAINS.find(d=>d.domain==='standing-stones'))]),warn});
+      }
     }else if(['active','canary'].includes(deliveryMode))warn(`client perks UNSUPPORTED: ${perkDeliveryFailure??'TRANSPORT_OR_DATABASE_UNAVAILABLE'}`);
     projection = new SpellProjection({ pool: db.status === 'SUPPORTED' ? pool : undefined,
       ...(perks?{perks}:{}),
