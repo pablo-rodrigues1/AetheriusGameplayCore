@@ -238,7 +238,7 @@ index 9e5b9876876bfe3e44d18039d8437ab79b022141..acae4a362018a4e655ede07bef53f5d4
 +  }).catch(error => { if (completed) completed(false); else throw error; });
  };
 diff --git a/client/src/sync/inventory.ts b/client/src/sync/inventory.ts
-index 8a5b6cc210dd934c3dba4438cbc7a4333bfa7d44..ecea1a69503b951ab3ecac3b98802289d0365627 100644
+index 8a5b6cc210dd934c3dba4438cbc7a4333bfa7d44..901852b39a34b1f23ae828f13bc1522332e8de9f 100644
 --- a/client/src/sync/inventory.ts
 +++ b/client/src/sync/inventory.ts
 @@ -22,6 +22,8 @@ import {
@@ -246,7 +246,7 @@ index 8a5b6cc210dd934c3dba4438cbc7a4333bfa7d44..ecea1a69503b951ab3ecac3b98802289
    Form,
  } from "skyrimPlatform";
 +import * as poisonPlatform from 'skyrimPlatform'; // AETHERIUS D-P1-fix2
-+import { observeWeaponPoison, replacePoisonGroups, setWeaponPoisonInventoryReader } from '../services/services/gameplayWeaponPoison';
++import { observeWeaponPoison, reconcilePoisonGroups, normalizePoisonInventory, setWeaponPoisonInventoryReader } from '../services/services/gameplayWeaponPoison';
  
  export interface Extra {
    health?: number;
@@ -263,11 +263,11 @@ index 8a5b6cc210dd934c3dba4438cbc7a4333bfa7d44..ecea1a69503b951ab3ecac3b98802289
  ): boolean => {
    resetBase(refr);
 -  const diff = getDiff(newInventory, getInventory(refr), ignoreWorn).entries;
-+  const current = getInventory(refr); // AETHERIUS D-P1-fix2: observe before correction
++  const current = normalizePoisonInventory(getInventory(refr)); // AETHERIUS D-P1-fix2: observe before correction
 +  const blocked = refr.getFormID() === Game.getPlayer()?.getFormID()
 +    ? observeWeaponPoison?.(current, newInventory) ?? new Set<number>() : new Set<number>();
 +  const allDiff = getDiff(newInventory, current, ignoreWorn).entries;
-+  const handled = replacePoisonGroups(poisonPlatform, refr, current, newInventory, allDiff, blocked, enableCrashProtection, ignoreWorn);
++  const handled = reconcilePoisonGroups(poisonPlatform, refr, current, newInventory, allDiff, blocked, enableCrashProtection, ignoreWorn);
 +  const diff = allDiff.filter(e => !handled.has(e.baseId));
  
    let res = true;
@@ -504,10 +504,10 @@ index 0000000000000000000000000000000000000000..179f1905446f7ccf6fc8e22717bbff4d
 +}
 diff --git a/client/src/services/services/gameplayWeaponPoison.ts b/client/src/services/services/gameplayWeaponPoison.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..9e5b41acfcdfcc48d0c34abd060b1e2d0b1c7057
+index 0000000000000000000000000000000000000000..85622900b755d8a37b4db70105ee723540a5904e
 --- /dev/null
 +++ b/client/src/services/services/gameplayWeaponPoison.ts
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,170 @@
 +import type { Entry, Inventory } from '../../sync/inventory';
 +
 +// Called before the existing inventory diff, including its five-second cycle.
@@ -523,67 +523,109 @@ index 0000000000000000000000000000000000000000..9e5b41acfcdfcc48d0c34abd060b1e2d
 +    sp.printConsole(`[AETHERIUS poison] ${event} ${JSON.stringify(details)}`);
 +};
 +
-+/** RemoveItem without extras selects by base; removing ALL copies cannot select
-+ * the wrong extra list. AddItemEx then adds/equips the authoritative copies.
-+ * Sources: CallNative.cpp IsRemoveItem branch; PapyrusTESModPlatform.cpp AddItemEx.
-+ * Both are real calls; game-thread additions/equips finish asynchronously. */
-+export function replacePoisonGroups(sp: any, refr: any, local: Inventory, server: Inventory,
++// PO3 setters retain the ExtraPoison node with a null poison and zero count.
++// InventoryApi.cpp:66-76 serializes that node as 0/0. Canonicalize only this
++// empty coating in the comparison view; never mutate the underlying inventory.
++export function normalizePoisonInventory(inv: Inventory): Inventory {
++  return { entries: inv.entries.map(e => {
++    if (e.poisonId !== 0 && e.poisonCount !== 0) return e;
++    const copy = { ...e }; delete copy.poisonId; delete copy.poisonCount; return copy;
++  }) };
++}
++const projectedPoisonStates = new Map<string, { poisonId: number; count: number }>();
++const poisonAttempts = new Map<string, string>();
++const totals = (entries: Entry[], includePoison: boolean) => {
++  const counts = new Map<string, number>();
++  normalizePoisonInventory({ entries }).entries.forEach(e => {
++    const key = JSON.stringify([e.health, e.enchantmentId, e.maxCharge,
++      !!e.removeEnchantmentOnUnequip, e.soul,
++      ...(includePoison ? [e.poisonId, e.poisonCount] : [])]);
++    counts.set(key, (counts.get(key) ?? 0) + e.count);
++  });
++  return JSON.stringify(Array.from(counts.entries()).sort());
++};
++
++/** In-place projection only. Source: CallNativeApi.cpp:119-171 and
++ * CallNative.cpp:245-286 dispatch registered globals with exact arity.
++ * PO3_SKSEFunctions.psc:129,174,176 in the official enabled Extender mod.
++ * Apply creates ExtraPoison; setters change its pointer/count, without equip.
++ * Missing API, hand, record or instance semantics are UNSUPPORTED, never an
++ * excuse to fall through to AddItemEx for this held base. */
++export function reconcilePoisonGroups(sp: any, refr: any, local: Inventory, server: Inventory,
 +  diff: Entry[], blocked: Set<number>, enableCrashProtection: boolean, ignoreWorn: boolean): Set<number> {
 +  const handled = new Set(blocked);
-+  if (enableCrashProtection || refr.getFormID() !== sp.Game.getPlayer()?.getFormID()) return handled;
-+  const bases = new Set(diff.map(e => e.baseId));
++  if (refr.getFormID() !== sp.Game.getPlayer()?.getFormID()) return handled;
++  const bases = new Set([...local.entries, ...server.entries].filter(e => e.poisonId).map(e => e.baseId));
++  correctedPoisonBases.forEach(base => bases.add(base));
 +  for (const baseId of Array.from(bases)) {
 +    if (blocked.has(baseId)) continue;
 +    const before = local.entries.filter(e => e.baseId === baseId);
 +    const after = server.entries.filter(e => e.baseId === baseId);
-+    // After exhaustion, the two clean copies differ only by hand. getDiff with
-+    // ignoreWorn subtracts both RHS entries from its FIRST matching LHS entry,
-+    // producing +1/-1 forever. For a base we actually corrected for poison,
-+    // compare multisets before calling that removal path again.
-+    const totals = (entries: Entry[]) => {
-+      const counts = new Map<string, number>();
-+      entries.forEach(e => {
-+        const key = JSON.stringify([e.health, e.enchantmentId, e.maxCharge, !!e.removeEnchantmentOnUnequip,
-+          e.soul, e.poisonId, e.poisonCount]);
-+        counts.set(key, (counts.get(key) ?? 0) + e.count);
-+      });
-+      return JSON.stringify(Array.from(counts.entries()).sort());
-+    };
-+    if (ignoreWorn && correctedPoisonBases.has(baseId) && totals(before) === totals(after)) {
-+      handled.add(baseId); continue;
++    const held = before.filter(e => e.worn || e.wornLeft);
++    // Initial inventory creation belongs to the existing maintainer path.
++    // Never call a worn native until that exact local weapon actually exists.
++    if (!held.length) {
++      if (before.length && after.some(e => e.worn || e.wornLeft)) handled.add(baseId);
++      continue;
 +    }
-+    if (![...before, ...after].some(e => e.poisonId)) continue;
-+    const form = sp.Game.getFormEx(baseId);
-+    if (!form || form.getType() !== sp.FormType.Weapon) continue;
-+    handled.add(baseId);
-+    // AddItemEx refuses a paused UI. Do not remove the group until its queued
-+    // reconstruction can actually run; other inventory bases keep the old path.
++    if (sp.Game.getFormEx(baseId)?.getType() !== sp.FormType.Weapon) continue;
++    handled.add(baseId); correctedPoisonBases.add(baseId);
 +    if (sp.Utility.isInMenuMode()) continue;
-+    correctedPoisonBases.add(baseId);
-+    const count = before.reduce((n, e) => n + e.count, 0);
-+    const copies: Entry[] = [];
-+    for (const entry of after) for (let i = 0; i < entry.count; i++) copies.push({ ...entry, count: 1 });
-+    // A refusal may return the original unsplit host stack. Preserve each local
-+    // hand, splitting that stack, without importing the client's poison state.
-+    if (!copies.some(e => e.worn || e.wornLeft)) {
-+      const hands = before.filter(e => e.worn || e.wornLeft);
-+      hands.forEach((e, i) => { if (copies[i]) { copies[i].worn = e.worn; copies[i].wornLeft = e.wornLeft; } });
++    if (totals(before, false) !== totals(after, false)) {
++      poisonTrace(sp, 'UNSUPPORTED-instance-difference', { baseId }); continue;
 +    }
-+    poisonTrace(sp, 'replace-base', { baseId, count, copies });
-+    if (count > 0) refr.removeItem(form, count, true, null);
-+    // Add spares before equipped copies so the final equip references the exact
-+    // newly-created extra list, never a spare selected by its base alone.
-+    copies.sort((a, b) => Number(!!(a.worn || a.wornLeft)) - Number(!!(b.worn || b.wornLeft)));
-+    for (const e of copies) {
-+      const old = before.find(x => !!x.worn === !!e.worn && !!x.wornLeft === !!e.wornLeft) ?? before[0];
-+      if (e.worn || e.wornLeft) sp.TESModPlatform.pushWornState(!!e.worn, !!e.wornLeft);
-+      sp.TESModPlatform.addItemEx(refr, form, 1, e.health ?? 1,
-+        e.enchantmentId ? sp.Enchantment.from(sp.Game.getFormEx(e.enchantmentId)) : null,
-+        e.maxCharge ?? 0, !!e.removeEnchantmentOnUnequip, e.chargePercent ?? old?.chargePercent ?? 0,
-+        e.name ?? old?.name ?? form.getName(), e.soul ?? 0,
-+        e.poisonId ? sp.Potion.from(sp.Game.getFormEx(e.poisonId)) : null, e.poisonCount ?? 0);
++    for (const entry of held) {
++      const left = !!entry.wornLeft, key = `${baseId}:${left ? 'left' : 'right'}`;
++      const target = after.find(e => left ? e.wornLeft : e.worn);
++      // A refusal can retain an unsplit clean server stack. It attests clean
++      // poison for both hands, but cannot select a poisoned ambiguous copy.
++      if (!target && after.some(e => e.poisonId)) {
++        poisonTrace(sp, 'UNSUPPORTED-authoritative-hand', { baseId, left }); continue;
++      }
++      const poisonId = target?.poisonId ?? 0, count = poisonId ? target?.poisonCount ?? 0 : 0;
++      if (!Number.isSafeInteger(count) || count < 0 || (poisonId && count === 0)) {
++        poisonTrace(sp, 'UNSUPPORTED-authoritative-poison', { baseId, left }); continue;
++      }
++      if ((entry.poisonId ?? 0) === poisonId && (entry.poisonCount ?? 0) === count) continue;
++      const attempt = JSON.stringify([entry.poisonId ?? 0, entry.poisonCount ?? 0, poisonId, count]);
++      if (poisonAttempts.get(key) === attempt) continue;
++      const actor = sp.Actor.from(refr);
++      if (!actor || actor.getEquippedObject(left ? 0 : 1)?.getFormID() !== baseId) continue;
++      poisonAttempts.set(key, attempt);
++      const functions: string[] = [];
++      const call = (name: string, ...args: any[]) => {
++        functions.push(name);
++        return sp.callNative('PO3_SKSEFunctions', name, null, actor, ...args);
++      };
++      try {
++        const potion = poisonId ? sp.Potion.from(sp.Game.getFormEx(poisonId)) : null;
++        if (poisonId && !potion) throw new Error('unresolved poison');
++        let ok: boolean;
++        if (!entry.poisonId && poisonId) {
++          ok = call('ApplyPoisonToEquippedWeapon', potion, count, left) === true;
++        } else {
++          ok = call('SetEquippedWeaponPoisonCount', count, left) === true;
++          if (ok && (entry.poisonId ?? 0) !== poisonId)
++            ok = call('SetEquippedWeaponPoison', potion, left) === true;
++        }
++        const actualPoison = call('GetEquippedWeaponPoison', left);
++        const actualCount = call('GetEquippedWeaponPoisonCount', left);
++        const actualId = actualPoison?.getFormID() ?? 0;
++        if (!ok || actualId !== poisonId || actualCount !== count) throw new Error('native result differs');
++        // Later 0/0 nodes compare exactly as absence, and duplicate same-base
++        // entries compare by multiset rather than getDiff's first match.
++        entry.poisonId = poisonId; entry.poisonCount = count;
++        projectedPoisonStates.set(key, { poisonId, count });
++        poisonTrace(sp, 'correct-in-place', { baseId, left,
++          before: JSON.parse(attempt).slice(0, 2), after: [actualId, actualCount], functions });
++      } catch (error) {
++        poisonTrace(sp, 'UNSUPPORTED-poison-native', { baseId, left, functions, reason: String(error) });
++      }
 +    }
-+    sp.Actor.from(refr)?.queueNiNodeUpdate();
++    // Hand and poison are the only supported delta. This base stays excluded
++    // from reconstruction even on failure; all other bases keep their path.
++    if (ignoreWorn && totals(before, true) !== totals(after, true))
++      poisonTrace(sp, 'UNSUPPORTED-nonworn-poison-difference', { baseId });
 +  }
 +  return handled;
 +}
@@ -593,7 +635,7 @@ index 0000000000000000000000000000000000000000..9e5b41acfcdfcc48d0c34abd060b1e2d
 +  private observed = new Map<string, { poisonId: number; count: number }>();
 +  private sequence = 0;
 +  constructor(private sp: any, private send: (packet: any) => void, private ready: () => boolean) {}
-+  reset() { this.pending = undefined; this.observed.clear(); correctedPoisonBases.clear(); }
++  reset() { this.pending = undefined; this.observed.clear(); correctedPoisonBases.clear(); poisonAttempts.clear(); projectedPoisonStates.clear(); }
 +  observe(local: Inventory, server: Inventory): Set<number> {
 +    const blocked = new Set<number>();
 +    if (!this.ready()) return blocked;
@@ -605,7 +647,9 @@ index 0000000000000000000000000000000000000000..9e5b41acfcdfcc48d0c34abd060b1e2d
 +      const previous = this.observed.get(key);
 +      this.observed.set(key, { poisonId: e.poisonId ?? 0, count: e.poisonCount ?? 0 });
 +      const authoritative = server.entries.some(x => x.baseId === e.baseId && x.poisonId === e.poisonId && x.poisonCount);
-+      const application = e.poisonId && !authoritative &&
++      const projected = projectedPoisonStates.get(key);
++      const fromProjection = !!projected && projected.poisonId === e.poisonId && (e.poisonCount ?? 0) <= projected.count;
++      const application = e.poisonId && !authoritative && !fromProjection &&
 +        (!previous || previous.poisonId !== e.poisonId || (e.poisonCount ?? 0) > previous.count);
 +      if (!this.pending && application && this.sp.Game.getFormEx(e.baseId)?.getType() === this.sp.FormType.Weapon
 +        && this.sp.Potion.from(this.sp.Game.getFormEx(e.poisonId))?.isPoison()) {

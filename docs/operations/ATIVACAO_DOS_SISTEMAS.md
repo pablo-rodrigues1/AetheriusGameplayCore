@@ -1,6 +1,6 @@
 # Ativação dos sistemas do GameplayCore num servidor
 
-Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 10/10/2026 (DEV-A1).
+Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 10/10/2026 (D-P1-fix3).
 
 Cada sistema do Core (pedras guardiãs, raças, e os que vierem) precisa de duas coisas no servidor onde roda: **tabelas próprias no PostgreSQL** e **uma opção de configuração que o liga**. No ambiente de desenvolvimento local esses dois passos foram feitos à mão a cada sistema. Este documento descreve o que foi feito, para ser repetido no servidor oficial com as diferenças necessárias.
 
@@ -13,6 +13,9 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 - As migrations são só aditivas: criam tabela e índice. Nenhuma altera ou remove coisa existente.
 
 ## 2. Tabelas, por migration
+
+D-P1-fix3 não cria migration, tabela, pool ou ledger. Só corrige a projeção
+de veneno no cliente; testes usam exclusivamente aetherius_test.
 
 **DEV-A1 não cria migration ou tabela.** Os máximos de teste ficam em memória no ator do host e nunca são escritos em `gc_*` ou no change form. Porcentagens continuam sob o writer normal do host.
 
@@ -115,7 +118,13 @@ A opção `aetheriusCombat.weaponPoison` é um booleano de **server-settings.jso
 
 Sem Core, o host usa uma carga por dose. Com Core e classes em `active` (ou personagem selecionado em `canary`), a composição entrega `aetheriusPoisonDoseBonus`, propriedade nativa em memória, inteira de 0 a 65534. `mp.get(actorId, 'aetheriusPoisonStatus')` expõe resultado e máscara das famílias recusadas, para diagnóstico. O cliente não escreve esses valores. Os modos de classe não habilitam o C++ por si só.
 
-### Gatilho e diagnóstico do veneno (D-P1-fix2)
+### Gatilho e diagnóstico do veneno (D-P1-fix2; correção D-P1-fix3)
+
+A fix3 não cria opção no host/Core. Requer Papyrus Extender no cliente: a Platform
+chama seus globais por callNative. Falta de função/retorno inválido é UNSUPPORTED,
+sem reconstrução da arma. Com o trace existente, procurar correct-in-place
+(before/after/functions); replace-base foi removido. Detalhes de instalação e
+reversão em integrations/client/LEIA-ME.md. Nenhuma configuração local foi alterada.
 
 Recompilar também o Core e instalar o patch cumulativo do cliente (ver
 `integrations/client/LEIA-ME.md`). `weaponPoison=true` habilita o canal mesmo se
@@ -210,7 +219,24 @@ Para o revisor/dono testar: configurar somente no ambiente local `GAMEPLAY_CORE_
 
 ### Veneno em arma (D-P1)
 
-**Fonte atual: D-P1-fix2.** Os parágrafos históricos de convergência D-P1/fix1 abaixo
+**Fonte atual do cliente: D-P1-fix3; protocolo e servidor da fix2 preservados.**
+A arma empunhada recebe o veneno/cargas no lugar por PO3_SKSEFunctions,
+sem RemoveItem, AddItemEx, pushWornState ou queueNiNodeUpdate. Limpar deixa
+veneno nulo e zero cargas; a comparação normaliza esse ExtraPoison vazio.
+A API é conferida por getters após a chamada, com trace antes/depois/funções.
+Falta de API ou contexto é UNSUPPORTED e impede reconstrução. Corrige somente
+quando a arma esperada existe na mão local; repetições de entrada e ciclos não
+repetem a mesma tentativa. Multiconjunto elimina o falso +1/-1 das cópias iguais.
+Quantidade/outros extras divergentes e veneno divergente em cópia não empunhada
+não têm correção certificada nesta ordem. Modelo e testes não provam animação,
+registro da VM PO3 nem ausência de queda em Skyrim; roteiro em
+integrations/client/LEIA-ME.md e no relatório D-P1-fix3.
+
+**Histórico de reconstrução supersedido abaixo:** o parágrafo que descreve
+RemoveItem/AddItemEx registra a fix2 reprovada em jogo em 10/10/2026. Não é
+instrução de implantação. O restante do protocolo de intenção continua vigente.
+
+**Fonte histórica: D-P1-fix2.** Os parágrafos históricos de convergência D-P1/fix1 abaixo
 explicam o host, mas não provaram o gatilho nem a convergência do cliente. A leitura
 prova que TESEquipEvent é repassado, sem provar que Skyrim emite esse evento quando
 um veneno é aplicado. A nova intenção nasce da observação de ExtraPoison na arma
@@ -356,6 +382,12 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+**D-P1-fix3 (10/10/2026):** cliente compilado somente em evidência, com deploy/zip
+desligados. Servidor intocado, sem recompilação, start/stop ou porta. Sem MO2/jogo,
+.env ou aetherius_dev alterados. Core verificado em cópia dentro de evidência
+para confinar saídas geradas aos caminhos autorizados. Instalação, harness real
+e sessão de jogo ficam para Opus/dono; snapshot e relatório não marcam gate.
 
 **DEV-A1 (10/10/2026):** código e bundle preparados para os máximos de teste. Esta entrega não altera `.env`, não aplica migration, não acessa `aetherius_dev`, não sobe servidor e não liga a opção. `weaponPoison` deve continuar `false`. A ativação e a conferência em jogo ficam com o revisor/dono, seguindo a seção 5. Para desfazer a ativação local, remover `GAMEPLAY_CORE_DEV_ATTRIBUTES` e recarregar o Core/reconectar; não há dado de máximos a apagar. Evidências e limitações da compilação estão no relatório DEV-A1.
 

@@ -22,6 +22,8 @@ const settings={port,listenHost:'127.0.0.1',maxPlayers:4,offlineMode:true,
 const fixture=JSON.parse(readFileSync(path.resolve(options.fixture),'utf8')),addon=path.resolve(options.addon),work=path.resolve(options['work-dir']);
 mkdirSync(work,{recursive:true});process.chdir(work);globalThis.require=createRequire(import.meta.url);
 const {ScampServer}=globalThis.require(addon),server=new ScampServer(JSON.stringify(settings));server._setSelf(server);
+const weaponMutations=g=>g.calls.filter(c=>c[1]===g.weaponId&&['remove-base','remove-all','add-ex','equip','node-update'].includes(c[0]));
+const corrections=g=>g.calls.filter(c=>c[0]==='native'&&!c[2].startsWith('Get'));
 const scope=new Scope();function tick(){for(let i=0;i<20;i++)server.tick();}
 try {
   const bot=server.createBot();tick();const user=bot.getUserId();
@@ -57,10 +59,29 @@ try {
     const result=packets.filter(p=>p.type==='weaponPoisonResult').at(-1);assert(result);assert.equal(result.result,refusal?3:1);
     const native=server.get(actor,'inventory');assert.equal(native.entries.find(e=>e.baseId===poison).count,refusal?20:19);
     if(!refusal)assert.equal(native.entries.find(e=>e.poisonId).poisonCount,7);
-    const count=g.calls.length;for(let i=0;i<100;i++)cycle();assert.equal(g.calls.length,count);
+    const count=corrections(g).length;for(let i=0;i<100;i++)cycle();assert.equal(corrections(g).length,count);assert.deepEqual(weaponMutations(g),[]);
     assert.equal(g.entries.filter(e=>e.worn||e.wornLeft).length,refusal?2:1);
-    console.log(`PASS real CustomPacket + native binding + API model: ${refusal?'refusal':'accepted 7 charges'}, 100 inventory cycles without a swap`);
+    console.log(`PASS real CustomPacket + native binding + API model: ${refusal?'refusal':'accepted 7 charges'}, zero weapon remove/add/equip, 100 cycles without repeated correction`);
+    if(!refusal){
+      // Project real native snapshots; this harness does not invent a hit.
+      for(const remaining of [6,0]){
+        const next=server.get(actor,'inventory'),coating=next.entries.find(e=>e.poisonId);
+        if(remaining)coating.poisonCount=remaining;else{delete coating.poisonId;delete coating.poisonCount;}
+        server.set(actor,'inventory',next);g.sp.storage.pcInv=server.get(actor,'inventory');cycle();
+        const held=g.entries.find(e=>e.worn||e.wornLeft);assert.equal(held.poisonCount,remaining);
+        const count=corrections(g).length;for(let i=0;i<100;i++)cycle();assert.equal(corrections(g).length,count);assert.deepEqual(weaponMutations(g),[]);
+        console.log(`PASS native inventory projection: ${remaining} charges; 100 cycles, no reconstruction`);
+      }
+      const already=server.get(actor,'inventory'),heldServer=already.entries.find(e=>e.worn||e.wornLeft);
+      assert(heldServer,'host retains its worn instance');heldServer.poisonId=poison;heldServer.poisonCount=7;
+      server.set(actor,'inventory',already);g.sp.storage.pcInv=server.get(actor,'inventory');
+      const held=g.entries.find(e=>e.worn||e.wornLeft);held.worn=false;
+      const before=corrections(g).length;cycle();await new Promise(resolve=>setTimeout(resolve,300));cycle();assert.equal(corrections(g).length,before);
+      held.worn=true;cycle();assert.equal(held.poisonCount,7);assert.equal(corrections(g).length,before+1);
+      const settled=corrections(g).length;for(let i=0;i<100;i++)cycle();assert.equal(corrections(g).length,settled);assert.deepEqual(weaponMutations(g),[]);
+      console.log('PASS already poisoned entry: two inventory applications 0.3 s apart wait for expected local weapon, then one in-place correction');
+    }
   }
-  console.log('NOT PROVED: bot receive in Skyrim, TESEquipEvent emission, native removal animation/hand/attack set. No DB/login was tested.');
+  console.log('NOT PROVED: bot receive in Skyrim, TESEquipEvent emission, PO3 VM registration, native in-place animation/hand/attack set. No DB/login was tested.');
   scope.close();process.exit(0);
-} catch(error){scope.close();console.error('FAIL D-P1-fix2 native client harness:',error.stack);process.exit(1);}
+} catch(error){scope.close();console.error('FAIL D-P1-fix3 native client harness:',error.stack);process.exit(1);}

@@ -1,4 +1,4 @@
-# Cliente B5b + D-P1-fix2 (cumulativo)
+# Cliente B5b + D-P1-fix3 (cumulativo)
 
 Patch `B5b-aa864cb.patch`, gerado com `git diff --binary --full-index` contra
 `aa864cbf0a7f026dd1b0c2d373640ddedf030369` mais o diff de criação do serviço.
@@ -15,7 +15,8 @@ git apply --3way "<Core>\integrations\client\B5b-aa864cb.patch"
 Revisar conflitos com o mantenedor, preservando mudanças posteriores.
 O `--3way` pode atualizar o index; isso não autoriza commit. O pacote altera
 somente `index.ts`, `services/events/events.ts`, `remoteServer.ts`,
-`sync/appearance.ts` e cria `gameplayGrantService.ts`.
+`sync/appearance.ts`, `sync/inventory.ts` e cria `gameplayGrantService.ts`
+e `gameplayWeaponPoison.ts`.
 
 Na pasta `client`, com dependências já instaladas:
 
@@ -69,7 +70,10 @@ recepção: observa saída após a chamada nativa sendCustomPacket. Não certifi
 o recebimento dentro do jogo, a aplicação de perks ou o save. Nunca executado
 pelo Sol; apenas conferência de sintaxe.
 
-## D-P1-fix2 — intenção de veneno e convergência
+## D-P1-fix2 — intenção de veneno e convergência (histórico)
+
+**Correção da arma supersedida pela D-P1-fix3 abaixo.** O protocolo de intenção
+continua vigente. A reconstrução foi reprovada em jogo em 10/10/2026.
 
 O **mesmo** `B5b-aa864cb.patch` foi regenerado: inclui toda a B5b e a D-P1-fix2,
 contra a mesma base aa864cb. Aplicar apenas uma vez em clone da base; quem já
@@ -117,3 +121,56 @@ pela API do host. Só a sintaxe foi conferida pelo executor: **não executado, e
 servidor local**. O roteiro completo e os limites estão em
 `_work/evidence/D-P1-fix2/PARTE-1.md` e na seção 5 de
 `docs/operations/ATIVACAO_DOS_SISTEMAS.md`.
+
+## D-P1-fix3 — veneno na arma existente
+
+O mesmo `B5b-aa864cb.patch` foi regenerado contra aa864cb; inclui B5b e as
+correções de veneno. Não reaplicar cumulativamente sobre a fix2. Nesta ordem,
+`remoteServer.ts`, o protocolo e o servidor não recebem delta.
+
+A correção chama `callNative('PO3_SKSEFunctions', função, null, actor, ...)`.
+Requer **powerofthree's Papyrus Extender** funcional em cada cliente; o perfil
+oficial habilita esse mod. As assinaturas instaladas estão na evidência
+`D-P1-fix3/platform-api.txt`. SKSE WornObject não oferece os setters necessários.
+Chamadas usadas: `ApplyPoisonToEquippedWeapon` quando não há revestimento,
+`SetEquippedWeaponPoisonCount` para cargas, `SetEquippedWeaponPoison` para trocar
+ou limpar o veneno, e getters para conferir o resultado. Limpar significa
+ponteiro de veneno nulo e zero cargas; o node ExtraPoison pode permanecer e
+0/0 é normalizado apenas na comparação. Não se remove nem recria a arma.
+
+A Platform aceita chamadas globais nativas com parâmetros explícitos.
+A semântica do modelo foi conferida no [fonte do Papyrus Extender](https://github.com/powerof3/PapyrusExtenderSSE/blob/master/src/Papyrus/Functions/Actor.cpp).
+É uma inferência sobre a DLL instalada: registro VM e efeito no jogo aguardam
+conferência do dono. API ausente, retorno false, leitura divergente ou identidade
+ambígua deixam a arma bloqueada para reconstrução e registram UNSUPPORTED com
+trace ligado. Não há fallback para remover/adicionar/equipar. Uma tentativa
+falha não se repete enquanto estados local e autoritativo permanecerem iguais.
+
+A correção aguarda a arma local do record esperado na mão indicada, após o
+caminho normal do mantenedor. Duas chamadas de inventário na entrada, separadas
+por 0,3 s, não duplicam a correção. Para bases envolvidas com veneno, compara
+multiconjuntos dos extras relevantes e preserva as duas cópias e suas mãos.
+Diferenças de quantidade/outros extras nessas bases são UNSUPPORTED; cópias não
+empunhadas com divergência de veneno não têm API de instância certificada nesta
+ordem. Demais bases seguem o fluxo existente. Sem a opção do host, uma coating
+local também pode ser limpa pela projeção autoritativa; isso não envia intenção.
+
+Com `aetheriusWeaponPoisonTrace=true`, capturar `correct-in-place` com `before`,
+`after` e `functions`, além de equip/unequip/extra-changes/intent/result. Não deve
+haver `replace-base`. Usar o comando webpack acima com saída absoluta de evidência;
+SHA e linhas tocadas estão em `_work/evidence/D-P1-fix3/`.
+
+O harness mantém os argumentos documentados acima, permanece exclusivo do
+revisor e agora afirma zero remove/add/equip para a arma, gasto/esgotamento,
+entrada já envenenada com atraso 0,3 s e 100 ciclos sem correções repetidas.
+Ele usa uma **imitação** do motor do cliente: não comprova chamadas PO3 reais.
+O executor conferiu sua sintaxe, sem iniciar servidor nem abrir porta.
+
+Roteiro em jogo: com o jogo fechado, revisor instala o bundle preservando o
+anterior e confere o SHA. Entrar com a adaga já envenenada; guardar o trace da
+entrada e de três ciclos; atacar repetidamente e verificar mão, animação e som.
+Aplicar uma dose nova com uma arma, conferir uma dose consumida e sete cargas;
+com duas armas, conferir recusa e devolução da dose. Usar adicionalmente um
+veneno de família coberta para conferir gasto até zero (Potent Corrosion Poison
+continua UNSUPPORTED para resultado). Reconectar com coating persistida. Não há
+validação em jogo nesta entrega; gates e instalação dependem do revisor/dono.
