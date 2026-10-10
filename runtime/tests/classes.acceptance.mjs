@@ -170,6 +170,12 @@ test('staff and explain CLI against real test DB, request replay and DEV environ
   const denied=await cli('explain-character.mjs',[pgPath,'profile:97003',schema],{GAMEPLAY_CORE_DEV_CLASS_LEVEL:'40'});assert.equal(denied.code,1);
   const dev=await cli('explain-character.mjs',[pgPath,'profile:97003',schema],{...developmentEnv,GAMEPLAY_CORE_DEV_CLASS_LEVEL:'40',GAME_ACCESS_CONTROL:undefined});
   assert.equal(dev.code,0);assert.equal(JSON.parse(dev.output).facts.level.origin,'DEV');assert.equal(JSON.parse(dev.output).grants.length,19);assert.equal(await progress('profile:97003'),undefined);
+  // DEV-A1: offline explanation describes configuration, never live delivery.
+  const attributes=await cli('explain-character.mjs',[pgPath,'profile:97003',schema],{...developmentEnv,GAMEPLAY_CORE_DEV_ATTRIBUTES:'300,300,300'});
+  assert.equal(attributes.code,0);assert.deepEqual(JSON.parse(attributes.output).developmentAttributes.values,{health:300,magicka:300,stamina:300});
+  assert.equal(JSON.parse(attributes.output).developmentAttributes.origin,'DEV');assert.equal(JSON.parse(attributes.output).developmentAttributes.status,'CONFIGURED_ONLY');
+  const refusedAttributes=await cli('explain-character.mjs',[pgPath,'profile:97003',schema],{NODE_ENV:'production',GAMEPLAY_CORE_DEV_ATTRIBUTES:'300,300,300'});
+  assert.equal(refusedAttributes.code,0);assert.equal(JSON.parse(refusedAttributes.output).developmentAttributes,null);
 });
 
 test('official production offline login: accidental DEV 40 disables only classes; authenticated stones/races act; replacement invalidates commands',async t=>{

@@ -24,6 +24,8 @@ import { StandingStoneSystem } from './standing-stones.ts';
 import { RaceSystem } from './races.ts';
 import { ClassSystem } from './classes.ts';
 import { PoisonProjection } from './poison.ts';
+import { developmentAttributes, DevelopmentAttributesProjection } from './attributes.ts';
+export { developmentAttributes } from './attributes.ts';
 import { PoisonIntents } from './poison-intents.ts';
 export { PoisonIntents } from './poison-intents.ts';
 export { poisonDoseBonus } from './poison.ts';
@@ -207,6 +209,10 @@ export function createGameplayCore(host: HostContext) {
     try{devClassLevel=developmentLevel(env.GAMEPLAY_CORE_DEV_CLASS_LEVEL,env);
       if(devClassLevel!==undefined)warn(`DEV class level override=${devClassLevel}; read only; never use on official server`);
     }catch(error){failures.set('classes',refusedDevOptions.get('GAMEPLAY_CORE_DEV_CLASS_LEVEL') ?? (error as {code:string}).code);warn(`ERROR ${failures.get('classes')}; classes refused`);}
+    let devAttributes:ReturnType<typeof developmentAttributes>;
+    try{devAttributes=developmentAttributes(env);
+      if(devAttributes)warn(`DEV attributes override=${devAttributes.health},${devAttributes.magicka},${devAttributes.stamina}; transient; never use on official server`);
+    }catch(error){warn(`ERROR ${(error as Error).message}; DEV attributes refused; record maxima retained`);}
     failures.set('leveling','SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED: durable adapter available; no event source connected');
     for (const spec of specs.values()) mode(spec.id);
     if (devEnabled('ENABLE_STANDING_STONE_SPIKE') && ['canary', 'active'].includes(mode('standing-stones'))) {
@@ -285,6 +291,11 @@ export function createGameplayCore(host: HostContext) {
     const poisonProjection=new PoisonProjection(host.mp,()=>[...catalogs.values()],binding=>current()&&actors.isCurrent(binding),warn);
     scope.add(()=>poisonProjection.shutdown());
     actors.onUnbound(binding=>poisonProjection.clear(binding));
+    const attributesProjection=new DevelopmentAttributesProjection(host.mp,devAttributes,binding=>current()&&actors.isCurrent(binding),warn);
+    scope.add(()=>attributesProjection.shutdown());
+    actors.onBound(binding=>attributesProjection.publish(binding));
+    actors.onReady(({binding})=>attributesProjection.publish(binding));
+    actors.onUnbound(binding=>attributesProjection.clear(binding));
     if(host.mp?.getServerSettings().aetheriusCombat?.weaponPoison===true)
       actors.onReady(({binding})=>{void composition?.inspect(binding).catch(()=>warn('poison dose UNSUPPORTED: composition unavailable'));});
     composition = new ActorComposition({ pool: db.status === 'SUPPORTED' ? pool : undefined,

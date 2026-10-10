@@ -1,6 +1,6 @@
 # Ativação dos sistemas do GameplayCore num servidor
 
-Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 10/10/2026 (D-P1-fix2).
+Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 10/10/2026 (DEV-A1).
 
 Cada sistema do Core (pedras guardiãs, raças, e os que vierem) precisa de duas coisas no servidor onde roda: **tabelas próprias no PostgreSQL** e **uma opção de configuração que o liga**. No ambiente de desenvolvimento local esses dois passos foram feitos à mão a cada sistema. Este documento descreve o que foi feito, para ser repetido no servidor oficial com as diferenças necessárias.
 
@@ -13,6 +13,8 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 - As migrations são só aditivas: criam tabela e índice. Nenhuma altera ou remove coisa existente.
 
 ## 2. Tabelas, por migration
+
+**DEV-A1 não cria migration ou tabela.** Os máximos de teste ficam em memória no ator do host e nunca são escritos em `gc_*` ou no change form. Porcentagens continuam sob o writer normal do host.
 
 Arquivos em `database/migrations/`, mais a migration B5b em
 `runtime/src/projection/migration.ts`, incluída pelo mesmo CLI e bundle, aplicados em ordem.
@@ -143,12 +145,21 @@ Fora dessa combinação, **a presença da opção, inclusive vazia ou `false`, �
 | `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY=true` | aceita perfil sem autenticação somente em host antigo, sem `aetheriusOfficialIdentity`, com a trava local acima. Recusa bloqueia vínculos nesse host antigo, sem retornar silenciosamente à identidade normal. No host atual sempre exige sessão oficial; esta opção não contorna o login |
 | `ENABLE_STANDING_STONE_SPIKE=true` | liga o protótipo antigo (`spike_*`) somente com a trava local acima. Recusada, não inicia o spike; os sistemas atuais independentes seguem. Nunca junto com pedras em `canary`/`active`: o sistema novo recusa iniciar. No oficial deixe ausente |
 | `GAMEPLAY_CORE_DEV_CLASS_LEVEL=<1..40>` | **Nunca no servidor oficial.** Com a trava local acima, `40` compõe todos os marcos sem gravar nível ou XP. Recusada, vazia, inválida ou fora de 1–40: **ERROR**, classes `UNSUPPORTED`, sem iniciar nem usar nível real em silêncio. Removida a opção, volta ao Leveling. Quando aceita, registra **DEV** e mostra essa origem na capacidade e explicação. Com B5b, a entrega depende também do modo de perks habilitado e do pronto confirmado pelo cliente. |
+| `GAMEPLAY_CORE_DEV_ATTRIBUTES=<vida>,<magia>,<vigor>` | **Nunca no servidor oficial.** Três inteiros entre 1 e 100000, sem espaços; exemplo local: `300,300,300`. Exige a mesma trava de `development.ts`. Opção presente fora dela (inclusive vazia ou `false`) ou valor inválido: **ERROR**, sem override; os demais sistemas seguem. Aceita: aviso **DEV** a cada boot. Entregue só a jogador com sessão oficial atual, no vínculo e no pronto; reentregue depois do respawn/reconnect, limpo no desvínculo/shutdown. Sem propriedade nativa: `UNSUPPORTED`, sem gravar propriedade customizada. |
 
 **Supersessão B1-fix1 (08/10/2026):** a trava anterior de C3a baseada em `offlineMode` e a premissa de B1 de que o oficial não roda offline estão substituídas por esta seção. O critério é exclusivamente o ambiente explícito acima.
 
 A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolvimento: ela transferiu para o sistema novo a pedra de um personagem de teste que vinha do protótipo. O servidor oficial não tem dados do protótipo e não precisa dela.
 
 ## 5. O que cada sistema faz quando ligado
+
+### Máximos de teste (DEV-A1, exclusivamente desenvolvimento)
+
+O ponto de verdade é `MpActor::GetMaximumValues()`: entrega os três valores em memória quando o ator é jogador online correspondente à entrega; sem override devolve os records como antes. Golpes físicos/mágicos, cura/dano por actor value e `ResourceDamage` do veneno usam esse máximo. O spawn usa a mesma aplicação do override. As taxas raciais de regeneração não mudam: a mesma porcentagem por segundo sobre 300 corresponde a três vezes os pontos por segundo sobre 100. A validação do caminho DEV recusa porcentagem não finita e limita também a regeneração de vigor; o caminho normal conserva a validação legada.
+
+O host entrega os máximos pelo mecanismo existente `SpSnippet Actor.SetActorValue`. Depois das três confirmações de chamada, envia as porcentagens atuais por `ChangeValues`; ACK antigo não publica depois de outra entrega ou mudança de usuário. Não há alteração no cliente. Essas confirmações não comprovam o resultado visual em jogo. A ferramenta `runtime/explain-character.mjs` mostra `developmentAttributes.origin=DEV` e `CONFIGURED_ONLY`: a ferramenta offline não afirma que o ator recebeu o override.
+
+Para o revisor/dono testar: configurar somente no ambiente local `GAMEPLAY_CORE_DEV_ATTRIBUTES=300,300,300`, `NODE_ENV=local`, `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS=true`, sem `GAME_ACCESS_CONTROL=true`. Reconectar e conferir máximo 300 nas três barras/inspeção, inclusive após respawn. Um golpe com dano conhecido `D` deve reduzir a porcentagem de vida em `D/300` (exemplo: 30 pontos, de 100% para 90%, vida 270). Conferir também um golpe sem a opção: queda `D/máximo dos records`. Remover a opção e recarregar o Core devolve os records; a reconexão também permite conferir o spawn normal. Manter `weaponPoison=false` no servidor local. O aceite nativo habilita somente o gate de veneno da fixture `PartOne` em memória, sem socket ou servidor em execução, chama a operação e restaura `false`. Veneno em jogo permanece sujeito à revisão própria D-P1-fix2.
 
 **Revisão da composição (FIX-1010):** trocar o nível de desenvolvimento, os providers ativos ou a assinatura de uma definição pode mudar os grants sem mudar fatos gravados. A composição consulta a cabeça persistida; se o conteúdo mudou, avança `grants` e, quando uma definição mantida muda de assinatura, `catalog`. Conserva os contadores anteriores ao retirar um provider. Mesmos conteúdo e revisão continuam idempotentes; a porta continua recusando uma publicação anterior ou conteúdo diferente enviado diretamente na mesma revisão. As opções continuam sendo lidas no boot, com as mesmas travas de desenvolvimento da seção 4.
 
@@ -299,6 +310,7 @@ No ambiente local os passos 4 e 5 foram pulados: o sistema foi direto para `acti
 No `.env` do gamemode do servidor oficial, estas opções têm de estar **ausentes**:
 
 - `GAMEPLAY_CORE_DEV_CLASS_LEVEL` (override exclusivo do teste; em produção bloqueia classes);
+- `GAMEPLAY_CORE_DEV_ATTRIBUTES` (**override exclusivo do teste; nunca no servidor oficial**);
 - `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS`;
 - `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY`;
 - `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV`;
@@ -344,6 +356,8 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+**DEV-A1 (10/10/2026):** código e bundle preparados para os máximos de teste. Esta entrega não altera `.env`, não aplica migration, não acessa `aetherius_dev`, não sobe servidor e não liga a opção. `weaponPoison` deve continuar `false`. A ativação e a conferência em jogo ficam com o revisor/dono, seguindo a seção 5. Para desfazer a ativação local, remover `GAMEPLAY_CORE_DEV_ATTRIBUTES` e recarregar o Core/reconectar; não há dado de máximos a apagar. Evidências e limitações da compilação estão no relatório DEV-A1.
 
 | Data | Sistema | No banco de desenvolvimento | Na configuração do servidor local |
 |---|---|---|---|
