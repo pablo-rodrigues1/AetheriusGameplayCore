@@ -30,6 +30,8 @@ Arquivos em `database/migrations/`, mais a migration B5b em
 
 D-P1 não cria migration: revestimento e cargas usam o inventário nativo existente; o bônus por ator e os ticks do veneno são transitórios. Não há ledger ou store de efeitos novo.
 
+FIX-1010 também não cria migration: a revisão da composição usa a cabeça já existente em `gc_spell_projection_heads`. Nenhuma tabela legada ou dado de `aetherius_dev` foi alterado pelo executor.
+
 Cada sistema novo acrescentará a sua migration, com o próximo número. Esta tabela deve ser atualizada junto.
 
 A identidade do personagem em todas as tabelas é `profile:<profile_id>`, com o `profile_id` da plataforma. No host atual, o Core usa exclusivamente `mp.aetheriusOfficialIdentity.session(actorId)`, confirma `isCurrent` e exige que o `profile_id` coincida com `mp.get(actorId, 'profileId')`. Nova sessão oficial recebe novo epoch do Core, mesmo com o mesmo ator e perfil. Nenhuma tabela guarda FormID de runtime nem posição de plugin.
@@ -128,6 +130,8 @@ A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolviment
 
 ## 5. O que cada sistema faz quando ligado
 
+**Revisão da composição (FIX-1010):** trocar o nível de desenvolvimento, os providers ativos ou a assinatura de uma definição pode mudar os grants sem mudar fatos gravados. A composição consulta a cabeça persistida; se o conteúdo mudou, avança `grants` e, quando uma definição mantida muda de assinatura, `catalog`. Conserva os contadores anteriores ao retirar um provider. Mesmos conteúdo e revisão continuam idempotentes; a porta continua recusando uma publicação anterior ou conteúdo diferente enviado diretamente na mesma revisão. As opções continuam sendo lidas no boot, com as mesmas travas de desenvolvimento da seção 4.
+
 ### Pedras guardiãs (`standing-stones`)
 
 - **Precisa de:** migrations 0001 a 0004; plugins `Skyrim.esm` e `Mundus.esp` presentes e iguais aos do export usado para gerar o catálogo.
@@ -174,6 +178,10 @@ A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolviment
 - Fora de C3a: interface, custo/restrições de troca (incluindo Winterhold), skills, pontos/alocação de atributos, feitiços de classe e entrega B5b. O módulo legado permanece intocado e não é ligado pelo runtime novo.
 
 ### Veneno em arma (D-P1)
+
+**Proteções FIX-1010:** o agressor deve ser um ator criado como jogador pelo host e ter usuário associado. NPC, ator sem usuário/mundo, fonte de golpe que não resolve e efeito sem MGEF válido não entram na aplicação de veneno. Alvo NPC hospedado continua possível quando o agressor é jogador; ausência de destinatário conectado é `UNSUPPORTED`, sem gasto de carga. Os timers mantêm referências fracas à origem e ao alvo e cessam na próxima execução se a origem se desconectar ou for destruída. Atualização de equipamento de NPC conserva o encaminhamento original; destinatários são deduplicados depois de resolver o hoster, sem eco ao dono por meio de listener NPC.
+
+**Queda de 10/10:** a violação de acesso não foi reproduzida na matriz nativa PartOne, sem socket, antes da proteção. Esta entrega não certifica a causa nem a resolução da queda. Manter `weaponPoison=false` e shadow desligado até revisão do Opus e nova sessão do dono. O registro e a auditoria estão em `_work/evidence/FIX-1010/`.
 
 **Primeira alteração de comportamento de jogo do Core no C++ do host.** A ordem foi autorizada fora da sequência da trilha D. O outro desenvolvedor precisa reaplicar os arquivos novos `server_guest_lib/aetherius_combat/WeaponPoison*.h`, as integrações marcadas `AETHERIUS D-P1`, os bindings `PoisonDoseBinding.*` e os testes nativos, e recompilar o addon. A lista exata de linhas está no relatório da ordem. O spike de dano anterior continua independente e desligado.
 
@@ -235,6 +243,9 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 
 ## 7. Como conferir
 
+- **FIX-1010/B5b:** `ACK_RECEIVED` informa contagens `applied`, `alreadyPresent`, `unresolved`, `failed`, `removed` e `alreadyAbsent`. Essa linha registra recebimento; só o `CONFIRMED` posterior comprova o registro transacional da entrega. Após 10 segundos sem ACK válido da publicação atual, `ACK_TIMEOUT` mantém `delivery=SENT_UNCONFIRMED`. Reset de sessão, nova publicação e shutdown cancelam o timer anterior. Nenhuma dessas linhas comprova resultado de gameplay no motor.
+- **Harness FIX-1010, apenas revisor:** `node runtime/harness/weapon-poison.cjs --port <porta-isolada> --work-dir <pasta-isolada> --addon <scam_native.node> --settings <server-settings.json> --mode on` (repetir com `--mode off`). Inclui NPC real `0422B4:Skyrim.esm` colocado por `mp.place`, hospedado pelo bot via mensagem `Host`, golpeando o ator do bot. O harness `runtime/harness/client-packet.mjs` usa os mesmos argumentos sem `--mode` e inicializa `globalThis.require`. Não executados pelo Sol: exigem servidor local/porta.
+
 - **B5b:** log `perks profile:<id>: CONFIRMED; 19 items` para viper no nível 40
   autorizado de teste. `SENT_UNCONFIRMED` jamais significa aplicado. Conferir
   `gc_perk_projections` por personagem (`owned`, `active`, `item_status` e
@@ -274,6 +285,7 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 | 08/10/2026 | pedras guardiãs | migrations 0001 a 0004; adoção da pedra do personagem de teste, vinda do protótipo | `ENABLE_STANDING_STONE_SPIKE=false`, `GAMEPLAY_CORE_MODE_STANDING_STONES=active`, `GAMEPLAY_CORE_DATABASE_SCHEMA=public`, `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV=false`, `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY=true` |
 | 08/10/2026 | raças | migration 0005 | `GAMEPLAY_CORE_MODE_RACES=active` |
 | 09/10/2026 | veneno D-P1 | nenhuma alteração em aetherius_dev; testes somente em aetherius_test | compilação Release e sync dos plugins oficiais; opção não ligada; servidor não iniciado; ticks cobertos por teste unitário; stacking e jogo pendentes de revisão |
+| 10/10/2026 | FIX-1010 | nenhuma migration nova; testes do Core somente em schemas descartáveis de aetherius_test | proteção de veneno e revisão derivada; rebuild Release e bundle; servidor mantido parado; weaponPoison desligado; queda não reproduzida; servidor e jogo pendentes do revisor/dono |
 | 08/10/2026 | classes (C3a) | migrations 0006 e 0007; classe do personagem de teste definida como `viper` pela ferramenta `runtime/set-character-class.mjs` | `GAMEPLAY_CORE_MODE_CLASSES=active` e, **só neste ambiente de teste**, `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` |
 | 09/10/2026 | perks no cliente B5b | nenhuma alteração em aetherius_dev; migration 0008 somente em schemas descartáveis de aetherius_test | nenhuma opção local alterada; bundle do cliente em evidência, sem instalação; addon e jogo não executados pelo Sol |
 

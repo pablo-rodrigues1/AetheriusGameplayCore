@@ -1,6 +1,6 @@
 import type { CharacterKey, Grant, GrantSet, SessionBinding, StableFormKey } from '../../shared/contracts/src/index.ts';
 import { compose } from '../../modules/actor-state-system/src/index.ts';
-import { lockCharacter, withTransaction } from '../../shared/persistence/src/index.ts';
+import { canonicalJson, lockCharacter, withTransaction } from '../../shared/persistence/src/index.ts';
 import type { PoolPort, QueryExecutor } from '../../shared/persistence/src/index.ts';
 import type { ProjectionResult } from './projection/index.ts';
 import { scopedPool } from './persistence-scope.ts';
@@ -43,6 +43,7 @@ export function nativeGrantKeys(set: GrantSet, previous?: GrantSet): ReadonlySet
 export class ActorComposition {
   private providers = new Map<string, CompositionProvider>();
   private tails = new Map<CharacterKey, Promise<unknown>>();
+  private derived = new Map<CharacterKey, GrantSet>();
   private closed = false;
   constructor(private options: {
     readonly pool: PoolPort | undefined;
@@ -75,14 +76,36 @@ export class ActorComposition {
           outputs.push(await provider.read(tx, binding.characterKey)); check();
         }
         const revision = outputs.reduce((sum, output) => sum + output.revision, 0);
-        return compose(binding.characterKey, outputs.map(output => output.grants), {
+        const next = compose(binding.characterKey, outputs.map(output => output.grants), {
           facts: revision, grants: revision, equipment: 0, effects: 0, catalog: 1
         });
+        // Publication counters belong to the derivation boundary. Facts alone
+        // cannot identify provider output (development level, enabled systems,
+        // winner signatures). Reuse the durable projection head across boots;
+        // keep an issued set only while that head has not caught up yet.
+        const head = (await tx.query<{grant_set: GrantSet}>(
+          `SELECT grant_set FROM "${this.options.schema}".gc_spell_projection_heads WHERE character_key=$1`,
+          [binding.characterKey])).rows[0]?.grant_set;
+        check();
+        const issued = this.derived.get(binding.characterKey);
+        const previous = issued && (!head || issued.revision.grants > head.revision.grants) ? issued : head;
+        if (!previous) return next;
+        const contentChanged = canonicalJson(previous.grants) !== canonicalJson(next.grants);
+        if (!contentChanged && revision <= previous.revision.facts) return compose(next.characterKey, [next.grants], previous.revision);
+        const signatures = new Map(previous.grants.map(g => [g.definition.stableFormKey,g.definition.catalogSignature]));
+        const catalogChanged = next.grants.some(g => signatures.has(g.definition.stableFormKey) &&
+          signatures.get(g.definition.stableFormKey) !== g.definition.catalogSignature);
+        return compose(next.characterKey, [next.grants], {
+          facts: Math.max(revision, previous.revision.facts),
+          grants: Math.max(revision, previous.revision.grants) + 1,
+          equipment: previous.revision.equipment, effects: previous.revision.effects,
+          catalog: previous.revision.catalog + (catalogChanged ? 1 : 0)
+        });
       });
-      check(); this.options.onComposed?.(binding,set); return action(set);
+      check(); this.derived.set(binding.characterKey,set); this.options.onComposed?.(binding,set); return action(set);
     });
     const tail = task.finally(() => { if (this.tails.get(binding.characterKey) === tail) this.tails.delete(binding.characterKey); });
     this.tails.set(binding.characterKey, tail); return tail;
   }
-  async shutdown(): Promise<void> { this.closed = true; await Promise.allSettled([...this.tails.values()]); this.providers.clear(); }
+  async shutdown(): Promise<void> { this.closed = true; await Promise.allSettled([...this.tails.values()]); this.providers.clear(); this.derived.clear(); }
 }

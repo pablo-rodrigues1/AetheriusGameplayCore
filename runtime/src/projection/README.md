@@ -1,5 +1,23 @@
 # B5a — Projeção de SPEL
 
+## FIX-1010 — revisão derivada e diagnóstico
+
+A regra de conflito da porta abaixo permanece: uma publicação antiga é recusada,
+e mesma revisão com conteúdo diferente continua sendo erro para quem chama a porta
+diretamente. `ActorComposition` consulta a cabeça persistida dentro da transação de
+leitura dos providers. Mudança de grants, nível de desenvolvimento, providers ou
+assinaturas avança `grants`; mudança de assinatura de uma definição mantida também
+avança `catalog`. Contadores não retrocedem quando um provider sai. Uma composição
+idêntica reutiliza a revisão; não há migration ou segundo ledger. O cache interno
+conserva apenas o último conjunto emitido até a cabeça alcançar a publicação.
+
+ACK válido de perks registra `ACK_RECEIVED` com contagens por status; o registro
+transacional continua antecedendo `CONFIRMED`. Sem ACK no prazo de 10 segundos,
+`ACK_TIMEOUT` mantém a entrega não confirmada. Reset, republicação e shutdown
+cancelam a espera anterior. Provas: `perks.test.mjs`, `perk-adapter.test.mjs` e
+`revision-derived.test.mjs`. A assinatura substituta do teste de catálogo é uma
+fixture explícita de versão, não uma alegação sobre outro winner instalado.
+
 `SpellProjection` implementa o contrato fixo `GrantProjectionPort`. Publicar recebe
 `GrantProjection` com o `GrantSet` completo de `ActorState.compose()`. O port usa
 `effectiveSet()` internamente e une spell/ability/power pelo StableFormKey. As origens

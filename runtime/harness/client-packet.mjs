@@ -21,7 +21,8 @@ const input=JSON.parse(readFileSync(settingsFile,'utf8'));
 const settings={port,listenHost:'127.0.0.1',maxPlayers:4,offlineMode:true,
   dataDir:path.resolve(path.dirname(settingsFile),input.dataDir??'data'),loadOrder:input.loadOrder};
 mkdirSync(work,{recursive:true});process.chdir(work);
-const {ScampServer}=createRequire(import.meta.url)(addon),server=new ScampServer(JSON.stringify(settings));server._setSelf(server);
+globalThis.require=createRequire(import.meta.url);
+const {ScampServer}=globalThis.require(addon),server=new ScampServer(JSON.stringify(settings));server._setSelf(server);
 const scope=new Scope(),ready=[],outgoing=[];
 function tick(){for(let i=0;i<20;i++)server.tick();}
 try{

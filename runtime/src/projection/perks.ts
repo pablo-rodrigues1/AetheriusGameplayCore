@@ -13,7 +13,7 @@ import type { ProjectionItem } from './index.js';
 
 interface Row { stable_form_key: StableFormKey; definition: DefinitionRef; revision: GrantProjection['set']['revision']; owned: boolean; active: boolean; item_status: string }
 interface WireItem { key: StableFormKey; plugin: string; localFormId: number; signature: string; action: 'ensure' | 'remove'; owned: boolean }
-interface Pending { projection: GrantProjection; cycle: DeliveryCycle; challenge: string; id: string; items: WireItem[]; definitions: Map<string, DefinitionRef>; committing: boolean; expires: number }
+interface Pending { projection: GrantProjection; cycle: DeliveryCycle; challenge: string; id: string; items: WireItem[]; definitions: Map<string, DefinitionRef>; committing: boolean; expires: number; timer?: ReturnType<typeof setTimeout> }
 export type PerkDeliveryState = 'UNSUPPORTED' | 'CLIENT_UNSUPPORTED' | 'ACTOR_NOT_READY' | 'SENT_UNCONFIRMED' | 'CONFIRMED' | 'PARTIAL' | 'FAILED';
 interface Options {
   pool: PoolPort; schema: string; channel: ClientDelivery; catalogs: readonly RecordCatalogPort[];
@@ -21,6 +21,7 @@ interface Options {
   nativeRecords(binding: SessionBinding, set:GrantProjection['set']): ReadonlySet<StableFormKey>;
   rankRecords: ReadonlyMap<StableFormKey, ReadonlySet<number>>;
   warn(message: string): void;
+  ackTimeoutMs?: number;
 }
 /** Internal PERK adapter of the single GrantProjectionPort, not a grant store.
  * Authorship is saved only after an exact current-session ACK transaction. */
@@ -33,6 +34,7 @@ export class PerkDelivery {
   private closed = false;
   constructor(private options: Options) {
     this.stops = [options.channel.onReset(binding => {
+      clearTimeout(this.pending.get(binding.characterKey)?.timer);
       this.pending.delete(binding.characterKey); this.results.delete(binding.characterKey);
     }), options.channel.onAck((cycle, p) => this.ack(cycle, p))];
   }
@@ -102,12 +104,21 @@ export class PerkDelivery {
     }
     if (items.length > MAX_ITEMS) return { state: 'UNSUPPORTED', items: [{ definition: items.length ? definitions.get(items[0]!.key)! : desired[0]!.definition, status: 'UNSUPPORTED', reason: 'PERK_SET_TOO_LARGE' }] };
     const id = randomUUID(), challenge = cycle.challenge;
-    const pending: Pending = { projection, cycle, challenge, id, items, definitions, committing: false, expires: performance.now() + 10000 };
+    clearTimeout(this.pending.get(binding.characterKey)?.timer);
+    const timeout = this.options.ackTimeoutMs ?? 10000;
+    const pending: Pending = { projection, cycle, challenge, id, items, definitions, committing: false, expires: performance.now() + timeout };
     this.pending.set(binding.characterKey, pending);
+    pending.timer = setTimeout(() => {
+      if (this.pending.get(binding.characterKey) !== pending || pending.committing) return;
+      try { this.check(binding); if (this.options.channel.current(binding) !== cycle) return; } catch { return; }
+      this.options.warn(`perks ${binding.characterKey}: ACK_TIMEOUT; ${items.length} items; delivery=SENT_UNCONFIRMED`);
+    }, timeout);
+    pending.timer.unref();
     const outcome = { epoch: binding.epoch, revision: set.revision, state: 'SENT_UNCONFIRMED' as PerkDeliveryState,
       items: [...failures, ...items.map(i => ({ definition: definitions.get(i.key)!, status: 'SENT_UNCONFIRMED' as const, reason: 'NO_CLIENT_ACK_YET' }))] };
     this.results.set(binding.characterKey, outcome);
     if (!this.options.channel.send(cycle, { type: 'perks', cycle: cycle.cycle, challenge, id, revision: set.revision, items })) {
+      clearTimeout(pending.timer);
       this.pending.delete(binding.characterKey); outcome.state = 'FAILED';
     }
     return this.status(binding);
@@ -126,6 +137,9 @@ export class PerkDelivery {
       || r.key !== pending.items[i]!.key || r.signature !== pending.items[i]!.signature || r.action !== pending.items[i]!.action
       || (r.action === 'ensure' ? ['REMOVED','ALREADY_ABSENT'].includes(r.status) : ['APPLIED','ALREADY_PRESENT'].includes(r.status)))) return;
     pending.committing = true;
+    clearTimeout(pending.timer);
+    const count = (status: string) => reports.filter(r => r.status === status).length;
+    this.options.warn(`perks ${cycle.binding.characterKey}: ACK_RECEIVED; applied=${count('APPLIED')}; alreadyPresent=${count('ALREADY_PRESENT')}; unresolved=${count('UNRESOLVED')}; failed=${count('FAILED')}; removed=${count('REMOVED')}; alreadyAbsent=${count('ALREADY_ABSENT')}; delivery evidence only`);
     const binding = pending.projection.binding;
     const check = () => {
       this.check(binding);
@@ -164,5 +178,5 @@ export class PerkDelivery {
     });
     this.tails.add(task); void task.finally(() => this.tails.delete(task));
   }
-  async shutdown(): Promise<void> { this.closed = true; for (const stop of this.stops) stop(); this.pending.clear(); this.results.clear(); await Promise.allSettled([...this.tails]); this.listeners.clear(); }
+  async shutdown(): Promise<void> { this.closed = true; for (const stop of this.stops) stop(); for (const p of this.pending.values()) clearTimeout(p.timer); this.pending.clear(); this.results.clear(); await Promise.allSettled([...this.tails]); this.listeners.clear(); }
 }

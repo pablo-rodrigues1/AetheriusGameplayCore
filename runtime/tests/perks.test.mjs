@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {isDeepStrictEqual} from 'node:util';
 import {test,before,after} from 'node:test';
 import {createRequire} from 'node:module';
 import {randomBytes} from 'node:crypto';
@@ -18,7 +19,7 @@ before(async()=>{await pool.query(`CREATE SCHEMA "${schema}"`);const migrations=
   assert.equal((await utils.applyMigrations(pool,migrations,schema)).applied.length,8);assert.equal((await utils.applyMigrations(pool,migrations,schema)).unchanged,8);});
 after(async()=>{await Promise.all(runtimes.map(c=>c.shutdown()));await pool.query(`DROP SCHEMA "${schema}" CASCADE`);await pool.end();});
 async function until(fn){const end=performance.now()+10000;while(!(await fn())){if(performance.now()>end)throw Error('B5b condition timeout');await delay(10);}}
-async function setup({mode='active',devLevel='40',natural=false,character,attach=true,shift=1000}={}){
+async function setup({mode='active',devLevel='40',natural=false,character,attach=true,shift=1000,env={}}={}){
   const mp=classHost({catalogAvailable:true,offlineMode:true}),log=logger(),c=client({shift}),packets=[];
   mp.profiles.set(91,character??++profile);mp.appearances.set(91,{raceId:mp.ids.get('skyrim.esm|013746')});
   mp.getUserActor=user=>[...mp.users].find(([,u])=>u===user)?.[0]??0;
@@ -28,7 +29,7 @@ async function setup({mode='active',devLevel='40',natural=false,character,attach
   c.emitter.on('sendMessage',e=>{const p=JSON.parse(e.message.contentJsonDump);if(p.type==='ack')acks.push(p);if(auto)mp.emitter.emit('customPacket',0,e.message.contentJsonDump);});
   for(const record of classes.records)c.register({stableFormKey:record.stableFormKey});
   const barrier=c.spawn();
-  const core=api.createGameplayCore({mp,pg:{init:()=>pool},log,env:{...developmentEnv,GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_MODE_CLASSES:'active',GAMEPLAY_CORE_CLIENT_PERKS_MODE:mode,...natural?{}:{GAMEPLAY_CORE_DEV_CLASS_LEVEL:devLevel}}});
+  const core=api.createGameplayCore({mp,pg:{init:()=>pool},log,env:{...developmentEnv,GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_MODE_CLASSES:'active',GAMEPLAY_CORE_CLIENT_PERKS_MODE:mode,...natural?{}:{GAMEPLAY_CORE_DEV_CLASS_LEVEL:devLevel},...env}});
   runtimes.push(core);await core.initialize();const binding=core.identity.lookup({actorId:91}).value;
   const set=classId=>core.setCharacterClass({binding,classId,requestId:randomBytes(8).toString('hex')});
   const ready=()=>{for(const task of ['spells','appearance','equipment','placement'])barrier.complete(task);};
@@ -108,4 +109,49 @@ test('durable ownership restored on reconnect: existing save perks are not re-ad
   const g=await setup({character,shift:7000});for(const key of old)g.c.perks.add(g.c.forms.get(key).id);g.ready();await g.confirm();assert.equal(g.c.calls.filter(c=>c[0]==='add').length,0);
   g.log.messages.length=0;await g.set('guardiao');g.c.update();await until(()=>g.log.messages.some(m=>m.includes('perks ')&&m.includes('CONFIRMED')));
   const next=new Set((await g.core.inspectActor(g.binding)).grants.map(r=>r.definition.stableFormKey));assert.deepEqual(g.c.calls.filter(c=>c[0]==='remove').map(c=>c[1]).sort(),old.filter(k=>!next.has(k)).sort());
+});
+
+test('FIX-1010 legacy complete stone head, Nord/viper: reconnect and dev/perk/provider mode changes keep reconciliation and external grants',async()=>{
+  const env={GAMEPLAY_CORE_MODE_STANDING_STONES:'active',GAMEPLAY_CORE_MODE_RACES:'active'};
+  const first=await setup({mode:'off',env});await first.set('viper');
+  await first.core.observeRace(first.binding);
+  assert.equal((await first.core.chooseStandingStone({binding:first.binding,stoneKey:'skyrim.esm|0D232D',requestId:'FIX-1010-stone'})).status,'SUPPORTED');
+  // Legacy protocol-off readiness is the documented 3 second approximation.
+  await until(async()=> (await pool.query('SELECT complete FROM gc_spell_projection_heads WHERE character_key=$1',[first.binding.characterKey])).rows[0]?.complete);
+  const head=()=>pool.query('SELECT grant_set,complete FROM gc_spell_projection_heads WHERE character_key=$1',[first.binding.characterKey]).then(r=>r.rows[0]);
+  const old=await head();assert.equal(old.complete,true);
+  assert(old.grant_set.grants.some(g=>g.source.kind==='STANDING_STONE'));
+  assert(old.grant_set.grants.some(g=>g.source.kind==='RACE'));
+  const externalPerk=old.grant_set.grants.find(g=>g.source.kind==='CLASS').definition.stableFormKey;
+  // State equivalent to a complete B5a head before classes participated. Facts
+  // already contain the viper choice, and stay unchanged throughout this test.
+  const legacy={...old.grant_set,grants:old.grant_set.grants.filter(g=>g.source.kind!=='CLASS')};
+  await pool.query('UPDATE gc_spell_projection_heads SET grant_set=$2::jsonb,complete=true WHERE character_key=$1',[first.binding.characterKey,JSON.stringify(legacy)]);
+  const externalSpell=first.mp.data.records.find(r=>r.recordType==='SPEL'&&!old.grant_set.grants.some(g=>g.definition.stableFormKey===r.stableFormKey)).stableFormKey;
+  first.mp.learned(91).add(first.mp.ids.get(externalSpell));
+  const character=Number(first.binding.characterKey.slice(8));let previous=first,priorRevision=legacy.revision;
+  const snapshots=[];
+  for(const options of [{},{natural:true},{devLevel:'40'},{mode:'off'},{mode:'active'},{env:{...env,GAMEPLAY_CORE_MODE_CLASSES:'off'}},{env}]){
+    const spellKeys=[...previous.mp.learned(91)].map(id=>[...previous.mp.ids].find(([,value])=>id===value)?.[0]).filter(Boolean);
+    const perkKeys=[...previous.c.perks].map(id=>[...previous.c.forms].find(([,form])=>id===form.id)?.[0]).filter(Boolean);
+    if(!perkKeys.includes(externalPerk))perkKeys.push(externalPerk);
+    await previous.core.shutdown();const next=await setup({character,env,...options});
+    for(const key of spellKeys)next.mp.learned(91).add(next.mp.ids.get(key));
+    for(const key of perkKeys)next.c.perks.add(next.c.forms.get(key).id);
+    next.ready();
+    const expected=(await next.core.inspectActor(next.binding)).grants;
+    await until(async()=>{next.c.update();const h=await head();return h?.complete&&isDeepStrictEqual(h.grant_set.grants,expected);});
+    if(options.mode!=='off')await next.confirm();
+    const h=await head();
+    assert(h.grant_set.revision.grants>=priorRevision.grants);priorRevision=h.grant_set.revision;
+    assert(!next.log.messages.some(m=>/REVISION_CONTENT_CONFLICT|STALE_OR_INCOMPARABLE/.test(m)),next.log.messages.join('\n'));
+    assert(next.mp.learned(91).has(next.mp.ids.get(externalSpell)));
+    assert(next.c.perks.has(next.c.forms.get(externalPerk).id));
+    assert(!next.mp.mutations().some(c=>c.method==='RemoveSpell'&&c.args[0].desc===next.mp.getDescFromId(next.mp.ids.get(externalSpell))));
+    assert(!next.c.calls.some(c=>c[0]==='remove'&&c[1]===externalPerk));
+    snapshots.push({options,revision:h.grant_set.revision,classPerks:expected.filter(g=>g.source.kind==='CLASS').length});previous=next;
+  }
+  assert(snapshots[0].revision.grants>legacy.revision.grants);
+  assert(snapshots[1].classPerks<snapshots[0].classPerks);
+  assert(snapshots[2].classPerks===snapshots[0].classPerks);
 });
