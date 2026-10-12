@@ -62,10 +62,10 @@ export class ActorComposition {
   inspect(binding: SessionBinding): Promise<ReturnType<typeof compose>> {
     return this.serial(binding, set => set);
   }
-  recompose(binding: SessionBinding): Promise<ProjectionResult> {
-    return this.serial(binding, set => this.options.publish(binding, set));
+  recompose(binding: SessionBinding, fresh = false): Promise<ProjectionResult> {
+    return this.serial(binding, set => this.options.publish(binding, set), fresh);
   }
-  private serial<T>(binding: SessionBinding, action: (set: ReturnType<typeof compose>) => T | Promise<T>): Promise<T> {
+  private serial<T>(binding: SessionBinding, action: (set: ReturnType<typeof compose>) => T | Promise<T>, fresh = false): Promise<T> {
     const task = (this.tails.get(binding.characterKey) ?? Promise.resolve()).catch(() => {}).then(async () => {
       const check = () => { if (this.closed) throw Error('COMPOSITION_CLOSED'); this.options.check(binding); };
       check(); if (!this.options.pool) throw Error('DATABASE_UNAVAILABLE');
@@ -91,7 +91,7 @@ export class ActorComposition {
         const previous = issued && (!head || issued.revision.grants > head.revision.grants) ? issued : head;
         if (!previous) return next;
         const contentChanged = canonicalJson(previous.grants) !== canonicalJson(next.grants);
-        if (!contentChanged && revision <= previous.revision.facts) return compose(next.characterKey, [next.grants], previous.revision);
+        if (!fresh && !contentChanged && revision <= previous.revision.facts) return compose(next.characterKey, [next.grants], previous.revision);
         const signatures = new Map(previous.grants.map(g => [g.definition.stableFormKey,g.definition.catalogSignature]));
         const catalogChanged = next.grants.some(g => signatures.has(g.definition.stableFormKey) &&
           signatures.get(g.definition.stableFormKey) !== g.definition.catalogSignature);

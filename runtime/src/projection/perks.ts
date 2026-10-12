@@ -14,6 +14,7 @@ import type { ProjectionItem } from './index.js';
 interface Row { stable_form_key: StableFormKey; definition: DefinitionRef; revision: GrantProjection['set']['revision']; owned: boolean; active: boolean; item_status: string }
 interface WireItem { key: StableFormKey; plugin: string; localFormId: number; signature: string; action: 'ensure' | 'remove'; owned: boolean }
 interface Pending { projection: GrantProjection; cycle: DeliveryCycle; challenge: string; id: string; items: WireItem[]; definitions: Map<string, DefinitionRef>; committing: boolean; expires: number; timer?: ReturnType<typeof setTimeout> }
+export const PERK_ACK_TIMEOUT_MS = 10000;
 export type PerkDeliveryState = 'UNSUPPORTED' | 'CLIENT_UNSUPPORTED' | 'ACTOR_NOT_READY' | 'SENT_UNCONFIRMED' | 'CONFIRMED' | 'PARTIAL' | 'FAILED';
 interface Options {
   pool: PoolPort; schema: string; channel: ClientDelivery; catalogs: readonly RecordCatalogPort[];
@@ -22,6 +23,7 @@ interface Options {
   rankRecords: ReadonlyMap<StableFormKey, ReadonlySet<number>>;
   warn(message: string): void;
   ackTimeoutMs?: number;
+  serializeSameRevision?: boolean;
 }
 /** Internal PERK adapter of the single GrantProjectionPort, not a grant store.
  * Authorship is saved only after an exact current-session ACK transaction. */
@@ -59,6 +61,10 @@ export class PerkDelivery {
     if (current?.epoch === binding.epoch && current.state === 'CONFIRMED' && !reconcile && compareRevisions(current.revision, set.revision) === 'equal') return this.status(binding);
     // Never supersede an ACK transaction with the same revision; wait for its outcome.
     const busy = this.pending.get(binding.characterKey);
+    // DEV sweep must not replace a still-unconfirmed initial ready delivery.
+    // Other ready providers can request the same set before its ACK commits.
+    if (this.options.serializeSameRevision && busy?.cycle === cycle && busy.challenge === cycleChallenge
+      && canonicalJson(busy.projection.set) === canonicalJson(set)) return this.status(binding);
     if (busy?.committing) { await Promise.allSettled([...this.tails]); this.check(binding); return this.publish(projection, reconcile); }
     const table = `"${this.options.schema}".gc_perk_projections`;
     const rows = await withTransaction(scopedPool(this.options.pool, this.options.schema, () => this.check(binding)), async tx => {
@@ -105,7 +111,7 @@ export class PerkDelivery {
     if (items.length > MAX_ITEMS) return { state: 'UNSUPPORTED', items: [{ definition: items.length ? definitions.get(items[0]!.key)! : desired[0]!.definition, status: 'UNSUPPORTED', reason: 'PERK_SET_TOO_LARGE' }] };
     const id = randomUUID(), challenge = cycle.challenge;
     clearTimeout(this.pending.get(binding.characterKey)?.timer);
-    const timeout = this.options.ackTimeoutMs ?? 10000;
+    const timeout = this.options.ackTimeoutMs ?? PERK_ACK_TIMEOUT_MS;
     const pending: Pending = { projection, cycle, challenge, id, items, definitions, committing: false, expires: performance.now() + timeout };
     this.pending.set(binding.characterKey, pending);
     pending.timer = setTimeout(() => {

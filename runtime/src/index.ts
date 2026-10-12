@@ -22,6 +22,8 @@ import { ActorComposition, nativeStonePerkKeys } from './composition.ts';
 export {nativeStonePerkKeys} from './composition.ts';
 import { StandingStoneSystem } from './standing-stones.ts';
 import { RaceSystem } from './races.ts';
+import { developmentClassSweep } from './class-sweep.ts';
+export { developmentClassSweep, DevelopmentClassSweep } from './class-sweep.ts';
 import { ClassSystem } from './classes.ts';
 import { PoisonProjection } from './poison.ts';
 import { developmentAttributes, DevelopmentAttributesProjection } from './attributes.ts';
@@ -55,7 +57,7 @@ export interface SystemContext {
   readonly identity: Actors;
   readonly projection: Pick<SpellProjection, 'publish' | 'onAck' | 'capability' | 'perkStatus'>;
   readonly composition: Pick<ActorComposition, 'register' | 'recompose' | 'inspect'>;
-  readonly actors: Pick<Actors, 'onReady' | 'onUnbound'>;
+  readonly actors: Pick<Actors, 'onReady' | 'onUnbound' | 'onInvalidated'>;
   readonly hooks: { register(name: `on${string}`, listener: Hook): () => void };
   readonly log: HostContext['log'];
   readonly signal: AbortSignal;
@@ -80,6 +82,9 @@ const coordinatorKey = Symbol.for('aetherius.runtime.coordinator.v1');
 interface Coordinator { tail: Promise<unknown>; active?: { shutdown(): Promise<void> } }
 const shared = process as unknown as Record<symbol, Coordinator>;
 const coordinator = shared[coordinatorKey] ??= { tail: Promise.resolve() };
+// Native host identity scopes attempts to a server boot, across Core reloads.
+const sweepBootKey=Symbol.for('aetherius.runtime.dev-class-sweep.boots.v1');
+const sweepBoots=(process as unknown as Record<symbol,WeakMap<object,Set<string>>>)[sweepBootKey]??=new WeakMap();
 const healthEvent = 'aetherius:gameplay-core:health-check';
 const modes = new Set<FeatureMode>(['off', 'audit', 'shadow', 'canary', 'active']);
 const envKey = (id: string) => `GAMEPLAY_CORE_MODE_${id.replaceAll('-', '_').toUpperCase()}`;
@@ -119,13 +124,16 @@ export function createGameplayCore(host: HostContext) {
   let races: RaceSystem | undefined;
   let classes: ClassSystem | undefined;
   let devClassLevel:number|undefined;
+  let devSweep=false;
+  const sweepAttempts=host.mp?(sweepBoots.get(host.mp)??new Set<string>()):new Set<string>();
+  if(host.mp)sweepBoots.set(host.mp,sweepAttempts);
   let clientDelivery: ClientDelivery | undefined;
   let perkDeliveryFailure: string | undefined;
   const deliveryMode = modes.has(env.GAMEPLAY_CORE_CLIENT_PERKS_MODE as FeatureMode) ? env.GAMEPLAY_CORE_CLIENT_PERKS_MODE as FeatureMode : 'off';
   registrations.set('classes',{id:'classes',domain:'classes',requiresDatabase:true,start(context){
     const eligible=new Set((env.GAMEPLAY_CORE_CANARY_CHARACTERS??'').split(',').map(s=>s.trim()));
     classes=new ClassSystem(context,BUILD_DOMAINS.find(d=>d.domain==='classes')!,devClassLevel,env.GAMEPLAY_CORE_DATABASE_SCHEMA??'public',
-      key=>context.mode==='active'||context.mode==='canary'&&eligible.has(key));
+      key=>context.mode==='active'||context.mode==='canary'&&eligible.has(key),devSweep,sweepAttempts);
     classes.start();return()=>classes!.shutdown();
   }});
   registrations.set('races', { id:'races', domain:'races', requiresDatabase:true, observeUnavailable:true, start(context) {
@@ -209,6 +217,10 @@ export function createGameplayCore(host: HostContext) {
     try{devClassLevel=developmentLevel(env.GAMEPLAY_CORE_DEV_CLASS_LEVEL,env);
       if(devClassLevel!==undefined)warn(`DEV class level override=${devClassLevel}; read only; never use on official server`);
     }catch(error){failures.set('classes',refusedDevOptions.get('GAMEPLAY_CORE_DEV_CLASS_LEVEL') ?? (error as {code:string}).code);warn(`ERROR ${failures.get('classes')}; classes refused`);}
+    devSweep=false;
+    try{devSweep=developmentClassSweep(env,devClassLevel,deliveryMode);
+      if(devSweep)warn('DEV class sweep enabled: temporary class commands and restoration; never use on official server');
+    }catch(error){warn('ERROR '+(error as Error).message+'; DEV class sweep refused');}
     let devAttributes:ReturnType<typeof developmentAttributes>;
     try{devAttributes=developmentAttributes(env);
       if(devAttributes)warn(`DEV attributes override=${devAttributes.health},${devAttributes.magicka},${devAttributes.stamina}; transient; never use on official server`);
@@ -265,6 +277,9 @@ export function createGameplayCore(host: HostContext) {
     let perks:PerkDelivery|undefined;
     const poisonEnabled = host.mp?.getServerSettings().aetheriusCombat?.weaponPoison === true;
     const perkEnabled = ['active','canary'].includes(deliveryMode)&&db.status==='SUPPORTED'&&!perkDeliveryFailure&&!!pool;
+    if(devSweep && (!['active','canary'].includes(mode('classes')) || capability(specs.get('classes')!).status!=='SUPPORTED' || !perkEnabled)){
+      warn('ERROR DEV class sweep unavailable: active classes, catalog, migrations and client perks are required');devSweep=false;
+    }
     if((perkEnabled || poisonEnabled)&&host.mp?.on&&host.mp.getUserActor&&host.mp.getUserByActor&&host.mp.sendCustomPacket){
       clientDelivery=new ClientDelivery(host.mp,actors,scope,binding=>poisonEnabled&&current()&&actors.isCurrent(binding)||deliveryAllowed(binding),warn);clientDelivery.start(hooks);
       if (poisonEnabled) new PoisonIntents(host.mp, clientDelivery, warn);
@@ -274,7 +289,7 @@ export function createGameplayCore(host: HostContext) {
       for(const cls of classData?.classes??[])for(const stage of cls.stages)for(const perk of stage.perks)if(perk.stableFormKey&&perk.rank){
         if(!ranks.has(perk.stableFormKey))ranks.set(perk.stableFormKey,new Set());ranks.get(perk.stableFormKey)!.add(perk.rank);
       }
-      perks=new PerkDelivery({pool,schema:env.GAMEPLAY_CORE_DATABASE_SCHEMA??'public',channel:clientDelivery,catalogs:[...catalogs.values()],rankRecords:ranks,
+      perks=new PerkDelivery({pool,schema:env.GAMEPLAY_CORE_DATABASE_SCHEMA??'public',channel:clientDelivery,catalogs:[...catalogs.values()],rankRecords:ranks,serializeSameRevision:devSweep,
         check:binding=>{if(!deliveryAllowed(binding))throw Error('STALE_BINDING_OR_CLIENT_MODE');},nativeRecords:(binding,set)=>new Set([
           ...races?.nativeKeys(binding)??[],...nativeStonePerkKeys(set,BUILD_DOMAINS.find(d=>d.domain==='standing-stones'))]),warn});
       }
@@ -328,11 +343,11 @@ export function createGameplayCore(host: HostContext) {
             if (!systemActive || !actors.isCurrent(binding)) return Promise.reject(Error('STALE_BINDING'));
             return systemComposition.inspect(binding);
           },
-          recompose: (binding: SessionBinding) => {
+          recompose: (binding: SessionBinding, fresh?: boolean) => {
             if (!systemActive || !context.canMutate(binding)) return Promise.resolve({ status: 'UNSUPPORTED' as const,
               reason: 'FEATURE_MODE_OR_BINDING_REFUSED', state: 'REJECTED' as const, items: [] });
-            return systemComposition.recompose(binding);
-          } }), actors: Object.freeze({ onReady: (fn: Parameters<Actors['onReady']>[0]) => systemScope.add(actors.onReady(fn)),
+            return systemComposition.recompose(binding,fresh);
+          } }), actors: Object.freeze({ onInvalidated:(fn:Parameters<Actors['onInvalidated']>[0])=>systemScope.add(actors.onInvalidated(fn)), onReady: (fn: Parameters<Actors['onReady']>[0]) => systemScope.add(actors.onReady(fn)),
           onUnbound: (fn: Parameters<Actors['onUnbound']>[0]) => systemScope.add(actors.onUnbound(fn)) }),
         hooks: Object.freeze({ register: (name: `on${string}`, fn: Hook) => systemScope.add(hooks.register(name, fn)) }),
         signal: controller.signal, log: host.log,

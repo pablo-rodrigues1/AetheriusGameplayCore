@@ -1,6 +1,6 @@
 # Ativação dos sistemas do GameplayCore num servidor
 
-Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 10/10/2026 (D-P1-fix3).
+Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 12/10/2026 (C3b-varredura-de-classes).
 
 Cada sistema do Core (pedras guardiãs, raças, e os que vierem) precisa de duas coisas no servidor onde roda: **tabelas próprias no PostgreSQL** e **uma opção de configuração que o liga**. No ambiente de desenvolvimento local esses dois passos foram feitos à mão a cada sistema. Este documento descreve o que foi feito, para ser repetido no servidor oficial com as diferenças necessárias.
 
@@ -13,6 +13,8 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 - As migrations são só aditivas: criam tabela e índice. Nenhuma altera ou remove coisa existente.
 
 ## 2. Tabelas, por migration
+
+**C3b-varredura:** nenhuma migration nova. A varredura temporária usa `classes.set` e as tabelas `gc_character_class`, `gc_commands` e de projeção já existentes. Só os testes acessam `aetherius_test`; esta entrega não acessa `aetherius_dev`.
 
 D-P1-fix3 não cria migration, tabela, pool ou ledger. Só corrige a projeção
 de veneno no cliente; testes usam exclusivamente aetherius_test.
@@ -153,6 +155,7 @@ Fora dessa combinação, **a presença da opção, inclusive vazia ou `false`, �
 | `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV=true` | aplica migrations no boot somente com a trava local acima. Se recusada, não adquire o pool nem aplica migrations e deixa indisponíveis os sistemas dependentes do banco. No oficial as migrations são aplicadas à mão, com backup |
 | `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY=true` | aceita perfil sem autenticação somente em host antigo, sem `aetheriusOfficialIdentity`, com a trava local acima. Recusa bloqueia vínculos nesse host antigo, sem retornar silenciosamente à identidade normal. No host atual sempre exige sessão oficial; esta opção não contorna o login |
 | `ENABLE_STANDING_STONE_SPIKE=true` | liga o protótipo antigo (`spike_*`) somente com a trava local acima. Recusada, não inicia o spike; os sistemas atuais independentes seguem. Nunca junto com pedras em `canary`/`active`: o sistema novo recusa iniciar. No oficial deixe ausente |
+| `GAMEPLAY_CORE_DEV_CLASS_SWEEP=true` | **Nunca no servidor oficial.** Exige a trava única, um `GAMEPLAY_CORE_DEV_CLASS_LEVEL` aceito e `GAMEPLAY_CORE_CLIENT_PERKS_MODE=active`. Ausente ou `false` em desenvolvimento: sem varredura. Valor inválido ou pré-requisito ausente: `ERROR`, sem varredura; os demais sistemas seguem. Aceita: aviso **DEV** em cada boot. Classes e entrega devem estar disponíveis; caso contrário registra erro e não começa. |
 | `GAMEPLAY_CORE_DEV_CLASS_LEVEL=<1..40>` | **Nunca no servidor oficial.** Com a trava local acima, `40` compõe todos os marcos sem gravar nível ou XP. Recusada, vazia, inválida ou fora de 1–40: **ERROR**, classes `UNSUPPORTED`, sem iniciar nem usar nível real em silêncio. Removida a opção, volta ao Leveling. Quando aceita, registra **DEV** e mostra essa origem na capacidade e explicação. Com B5b, a entrega depende também do modo de perks habilitado e do pronto confirmado pelo cliente. |
 | `GAMEPLAY_CORE_DEV_ATTRIBUTES=<vida>,<magia>,<vigor>` | **Nunca no servidor oficial.** Três inteiros entre 1 e 100000, sem espaços; exemplo local: `300,300,300`. Exige a mesma trava de `development.ts`. Opção presente fora dela (inclusive vazia ou `false`) ou valor inválido: **ERROR**, sem override; os demais sistemas seguem. Aceita: aviso **DEV** a cada boot. Entregue só a jogador com sessão oficial atual, no vínculo e no pronto; reentregue depois do respawn/reconnect, limpo no desvínculo/shutdown. Sem propriedade nativa: `UNSUPPORTED`, sem gravar propriedade customizada. |
 
@@ -161,6 +164,28 @@ Fora dessa combinação, **a presença da opção, inclusive vazia ou `false`, �
 A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolvimento: ela transferiu para o sistema novo a pedra de um personagem de teste que vinha do protótipo. O servidor oficial não tem dados do protótipo e não precisa dela.
 
 ## 5. O que cada sistema faz quando ligado
+
+### Varredura de classes (C3b, exclusivamente desenvolvimento)
+
+Após a primeira entrega de perks `CONFIRMED`, uma vez por boot do host e por personagem, percorre as 18 classes em ordem de `id`. Cada passo grava pelo comando idempotente `classes.set`, compõe uma nova revisão de publicação, mantém a publicação inicial em voo até seu ACK (sem duplicá-la na varredura), entrega pelo adaptador B5b e espera até 10 segundos pelo ACK exato já registrado no banco. Nunca altera XP, nível, catálogo ou protocolo. A nova revisão evita a recusa do cliente a payload diferente na mesma revisão, inclusive ao restaurar a classe que já era a última da lista.
+
+`UNRESOLVED` e `FAILED` produzem `FAIL` no passo, e a varredura segue. Saída, morte, respawn, início de carga ou shutdown interrompem com `ABORTED`; timeout também interrompe. A restauração usa `classes.set` mesmo sem ator vigente, antes de encerrar o sistema. Se houver ator pronto após o término normal ou timeout, aguarda também a entrega da classe original. Depois de saída/respawn, a próxima entrada pronta recompõe a classe restaurada. Um pronto recebido durante a restauração aguarda seu término. Sem classe original, registra `ORIGINAL_CLASS_REQUIRED`, sem mutação: o domínio atual não dispõe de comando para remover uma escolha. Staff não pode mudar a classe durante a varredura (`DEV_SWEEP_IN_PROGRESS`).
+
+O log de cada passo traz `expected`, `applied`, `alreadyPresent`, `unresolved`, `failed`, `removed`, `alreadyAbsent` e `OK`/`FAIL`. As contagens de ensure correspondem aos perks dessa classe; erros e remoções incluem o ACK inteiro. A linha final informa `ok`, `fail`, `restored` e o estado da entrega restaurada. `RESTORE_FAILED` exige intervenção de staff quando o banco não permite gravar a restauração; não é reportado como sucesso. Fechamento abrupto do processo ou indisponibilidade permanente do banco não permitem garantir a restauração: a garantia automatizada cobre as interrupções observadas e o shutdown aguardado.
+
+**Divergências verificadas em 85b7066:** o catálogo contém 350 entradas, em vez das 351 descritas na ordem; a tabela conserva essas 350 sem mudar o catálogo. O cliente atual preserva perks compartilhados sem remover/recolocar, mas responde `APPLIED` para um perk já pertencente ao Core. `ALREADY_PRESENT` indica presença protegida/preexistente. As contagens registram o ACK real, sem reclassificá-lo. O cliente instalado B5b e o resultado no Skyrim precisam ser conferidos pelo dono/revisor.
+
+Tabela para o desenvolvedor oficial: `docs/classes/PERKS_POR_CLASSE.md`; regenerar com `node tools/catalog/perks-per-class.mjs`. A tabela não adiciona os pré-requisitos ausentes nem certifica seus efeitos.
+
+**Roteiro local para o revisor/dono:** com o cliente B5b instalado, classes em `active`, nível DEV `40`, perks em `active`, configurar `GAMEPLAY_CORE_DEV_CLASS_SWEEP=true` e a trava local da seção 4. Não parar/reiniciar a sessão existente sem autorização do dono. Recarregar o Core quando a sessão estiver disponível para o teste; entrar com personagem que já tenha classe e aguardar sem morrer, sair ou carregar save. São 18 passos mais restauração, em geral segundos, limite nominal de 190 segundos após a primeira confirmação. Conferir 18 linhas `OK`, `done: ok=18 fail=0; restored=<original>; delivery=CONFIRMED` e remoção dos exclusivos; comparar o banco pelo comando de explicação. Falha por item continua até o fim; timeout aborta antes. Reconectar no mesmo boot não deve repetir. Recarregar o Core no mesmo host também não repete. Para repetir do início é necessário um novo processo do servidor de teste; não reiniciar a sessão existente sem autorização. Remover a opção e recarregar para desfazer; não apagar autoria de projeção.
+
+**Harness, só Opus:** executar na raiz do Core, com a variável `AETHERIUS_TEST_DATABASE_URL` no ambiente, nunca em argumento/log:
+
+```powershell
+node runtime/harness/class-sweep.mjs --port <porta-isolada-diferente-de-7777> --work-dir <pasta-isolada> --addon <scam_native.node> --settings <server-settings.json>
+```
+
+Instancia o addon compilado e seu bot, encaminha begin/ready/ACK pelo transporte nativo e executa o cliente de harness B5b em memória. Usa schema descartável de `aetherius_test`, apagado ao fim. Settings fornecem somente dataDir/loadOrder; não copia credenciais, não inicia o gamemode oficial e não toca no servidor em execução. Não certifica efeito dos perks ou comportamento do motor do Skyrim. **Não executado pelo Sol: exige servidor local.**
 
 ### Máximos de teste (DEV-A1, exclusivamente desenvolvimento)
 
@@ -335,6 +360,7 @@ No ambiente local os passos 4 e 5 foram pulados: o sistema foi direto para `acti
 
 No `.env` do gamemode do servidor oficial, estas opções têm de estar **ausentes**:
 
+- `GAMEPLAY_CORE_DEV_CLASS_SWEEP` (**varredura exclusiva do teste; nunca no servidor oficial**, remover inclusive `false`);
 - `GAMEPLAY_CORE_DEV_CLASS_LEVEL` (override exclusivo do teste; em produção bloqueia classes);
 - `GAMEPLAY_CORE_DEV_ATTRIBUTES` (**override exclusivo do teste; nunca no servidor oficial**);
 - `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS`;
@@ -382,6 +408,8 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+**C3b-varredura (12/10/2026):** opção, testes, harness e tabela preparados no Core. Nenhum `.env` ou setting alterado; servidor/cliente não recompilados, iniciados ou interrompidos; nenhuma porta aberta. Veneno continua suspenso, e seus arquivos não foram alterados. PostgreSQL somente `aetherius_test`. A ativação local e a sessão em jogo são do revisor/dono. Desfazer a futura ativação removendo `GAMEPLAY_CORE_DEV_CLASS_SWEEP` e recarregando o Core depois da restauração. O catálogo real tem 350 entradas; o item de 351 da ordem não foi satisfeito.
 
 **D-P1-fix3 (10/10/2026):** cliente compilado somente em evidência, com deploy/zip
 desligados. Servidor intocado, sem recompilação, start/stop ou porta. Sem MO2/jogo,
