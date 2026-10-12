@@ -50,7 +50,7 @@ test('viper 40: 19 correct distinct records, all ranks, duplicate revision sends
 });
 test('class change removes only exclusive owned records and preserves shared ones',async()=>{
   const f=await setup();await f.set('viper');f.ready();await f.confirm();const old=(await rows(f.binding.characterKey)).filter(r=>r.active).map(r=>r.stable_form_key);
-  f.log.messages.length=0;await f.set('assassino');f.c.update();await until(()=>f.log.messages.some(m=>m.includes('perks ')&&m.includes('CONFIRMED')));
+  f.log.messages.length=0;await f.set('assassino');f.c.update();await until(()=>{f.c.update();return f.log.messages.some(m=>m.includes('perks ')&&m.includes('CONFIRMED'));});
   const wanted=new Set((await f.core.inspectActor(f.binding)).grants.map(g=>g.definition.stableFormKey));
   assert.deepEqual(f.c.calls.filter(c=>c[0]==='remove').map(c=>c[1]).sort(),old.filter(k=>!wanted.has(k)).sort());
   assert.equal((await rows(f.binding.characterKey)).filter(r=>r.active).length,wanted.size);
@@ -107,7 +107,7 @@ test('new client with protocol off and legacy client with protocol on preserve a
 test('durable ownership restored on reconnect: existing save perks are not re-added; revoked owned save perk removed',async()=>{
   const f=await setup();await f.set('viper');f.ready();await f.confirm();const old=(await rows(f.binding.characterKey)).map(r=>r.stable_form_key),character=Number(f.binding.characterKey.slice(8));await f.core.shutdown();
   const g=await setup({character,shift:7000});for(const key of old)g.c.perks.add(g.c.forms.get(key).id);g.ready();await g.confirm();assert.equal(g.c.calls.filter(c=>c[0]==='add').length,0);
-  g.log.messages.length=0;await g.set('guardiao');g.c.update();await until(()=>g.log.messages.some(m=>m.includes('perks ')&&m.includes('CONFIRMED')));
+  g.log.messages.length=0;await g.set('guardiao');g.c.update();await until(()=>{g.c.update();return g.log.messages.some(m=>m.includes('perks ')&&m.includes('CONFIRMED'));});
   const next=new Set((await g.core.inspectActor(g.binding)).grants.map(r=>r.definition.stableFormKey));assert.deepEqual(g.c.calls.filter(c=>c[0]==='remove').map(c=>c[1]).sort(),old.filter(k=>!next.has(k)).sort());
 });
 

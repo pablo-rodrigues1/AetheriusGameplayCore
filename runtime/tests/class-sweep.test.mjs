@@ -70,11 +70,11 @@ test('sweep flag false/empty outside development is explicitly refused, other sy
 });
 test('all 18 classes sequentially confirmed and original restored; shared perks already present; second session never repeats',async()=>{
   const f=await fixture();f.ready();await f.finish();
+  console.log(f.log.messages.filter(l=>l.includes('DEV sweep ')).join('\n'));
   const steps=f.log.messages.filter(l=>/DEV sweep \d+\/18/.test(l));assert.equal(steps.length,18);assert(steps.every(l=>l.endsWith('result=OK')));
   const ids=[...data.classes].map(c=>c.id).sort();
   steps.forEach((line,i)=>{const n=new Set(data.classes.find(c=>c.id===ids[i]).stages.flatMap(s=>s.perks.map(p=>p.stableFormKey))).size;
     assert(line.includes((i+1)+'/18 '+ids[i]+': expected='+n+';'));});
-  console.log(f.log.messages.filter(l=>l.includes('DEV sweep ')).join('\n'));
   assert.equal(await f.currentClass(),'viper');assert(f.log.messages.some(l=>l.includes('done: ok=18 fail=0; restored=viper; delivery=CONFIRMED')));
   assert.equal(f.packets.filter(p=>p.type==='perks').length,20);
   

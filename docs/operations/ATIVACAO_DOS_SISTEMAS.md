@@ -1,6 +1,6 @@
 # Ativação dos sistemas do GameplayCore num servidor
 
-Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 12/10/2026 (C3b-varredura-de-classes).
+Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 12/10/2026 (B5b-fix1).
 
 Cada sistema do Core (pedras guardiãs, raças, e os que vierem) precisa de duas coisas no servidor onde roda: **tabelas próprias no PostgreSQL** e **uma opção de configuração que o liga**. No ambiente de desenvolvimento local esses dois passos foram feitos à mão a cada sistema. Este documento descreve o que foi feito, para ser repetido no servidor oficial com as diferenças necessárias.
 
@@ -13,6 +13,8 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 - As migrations são só aditivas: criam tabela e índice. Nenhuma altera ou remove coisa existente.
 
 ## 2. Tabelas, por migration
+
+**B5b-fix1:** nenhuma migration/tabela nova; formato do ACK e autoria durável permanecem iguais. Testes usam só `aetherius_test`.
 
 **C3b-varredura:** nenhuma migration nova. A varredura temporária usa `classes.set` e as tabelas `gc_character_class`, `gc_commands` e de projeção já existentes. Só os testes acessam `aetherius_test`; esta entrega não acessa `aetherius_dev`.
 
@@ -98,6 +100,8 @@ Valor inválido é tratado como `off`, com aviso no log. Sistema ausente da conf
 
 ### Entrega de perks no cliente (B5b)
 
+**B5b-fix1:** nenhuma opção nova. Instalar o patch só-B5b corrigido; o cumulativo de veneno do Core `85b7066` fica suspenso em `integrations/client/suspenso/B5b-mais-veneno-fix3-aa864cb.patch`. As instruções históricas de instalação de D-P1-fix2/fix3 abaixo estão supersedidas por esta nota e pelo LEIA-ME atual. Veneno permanece suspenso; esta ordem não altera a configuração do servidor.
+
 `GAMEPLAY_CORE_CLIENT_PERKS_MODE=off` por padrão. `active` habilita a conversa
 para bindings autenticados; `canary` só para `GAMEPLAY_CORE_CANARY_CHARACTERS`.
 `audit` e `shadow` não iniciam a conversa nem aplicam perks. A migration 0008
@@ -164,6 +168,14 @@ Fora dessa combinação, **a presença da opção, inclusive vazia ou `false`, �
 A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolvimento: ela transferiu para o sistema novo a pedra de um personagem de teste que vinha do protótipo. O servidor oficial não tem dados do protótipo e não precisa dela.
 
 ## 5. O que cada sistema faz quando ligado
+
+### Confirmação de remoção de perks (B5b-fix1)
+
+A sessão real de 12/10 às 17:10 mostrou concessões certas nas 18 classes, mas remoções relatadas como `FAILED` antes de ficarem observáveis. A bridge da Platform aguarda a chamada nativa; o atraso interno do motor é inferência do log, não uma fila específica demonstrada no fonte. O cliente corrigido confere a ausência em updates posteriores, até três verificações ou 500 ms para a entrega inteira. Perk que continua presente é `FAILED`; perk já ausente é `ALREADY_ABSENT`. A entrega seguinte só começa a aplicar depois do ACK anterior. Ensure e formato/ordem do ACK permanecem iguais; reset de sessão/ciclo cancela callbacks antigos. Sem updates, não há confirmação fabricada; timeout do servidor continua em 10 segundos.
+
+Cliente instalável contém somente B5b + B5b-fix1. `sync/inventory.ts` voltou à base aa864cb e `gameplayWeaponPoison.ts` saiu. O código de veneno permanece no patch suspenso citado na seção 4, que também alimenta seus testes sem recolocá-lo no cliente. Evidência e referências: `_work/evidence/B5b-fix1/PARTE-2.md`.
+
+Depois da instalação pelo revisor, o dono deve ver 18 linhas `result=OK`, todas com `failed=0` e `unresolved=0`; `removed` confirma os perks exclusivos removidos, sem removê-los de novo como `alreadyAbsent` no passo seguinte. A linha final deve ser `done: ok=18 fail=0; restored=<original>; delivery=CONFIRMED`. Isso confirma entrega, não efeitos de combate. Harness continua com os mesmos argumentos e é exclusivo do revisor; servidor local e jogo não foram executados nesta ordem.
 
 ### Varredura de classes (C3b, exclusivamente desenvolvimento)
 
@@ -408,6 +420,8 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+**B5b-fix1 (12/10/2026, Sol 6.1):** cliente voltou à B5b pura por `git apply -R`/`git apply`, e o build reproduziu o instalado EE6EF143294D byte a byte; depois foi corrigida a confirmação de remoção. Veneno preservado no patch suspenso do Core `85b7066`. Cliente compilado só em evidência, deploy/zip desligados. Nenhum commit, configuração local, jogo/MO2, servidor ou `aetherius_dev` alterado; nenhuma porta aberta. Para futura reversão, o revisor repõe o bundle que preservou, com o jogo fechado; não apagar autoria ou dados. Validação em jogo/harness nativo permanece pendente do revisor/dono.
 
 **C3b-varredura, ativação local (12/10/2026, revisor):** `GAMEPLAY_CORE_DEV_CLASS_SWEEP=true` acrescentada ao `gamemode.env` do servidor local (cópia anterior em `_workackupsgamemode.env.before-class-sweep-20261012`); boot conferido, opção aceita. `aetheriusCombat.weaponPoison` voltou a `false` e o cliente instalado voltou ao build da B5b, por decisão do dono do projeto de suspender o veneno. Harness com o servidor compilado: 18 de 18 classes `OK`. Para desfazer: apagar a linha da opção. **Não levar ao servidor oficial.**
 

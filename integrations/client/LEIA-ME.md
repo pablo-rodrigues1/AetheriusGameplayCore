@@ -1,22 +1,33 @@
-# Cliente B5b + D-P1-fix3 (cumulativo)
+# Cliente B5b-fix1 — perks, sem veneno
 
-Patch `B5b-aa864cb.patch`, gerado com `git diff --binary --full-index` contra
-`aa864cbf0a7f026dd1b0c2d373640ddedf030369` mais o diff de criação do serviço.
-Esse commit compila byte a byte como o v0.13.0 distribuído, SHA-256
-`9FF147FB05A900CDB7D1C4AF8496971C54C4FD3465D197ED43E3E774F71F2DCD`.
-Não houve commit no clone. A instalação no jogo/MO2 cabe ao revisor.
+O patch instalável `B5b-aa864cb.patch` contém só a B5b e a correção de
+confirmação de remoção B5b-fix1. Base:
+`aa864cbf0a7f026dd1b0c2d373640ddedf030369`. Não houve commit no clone.
+Altera `client/src/index.ts`, `services/events/events.ts`,
+`services/services/remoteServer.ts`, `sync/appearance.ts` e cria
+`services/services/gameplayGrantService.ts`. `sync/inventory.ts` fica na base;
+`gameplayWeaponPoison.ts` sai do cliente instalável.
 
-Na raiz de um clone limpo e atualizado do cliente:
+Veneno suspenso por decisão do dono em 12/10/2026. O patch cumulativo
+do Core `85b7066` foi preservado byte a byte em
+`suspenso/B5b-mais-veneno-fix3-aa864cb.patch`. Ele permanece exclusivamente
+como histórico e fonte dos testes de veneno; não instalar junto com este patch.
+As seções D-P1 abaixo estão supersedidas por esta nota quanto à instalação.
+
+## Aplicação e build
+
+Na raiz de um clone limpo da base identificada:
 
 ```powershell
-git apply --3way "<Core>\integrations\client\B5b-aa864cb.patch"
+git apply --check "<Core>\integrations\client\B5b-aa864cb.patch"
+git apply "<Core>\integrations\client\B5b-aa864cb.patch"
 ```
 
-Revisar conflitos com o mantenedor, preservando mudanças posteriores.
-O `--3way` pode atualizar o index; isso não autoriza commit. O pacote altera
-somente `index.ts`, `services/events/events.ts`, `remoteServer.ts`,
-`sync/appearance.ts`, `sync/inventory.ts` e cria `gameplayGrantService.ts`
-e `gameplayWeaponPoison.ts`.
+Em outra base, revisar conflitos com o mantenedor, preservando suas mudanças.
+Não reaplicar o cumulativo sobre uma árvore já modificada. Se ainda houver
+B5b + veneno, conferir a árvore contra o snapshot aprovado, conferir
+`git apply --check -R` do patch suspenso, revertê-lo e aplicar este.
+Não usar checkout, restore, reset, clean ou stash.
 
 Na pasta `client`, com dependências já instaladas:
 
@@ -28,47 +39,50 @@ node node_modules/webpack-cli/bin/cli.js --config webpack.config.js --output-pat
 Get-FileHash "<pasta de evidencia absoluta>\skymp5-client.js" -Algorithm SHA256
 ```
 
-Saída: `<pasta de evidencia>\skymp5-client.js`, nunca jogo ou MO2. Conferir o
-SHA-256 da entrega em `_work/evidence/B5b/client-sha256.txt`. Destino de teste
-existente: mod `AETHERIUS - MERIDIAN - COMPATIBILIDADE`, `Platform/Plugins`,
-instância oficial `C:\Modding\MO2`. O revisor preserva o arquivo anterior,
-instala com o jogo fechado e confere o arquivo vencedor do VFS. `PluginsDev`
-é um destino distinto; as flags acima impedem deploy automático.
+Bundle da entrega e SHA-256: `_work/evidence/B5b-fix1/build-final/` e
+`_work/evidence/B5b-fix1/client-sha256.txt`. O build da B5b pura anterior à
+correção reproduziu byte a byte o instalado EE6EF143294D; comparação em
+`build-b5b-only-sha256.json`. A compilação escreve somente na evidência.
+Instalação fica com o revisor, com o jogo fechado e backup do bundle anterior.
 
-No Core, aplicar as migrations pelo CLI existente (0008 está em
-`runtime/src/projection/migration.ts`, incluída pelo CLI e pelo bundle).
-Ligar `GAMEPLAY_CORE_CLIENT_PERKS_MODE=canary` e configurar personagens de teste;
-classes também precisam de seu modo habilitado. O padrão é `off`.
-O serviço cliente é passivo até hello do servidor. Servidor antigo não recebe
-mensagens nem mutações novas; cliente antigo mantém a aproximação de três segundos.
-O perfil oficial não contém plugin `sweetpie`; os dois serviços existentes são
-inertes e não foram alterados. Se outro perfil o habilitar, esta entrega não
-autoriza ativar o novo writer junto deles.
+## Entrega e confirmação
 
-Canal: `aetherius.gameplay.grants`, versão 1. Hello/session → begin/cycle →
-challenge → ready → perks/id/revision/items → ack exato. Identidades de record
-são plugin de definição + id local, com assinatura do catálogo. O cliente usa
-`Game.getFormFromFile`; presença é verificada antes/depois. A autoria durável
-confirmada no servidor é restaurada no reconnect; perk preexistente permanece
-protegido. ACK é evidência de entrega, não prova de resultado de combate.
+Mesmo canal `aetherius.gameplay.grants`, versão 1 e formato do ACK da B5b.
+O servidor decide os grants; o cliente relata presença. Serviço passivo até
+hello/session → begin/cycle → challenge → ready. Preserva autoria atestada
+pelo servidor e protege perks preexistentes. O perfil sem sweetpie deixa os
+serviços sweetTaffy existentes inertes; não autoriza dois writers ativos.
 
-Para reverter a implantação: desligar `GAMEPLAY_CORE_CLIENT_PERKS_MODE`,
-recarregar o Core conforme o procedimento do operador, e restaurar o bundle
-anterior no mod de teste. Isso mantém perks já aplicados; não os remove em massa.
-Para tirar só este patch da árvore, conferir `git apply --check --reverse` e
-usar `git apply --reverse` em um clone sem trabalho posterior nos trechos.
-Não usar restore/reset/clean. Não apagar tabelas ou registros de autoria.
+A remoção de um perk presente é conferida em updates posteriores: até três
+verificações ou 500 ms, o que vier primeiro, para o conjunto da entrega.
+Se continua presente, relata FAILED e conserva autoria para reconciliar.
+A próxima aplicação aguarda o envio do ACK anterior. Ordem dos itens,
+replay exato, revisão, protocolo e ensure continuam como na B5b. Reset de
+sessão/ciclo invalida verificações e fila. Se o jogo para de produzir updates,
+o cliente não fabrica confirmação; o timeout do servidor é de 10 segundos.
 
-Harness do addon, somente revisor (porta obrigatória e diferente de 7777):
+A bridge da Platform aguarda chamadas não latentes. O atraso de visibilidade
+da remoção é inferência da sessão real; o fonte não contém sua implementação
+interna. Referências e limites: `_work/evidence/B5b-fix1/PARTE-2.md`.
+ACK continua sendo evidência de entrega, sem certificação de efeitos de perks.
 
-```powershell
-node "<Core>\runtime\harness\client-packet.mjs" --port <porta-isolada> --work-dir <pasta-isolada> --addon "<build>\dist\server\scam_native.node" --settings "<build>\dist\server\server-settings.json"
-```
+## Teste e reversão
 
-Usa o bot nativo para o retorno CustomPacket autenticado. A API do bot não expõe
-recepção: observa saída após a chamada nativa sendCustomPacket. Não certifica
-o recebimento dentro do jogo, a aplicação de perks ou o save. Nunca executado
-pelo Sol; apenas conferência de sintaxe.
+A varredura automatizada deve registrar `ok=18 fail=0`, remoções exclusivas
+confirmadas, `failed=0`, `unresolved=0`, restauração da classe original e
+`delivery=CONFIRMED`. O revisor/dono repetem no servidor/jogo e guardam o log.
+Nenhum servidor foi iniciado/interrompido nem porta aberta pelo executor.
+
+O harness mantém os argumentos: `node runtime/harness/class-sweep.mjs --port
+<porta-isolada> --work-dir <pasta-isolada> --addon <scam_native.node> --settings
+<server-settings.json>`. Execução exclusivamente pelo revisor. Sua imitação
+efetiva remoções no update seguinte e usa o serviço real corrigido.
+Os 22 testes de veneno leem o patch suspenso por `suspended-client.mjs`;
+nenhuma asserção de comportamento do veneno foi removida.
+
+Para desfazer a implantação, o operador segue a seção 8 do documento de
+ativação e repõe o bundle anterior preservado. Desligar o protocolo não apaga
+perks do save nem autoria do banco. Não remover em massa.
 
 ## D-P1-fix2 — intenção de veneno e convergência (histórico)
 

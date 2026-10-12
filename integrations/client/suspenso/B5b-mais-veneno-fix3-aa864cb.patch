@@ -1,0 +1,680 @@
+diff --git a/client/src/index.ts b/client/src/index.ts
+index 2b9543f9928b81ddf80584f6e795ae89031ef962..394d853b6b7e31645286ea83a1427d918c78dddd 100644
+--- a/client/src/index.ts
++++ b/client/src/index.ts
+@@ -30,6 +30,7 @@ import { RagdollService } from "./services/services/ragdollService";
+ import { DeathService } from "./services/services/deathService";
+ import { ContainersService } from "./services/services/containersService";
+ import { NetworkingService } from "./services/services/networkingService";
++import { GameplayGrantService } from './services/services/gameplayGrantService';
+ import { RemoteServer } from "./services/services/remoteServer";
+ import { SpSnippetService } from "./services/services/spSnippetService";
+ import { SweetTaffyDynamicPerksService } from "./services/services/sweetTaffyDynamicPerksService";
+@@ -98,6 +99,7 @@ const main = () => {
+       new DeathService(sp, controller),
+       new ContainersService(sp, controller),
+       new NetworkingService(sp, controller),
++      new GameplayGrantService(sp, controller),
+       new RemoteServer(sp, controller),
+       new SpSnippetService(sp, controller),
+       new SettingsService(sp, controller),
+diff --git a/client/src/services/events/events.ts b/client/src/services/events/events.ts
+index c7cc046d66c9bea67de5ee4c1dbdac6553438614..143ad6b3f9a89cb459e829b48393a4cf13a72f7f 100644
+--- a/client/src/services/events/events.ts
++++ b/client/src/services/events/events.ts
+@@ -37,12 +37,14 @@ import { QueryKeyCodeBindings } from "./queryKeyCodeBindings";
+ import { SpellCastMessage } from "../messages/spellCastMessage";
+ import { UpdateAnimVariablesMessage } from "../messages/updateAnimVariablesMessage";
+ import { CustomPacketMessage } from "../messages/customPacketMessage";
++import type { GameplaySpawnBarrier } from '../services/gameplayGrantService';
+ 
+ import { AnyRawMessageEvent } from "./anyRawMessageEvent";
+ import { NicknameCreateEvent } from "./nicknameCreateEvent";
+ import { NicknameDestroyEvent } from "./nicknameDestroyEvent";
+ 
+ type EventTypes = {
++    'gameplaySpawnBegin': [{ tasks: string[]; capture: (barrier: GameplaySpawnBarrier) => void }],
+     'gameLoad': [GameLoadEvent],
+ 
+     'sendMessage': [SendMessageEvent<AnyMessage>],
+diff --git a/client/src/services/services/remoteServer.ts b/client/src/services/services/remoteServer.ts
+index 8ab9213c53bc4cc3afb52450728324b127f81f23..0941b51dca343ca13134cb14b85ddcb6122888d4 100644
+--- a/client/src/services/services/remoteServer.ts
++++ b/client/src/services/services/remoteServer.ts
+@@ -64,6 +64,7 @@ import { logTrace, logError } from '../../logging';
+ import { SpellCastMessage } from '../messages/spellCastMessage';
+ import { UpdateAnimVariablesMessage } from '../messages/updateAnimVariablesMessage';
+ import { MsgType } from '../../messages';
++import type { GameplaySpawnBarrier } from './gameplayGrantService';
+ 
+ export const getPcInventory = (): Inventory | undefined => {
+   const res = storage['pcInv'];
+@@ -100,6 +101,11 @@ const unequipIronHelmet = () => {
+ };
+ 
+ export class RemoteServer extends ClientListener {
++  private beginGrantCycle(tasks: string[]): GameplaySpawnBarrier | undefined {
++    let barrier: GameplaySpawnBarrier | undefined;
++    this.controller.emitter.emit('gameplaySpawnBegin', { tasks, capture: value => barrier = value });
++    return barrier;
++  }
+   constructor(private sp: Sp, private controller: CombinedController) {
+     super();
+ 
+@@ -244,7 +250,7 @@ export class RemoteServer extends ClientListener {
+     });
+   }
+ 
+-  private onTeleportMessage(event: ConnectionMessage<TeleportMessage> | ConnectionMessage<TeleportMessage2>): void {
++  private onTeleportMessage(event: ConnectionMessage<TeleportMessage> | ConnectionMessage<TeleportMessage2>, grantCycle?: GameplaySpawnBarrier): void {
+     const msg = event.message;
+     once('update', () => {
+       const id = ("idx" in msg && typeof msg.idx === "number") ? this.getIdManager().getId(msg.idx) : this.getMyActorIndex();
+@@ -271,6 +277,7 @@ export class RemoteServer extends ClientListener {
+           msg.rot[1],
+           msg.rot[2],
+         );
++        grantCycle?.complete('teleport', !!refr);
+       };
+       const actor = Actor.from(refr);
+       if (actor /*&& actor.getFormID() === 0x14*/) {
+@@ -434,11 +441,15 @@ export class RemoteServer extends ClientListener {
+     }
+ 
+     const numSetInventory = this.numSetInventory;
++    const grantCycle = msg.isMe ? this.beginGrantCycle(['spells','appearance','placement','equipment1','equipment2']) : undefined;
++    if (!msg.props?.learnedSpells) grantCycle?.complete('spells');
++    if (!msg.appearance) grantCycle?.complete('appearance');
+ 
+-    const applyPcInv = () => {
++    const applyPcInv = (task: string) => {
+       if (msg.equipment) {
+         applyEquipment(Game.getPlayer()!, msg.equipment)
+       }
++      grantCycle?.complete(task, !!Game.getPlayer());
+ 
+       if (numSetInventory !== this.numSetInventory) {
+         logTrace(this, 'Skipping inventory apply due to newer setInventory message');
+@@ -469,6 +480,7 @@ export class RemoteServer extends ClientListener {
+               `player learnedSpells:`, JSON.stringify(learnedSpells),
+             );
+           }
++          if (!grantCycle?.loading) grantCycle?.complete('spells', !!player);
+         });
+       });
+     }
+@@ -525,13 +537,14 @@ export class RemoteServer extends ClientListener {
+                 break;
+               }
+             }
++            grantCycle?.complete('placement', !!Game.getPlayer());
+           })();
+           // Unfortunatelly it requires two calls to work
+-          Utility.wait(1).then(applyPcInv);
+-          Utility.wait(1.3).then(applyPcInv);
++          Utility.wait(1).then(() => applyPcInv('equipment1'));
++          Utility.wait(1.3).then(() => applyPcInv('equipment2'));
+           // Note: appearance part was copy-pasted
+           if (msg.appearance) {
+-            applyAppearanceToPlayer(msg.appearance);
++            applyAppearanceToPlayer(msg.appearance, grantCycle ? success => grantCycle.complete('appearance', success) : undefined);
+           }
+         }
+ 
+@@ -582,6 +595,8 @@ export class RemoteServer extends ClientListener {
+             logTrace(this, `loading game in world/cell`, msg.transform.worldOrCell.toString(16));
+             // As magias aplicadas antes do loadGame se perdem com ele (ver onGameLoad)
+             this.spawnLearnedSpells = msg.props?.learnedSpells;
++            this.spawnGrantCycle = grantCycle;
++            if (grantCycle) { grantCycle.loading = true; grantCycle.require('spells'); }
+             const loadGameService = this.controller.lookupListener(LoadGameService);
+             loadGameService.loadGame(
+               msg.transform.pos,
+@@ -609,11 +624,11 @@ export class RemoteServer extends ClientListener {
+               { minutes: 0, seconds: 0, hours: this.controller.lookupListener(TimeService).getTime().newGameHourValue }
+             );
+             once('update', () => {
+-              applyPcInv();
+-              Utility.wait(0.3).then(applyPcInv);
++              applyPcInv('equipment1');
++              Utility.wait(0.3).then(() => applyPcInv('equipment2'));
+               // Note: appearance part was copy-pasted
+               if (msg.appearance) {
+-                applyAppearanceToPlayer(msg.appearance);
++                applyAppearanceToPlayer(msg.appearance, grantCycle ? success => grantCycle.complete('appearance', success) : undefined);
+               }
+             });
+           }
+@@ -781,6 +796,9 @@ export class RemoteServer extends ClientListener {
+       logError(this, `onDeathStateContainerMessage - Invalid data`, msgData);
+       return;
+     }
++    const grantCycle = !msgData && id === this.getWorldModel().playerCharacterFormIdx
++      ? this.beginGrantCycle(['death','teleport']) : undefined;
++    if (!msg.tTeleport) grantCycle?.complete('teleport');
+ 
+     if (msg.tChangeValues) {
+       this.onChangeValuesMessage({ message: msg.tChangeValues });
+@@ -788,7 +806,7 @@ export class RemoteServer extends ClientListener {
+     once('update', () => this.onUpdatePropertyMessage({ message: msg.tIsDead }));
+ 
+     if (msg.tTeleport) {
+-      this.onTeleportMessage({ message: msg.tTeleport });
++      this.onTeleportMessage({ message: msg.tTeleport }, grantCycle);
+     }
+ 
+     once('update', () => {
+@@ -802,7 +820,9 @@ export class RemoteServer extends ClientListener {
+             actor: actor,
+             isDead: msgData
+           });
++          grantCycle?.complete('death');
+         } catch (e) {
++          grantCycle?.complete('death', false);
+           if (e instanceof RespawnNeededError) {
+             actor.disableNoWait(false);
+             actor.delete();
+@@ -810,7 +830,7 @@ export class RemoteServer extends ClientListener {
+             throw e;
+           }
+         }
+-      }
++      } else grantCycle?.complete('death', false);
+     });
+   }
+ 
+@@ -999,21 +1019,26 @@ export class RemoteServer extends ClientListener {
+   // reenviava, ~20 s depois. Reaplica assim que o carregamento termina.
+   private onGameLoad(e: GameLoadEvent): void {
+     const learnedSpells = this.spawnLearnedSpells;
+-    if (!e.isCausedBySkyrimPlatform || !learnedSpells) return;
++    const grantCycle = this.spawnGrantCycle;
++    if (!e.isCausedBySkyrimPlatform || (!learnedSpells && !grantCycle)) return;
+     this.spawnLearnedSpells = undefined;
++    this.spawnGrantCycle = undefined;
++    grantCycle?.complete('placement', !!Game.getPlayer());
+ 
+     once('update', () => {
+       Utility.wait(1).then(() => {
+         const player = Game.getPlayer();
+-        if (player) {
++        if (player && learnedSpells) {
+           removeAllSpells(player);
+           learnSpells(player, learnedSpells);
+           logTrace(this, `player learnedSpells after loadGame:`, JSON.stringify(learnedSpells));
+         }
++        grantCycle?.complete('spells', !!player);
+       });
+     });
+   }
+ 
+   private spawnLearnedSpells?: number[];
++  private spawnGrantCycle?: GameplaySpawnBarrier;
+   private numSetInventory = 0;
+ }
+diff --git a/client/src/sync/appearance.ts b/client/src/sync/appearance.ts
+index 9e5b9876876bfe3e44d18039d8437ab79b022141..acae4a362018a4e655ede07bef53f5d4cf88dd45 100644
+--- a/client/src/sync/appearance.ts
++++ b/client/src/sync/appearance.ts
+@@ -159,7 +159,7 @@ export const applyAppearance = (appearance: Appearance): ActorBase => {
+   return npc;
+ };
+ 
+-export const applyAppearanceToPlayer = (appearance: Appearance): void => {
++export const applyAppearanceToPlayer = (appearance: Appearance, completed?: (success: boolean) => void): void => {
+   applyAppearanceCommon(
+     appearance,
+     ActorBase.from((Game.getPlayer() as Actor).getBaseObject()) as ActorBase,
+@@ -168,7 +168,9 @@ export const applyAppearanceToPlayer = (appearance: Appearance): void => {
+   (Game.getPlayer() as Actor).queueNiNodeUpdate();
+   Utility.wait(0.0625).then(() => {
+     once("update", () => {
+-      Game.getPlayer()?.startDeferredKill();
++      const player = Game.getPlayer();
++      player?.startDeferredKill();
++      completed?.(!!player);
+     });
+-  });
++  }).catch(error => { if (completed) completed(false); else throw error; });
+ };
+diff --git a/client/src/sync/inventory.ts b/client/src/sync/inventory.ts
+index 8a5b6cc210dd934c3dba4438cbc7a4333bfa7d44..901852b39a34b1f23ae828f13bc1522332e8de9f 100644
+--- a/client/src/sync/inventory.ts
++++ b/client/src/sync/inventory.ts
+@@ -22,6 +22,8 @@ import {
+   FormType,
+   Form,
+ } from "skyrimPlatform";
++import * as poisonPlatform from 'skyrimPlatform'; // AETHERIUS D-P1-fix2
++import { observeWeaponPoison, reconcilePoisonGroups, normalizePoisonInventory, setWeaponPoisonInventoryReader } from '../services/services/gameplayWeaponPoison';
+ 
+ export interface Extra {
+   health?: number;
+@@ -311,6 +313,7 @@ export const getInventory = (refr: ObjectReference): Inventory => {
+     )
+   );
+ };
++setWeaponPoisonInventoryReader(getInventory); // AETHERIUS D-P1-fix2: same reader, no duplicate inventory
+ 
+ const basesReset = (): Set<number> => {
+   if (storage["basesResetExists"] !== true) {
+@@ -338,7 +341,12 @@ export const applyInventory = (
+   ignoreWorn = false
+ ): boolean => {
+   resetBase(refr);
+-  const diff = getDiff(newInventory, getInventory(refr), ignoreWorn).entries;
++  const current = normalizePoisonInventory(getInventory(refr)); // AETHERIUS D-P1-fix2: observe before correction
++  const blocked = refr.getFormID() === Game.getPlayer()?.getFormID()
++    ? observeWeaponPoison?.(current, newInventory) ?? new Set<number>() : new Set<number>();
++  const allDiff = getDiff(newInventory, current, ignoreWorn).entries;
++  const handled = reconcilePoisonGroups(poisonPlatform, refr, current, newInventory, allDiff, blocked, enableCrashProtection, ignoreWorn);
++  const diff = allDiff.filter(e => !handled.has(e.baseId));
+ 
+   let res = true;
+ 
+diff --git a/client/src/services/services/gameplayGrantService.ts b/client/src/services/services/gameplayGrantService.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..179f1905446f7ccf6fc8e22717bbff4d9c503f95
+--- /dev/null
++++ b/client/src/services/services/gameplayGrantService.ts
+@@ -0,0 +1,224 @@
++import { MsgType } from '../../messages';
++import { ClientListener, CombinedController, Sp } from './clientListener';
++import { WeaponPoisonClient, setWeaponPoisonObserver, readWeaponPoisonInventory, poisonTrace } from './gameplayWeaponPoison';
++
++const channel = 'aetherius.gameplay.grants';
++const maxPacket = 65536;
++const maxItems = 512;
++const token = (s: unknown): s is string => typeof s === 'string' && /^[a-zA-Z0-9_-]{1,96}$/.test(s);
++const exact = (p: any, keys: string[]) => p && typeof p === 'object' && !Array.isArray(p)
++  && Object.keys(p).sort().join('|') === keys.sort().join('|');
++type WireItem = { key: string; plugin: string; localFormId: number; signature: string; action: 'ensure' | 'remove'; owned: boolean };
++type ItemReport = { key: string; signature: string; action: string; status: string };
++type Packet = { [key: string]: any };
++
++/** Completion of calls already made by RemoteServer, not physical engine work.
++ * Optional emitter hook: absence of this service leaves the old flow untouched. */
++export class GameplaySpawnBarrier {
++  readonly id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${GameplaySpawnBarrier.sequence++}`;
++  private static sequence = 0;
++  private pending: Set<string>;
++  failed = false;
++  loading = false;
++  constructor(tasks: string[], private changed: () => void) { this.pending = new Set(tasks); }
++  complete(task: string, success = true) { if (!success) this.failed = true; this.pending.delete(task); this.changed(); }
++  require(task: string) { this.pending.add(task); this.changed(); }
++  get done() { return !this.failed && this.pending.size === 0; }
++}
++
++/** The server owns the set; the client supplies presence/application evidence.
++ * Durable ownership is restored only when explicitly attested by the server.
++ * Without that attestation, a perk already present is never claimed or removed. */
++export class GameplayGrantService extends ClientListener {
++  private session?: string;
++  private cycle?: GameplaySpawnBarrier;
++  private challenge?: string;
++  private begun?: string;
++  private readySent = false;
++  private owned = new Set<string>();
++  private protected = new Set<string>();
++  private last?: { id: string; revision: string; content: string; reports: ItemReport[] };
++  private queued?: string;
++  private queuedPacket?: Packet;
++  private generation = 0;
++  private sessions = new Set<string>();
++  private poisonEnabled = false;
++  private poison: WeaponPoisonClient;
++  constructor(private sp: Sp, private controller: CombinedController) {
++    super();
++    if (sp.settings?.['skymp5-client']?.['aetheriusWeaponPoisonTrace'] === true)
++      sp.storage['aetheriusWeaponPoisonTrace'] = true;
++    this.poison = new WeaponPoisonClient(sp, packet => this.send({ ...packet, cycle: this.cycle?.id, challenge: this.challenge }),
++      () => this.poisonEnabled && this.readySent && !!this.cycle?.done);
++    setWeaponPoisonObserver((local, server) => this.poison.observe(local, server));
++    const traceEquip = (event: string, e: import('skyrimPlatform').EquipEvent) => {
++      if (e.actor?.getFormID() === sp.Game.getPlayer()?.getFormID())
++        poisonTrace(sp, event, { baseId: e.baseObj?.getFormID(), type: e.baseObj?.getType(), uniqueId: e.uniqueId });
++    };
++    controller.on('equip', e => traceEquip('equip', e));
++    controller.on('unequip', e => traceEquip('unequip', e));
++    controller.on('update', () => {
++      const player = sp.Game.getPlayer();
++      const serverInventory = sp.storage['pcInv'] as import('../../sync/inventory').Inventory | undefined;
++      if (this.poisonEnabled && player && serverInventory?.entries && readWeaponPoisonInventory)
++        this.poison.observe(readWeaponPoisonInventory(player), serverInventory);
++      if (sp.storage['aetheriusWeaponPoisonTrace'] === true) {
++        if (player) {
++          const snapshot = JSON.stringify(sp.getExtraContainerChanges(player.getFormID()));
++          if (snapshot !== this.poisonTraceSnapshot) { this.poisonTraceSnapshot = snapshot; poisonTrace(sp, 'extra-changes', JSON.parse(snapshot)); }
++        }
++      }
++    });
++    controller.emitter.on('gameplaySpawnBegin', e => {
++      this.poison.reset(); this.poisonEnabled = false;
++      this.cycle = new GameplaySpawnBarrier(e.tasks, () => this.tryReady());
++      this.challenge = undefined; this.begun = undefined; this.readySent = false;
++      this.last = undefined; this.queued = undefined; this.queuedPacket = undefined; this.generation++;
++      e.capture(this.cycle); this.tryBegin();
++    });
++    controller.emitter.on('customPacketMessage', e => this.receive(e.message.contentJsonDump));
++    controller.emitter.on('connectionDisconnect', () => this.disconnect());
++    controller.emitter.on('connectionAccepted', () => this.disconnect());
++    controller.emitter.on('gameLoad', e => {
++      if (this.cycle?.loading && e.isCausedBySkyrimPlatform) return;
++      // Unknown/local save loads have no instrumented spawn tasks: invalidate,
++      // announce loading, and leave readiness unavailable until next spawn.
++      if (this.session) {
++        this.cycle = new GameplaySpawnBarrier(['unobserved-load'], () => this.tryReady());
++        this.challenge = undefined; this.begun = undefined; this.readySent = false;
++        this.last = undefined; this.queued = undefined; this.queuedPacket = undefined; this.generation++; this.tryBegin();
++      }
++    });
++  }
++  private disconnect() {
++    this.poison.reset(); this.poisonEnabled = false;
++    this.session = undefined; this.cycle = undefined; this.challenge = undefined;
++    this.begun = undefined; this.readySent = false; this.last = undefined;
++    this.queued = undefined; this.queuedPacket = undefined; this.owned.clear(); this.protected.clear(); this.sessions.clear(); this.generation++;
++  }
++  private send(packet: Packet) {
++    if (!this.session) return;
++    this.controller.emitter.emit('sendMessage', {
++      message: { t: MsgType.CustomPacket, contentJsonDump: JSON.stringify({ channel, v: 1, session: this.session, ...packet }) },
++      reliability: 'reliable'
++    });
++  }
++  private tryBegin() {
++    if (!this.session || !this.cycle || this.begun === this.cycle.id) return;
++    this.begun = this.cycle.id;
++    this.send({ type: 'begin', cycle: this.cycle.id });
++  }
++  private tryReady() {
++    if (!this.session || !this.cycle?.done || !this.challenge || this.readySent) return;
++    this.readySent = true;
++    this.send({ type: 'ready', cycle: this.cycle.id, challenge: this.challenge });
++  }
++  private receive(raw: string) {
++    // UTF-8 can use 3 bytes per UTF-16 unit. Conservatively bound both before parse.
++    if (typeof raw !== 'string' || raw.length > maxPacket || this.sp.encodeUtf8(raw).byteLength > maxPacket) return;
++    let p: Packet;
++    try { p = JSON.parse(raw); } catch { return; }
++    if (!p || p.channel !== channel || p.v !== 1) return;
++    if (p.type === 'hello') {
++      if (!exact(p, ['channel','v','session','type']) || !token(p.session)) return;
++      if (this.sessions.has(p.session) || this.sessions.size >= 256) return;
++      this.sessions.add(p.session);
++      // A new authenticated session may be another character. Restore ownership
++      // only from that character's durable server evidence, never from the old one.
++      this.owned.clear(); this.protected.clear();
++      this.poison.reset(); this.poisonEnabled = false;
++      this.session = p.session; this.challenge = undefined; this.begun = undefined;
++      this.readySent = false; this.last = undefined; this.queued = undefined; this.queuedPacket = undefined; this.generation++;
++      this.tryBegin(); return;
++    }
++    if (p.session !== this.session || p.cycle !== this.cycle?.id) return;
++    if (p.type === 'weaponPoisonCapability' && this.readySent && p.challenge === this.challenge
++      && exact(p, ['channel','v','session','type','cycle','challenge','enabled']) && typeof p.enabled === 'boolean') {
++      this.poisonEnabled = p.enabled; return;
++    }
++    if (p.type === 'weaponPoisonResult' && this.readySent && this.cycle?.done && p.challenge === this.challenge
++      && exact(p, ['channel','v','session','type','cycle','challenge','id','result','inventory'])) {
++      this.poison.receive(p); return;
++    }
++    if (p.type === 'challenge') {
++      if (!exact(p, ['channel','v','session','type','cycle','challenge']) || !token(p.challenge) || this.challenge) return;
++      this.challenge = p.challenge; this.tryReady(); return;
++    }
++    if (p.type !== 'perks' || !this.readySent || !this.cycle?.done || p.challenge !== this.challenge
++      || !exact(p, ['channel','v','session','type','cycle','challenge','id','revision','items']) || !token(p.id)
++      || !exact(p.revision, ['facts','grants','equipment','effects','catalog'])
++      || Object.keys(p.revision).some(k => !Number.isSafeInteger(p.revision[k]) || p.revision[k] < 0)
++      || !Array.isArray(p.items) || p.items.length > maxItems) return;
++    const keys = new Set<string>();
++    if (p.items.some((i: WireItem) => {
++      if (!exact(i, ['key','plugin','localFormId','signature','action','owned'])
++        || typeof i.plugin !== 'string' || !/^[^\x00-\x1f\\/:|]+\.(esm|esp|esl)$/.test(i.plugin)
++        || !Number.isSafeInteger(i.localFormId) || i.localFormId < 1 || i.localFormId > 0xffffff
++        || i.key !== `${i.plugin.toLowerCase()}|${i.localFormId.toString(16).toUpperCase().padStart(6,'0')}`
++        || typeof i.signature !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(i.signature)
++        || !['ensure','remove'].includes(i.action) || typeof i.owned !== 'boolean' || (i.action === 'remove' && !i.owned)
++        || keys.has(i.key)) return true;
++      keys.add(i.key); return false;
++    })) return;
++    const revision = JSON.stringify(p.revision);
++    if (this.last) {
++      const old = JSON.parse(this.last.revision);
++      if (Object.keys(old).some(k => p.revision[k] < old[k])) return;
++      if (p.id === this.last.id) {
++        if (raw === this.last.content) this.ack(p, this.last.reports);
++        return;
++      }
++      // Equal revision retries use a new server request id, with identical items.
++      if (Object.keys(old).every(k => old[k] === p.revision[k]) && JSON.stringify(p.items) !== JSON.stringify(JSON.parse(this.last.content).items)) return;
++    }
++    if (this.queuedPacket) {
++      const queued = this.queuedPacket;
++      if (p.id === queued.id || Object.keys(queued.revision).some(k => p.revision[k] < queued.revision[k])) return;
++      if (Object.keys(queued.revision).every(k => p.revision[k] === queued.revision[k]) && JSON.stringify(p.items) !== JSON.stringify(queued.items)) return;
++    }
++    this.queued = p.id;
++    this.queuedPacket = p;
++    const generation = this.generation;
++    this.controller.once('update', () => {
++      if (generation !== this.generation || this.queued !== p.id || p.session !== this.session || p.challenge !== this.challenge || !this.cycle?.done) return;
++      this.queued = undefined;
++      this.queuedPacket = undefined;
++      const player = this.sp.Game.getPlayer();
++      if (!player) return;
++      const reports: ItemReport[] = p.items.map((item: WireItem) => {
++        const report = { key: item.key, signature: item.signature, action: item.action, status: 'FAILED' };
++        try {
++          // No runtime index/masking: the engine resolves defining filename + local id.
++          const perk = this.sp.Perk.from(this.sp.Game.getFormFromFile(item.localFormId, item.plugin));
++          if (!perk) { report.status = 'UNRESOLVED'; return report; }
++          const present = player.hasPerk(perk);
++          if (item.action === 'ensure') {
++            if (!item.owned && present && !this.owned.has(item.key)) this.protected.add(item.key);
++            if (!present) {
++              player.addPerk(perk);
++              if (!player.hasPerk(perk)) return report;
++              if (!this.protected.has(item.key)) this.owned.add(item.key);
++            } else if (item.owned && !this.protected.has(item.key)) this.owned.add(item.key);
++            report.status = this.owned.has(item.key) ? 'APPLIED' : 'ALREADY_PRESENT';
++          } else {
++            if (this.protected.has(item.key)) return report;
++            // Restore server-recorded authorship across reconnect/save, never
++            // infer it merely from presence. Removal must be explicitly owned.
++            if (item.owned) this.owned.add(item.key);
++            if (!this.owned.has(item.key)) return report;
++            if (present) player.removePerk(perk);
++            if (player.hasPerk(perk)) return report;
++            this.owned.delete(item.key); report.status = present ? 'REMOVED' : 'ALREADY_ABSENT';
++          }
++        } catch { /* Failed item is returned, never silently skipped. */ }
++        return report;
++      });
++      this.last = { id: p.id, revision, content: raw, reports };
++      this.ack(p, reports);
++    });
++  }
++  private ack(p: Packet, items: ItemReport[]) {
++    this.send({ type: 'ack', cycle: p.cycle, challenge: p.challenge, id: p.id, revision: p.revision, items });
++  }
++  private poisonTraceSnapshot?: string;
++}
+diff --git a/client/src/services/services/gameplayWeaponPoison.ts b/client/src/services/services/gameplayWeaponPoison.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..85622900b755d8a37b4db70105ee723540a5904e
+--- /dev/null
++++ b/client/src/services/services/gameplayWeaponPoison.ts
+@@ -0,0 +1,170 @@
++import type { Entry, Inventory } from '../../sync/inventory';
++
++// Called before the existing inventory diff, including its five-second cycle.
++// No timer or second inventory store. The service returns bases awaiting reply.
++export let observeWeaponPoison: ((local: Inventory, server: Inventory) => Set<number>) | undefined;
++export function setWeaponPoisonObserver(observer: typeof observeWeaponPoison) { observeWeaponPoison = observer; }
++export let readWeaponPoisonInventory: ((refr: any) => Inventory) | undefined;
++export function setWeaponPoisonInventoryReader(reader: NonNullable<typeof readWeaponPoisonInventory>) { readWeaponPoisonInventory = reader; }
++const correctedPoisonBases = new Set<number>();
++
++export const poisonTrace = (sp: any, event: string, details: unknown) => {
++  if (sp.storage?.['aetheriusWeaponPoisonTrace'] === true)
++    sp.printConsole(`[AETHERIUS poison] ${event} ${JSON.stringify(details)}`);
++};
++
++// PO3 setters retain the ExtraPoison node with a null poison and zero count.
++// InventoryApi.cpp:66-76 serializes that node as 0/0. Canonicalize only this
++// empty coating in the comparison view; never mutate the underlying inventory.
++export function normalizePoisonInventory(inv: Inventory): Inventory {
++  return { entries: inv.entries.map(e => {
++    if (e.poisonId !== 0 && e.poisonCount !== 0) return e;
++    const copy = { ...e }; delete copy.poisonId; delete copy.poisonCount; return copy;
++  }) };
++}
++const projectedPoisonStates = new Map<string, { poisonId: number; count: number }>();
++const poisonAttempts = new Map<string, string>();
++const totals = (entries: Entry[], includePoison: boolean) => {
++  const counts = new Map<string, number>();
++  normalizePoisonInventory({ entries }).entries.forEach(e => {
++    const key = JSON.stringify([e.health, e.enchantmentId, e.maxCharge,
++      !!e.removeEnchantmentOnUnequip, e.soul,
++      ...(includePoison ? [e.poisonId, e.poisonCount] : [])]);
++    counts.set(key, (counts.get(key) ?? 0) + e.count);
++  });
++  return JSON.stringify(Array.from(counts.entries()).sort());
++};
++
++/** In-place projection only. Source: CallNativeApi.cpp:119-171 and
++ * CallNative.cpp:245-286 dispatch registered globals with exact arity.
++ * PO3_SKSEFunctions.psc:129,174,176 in the official enabled Extender mod.
++ * Apply creates ExtraPoison; setters change its pointer/count, without equip.
++ * Missing API, hand, record or instance semantics are UNSUPPORTED, never an
++ * excuse to fall through to AddItemEx for this held base. */
++export function reconcilePoisonGroups(sp: any, refr: any, local: Inventory, server: Inventory,
++  diff: Entry[], blocked: Set<number>, enableCrashProtection: boolean, ignoreWorn: boolean): Set<number> {
++  const handled = new Set(blocked);
++  if (refr.getFormID() !== sp.Game.getPlayer()?.getFormID()) return handled;
++  const bases = new Set([...local.entries, ...server.entries].filter(e => e.poisonId).map(e => e.baseId));
++  correctedPoisonBases.forEach(base => bases.add(base));
++  for (const baseId of Array.from(bases)) {
++    if (blocked.has(baseId)) continue;
++    const before = local.entries.filter(e => e.baseId === baseId);
++    const after = server.entries.filter(e => e.baseId === baseId);
++    const held = before.filter(e => e.worn || e.wornLeft);
++    // Initial inventory creation belongs to the existing maintainer path.
++    // Never call a worn native until that exact local weapon actually exists.
++    if (!held.length) {
++      if (before.length && after.some(e => e.worn || e.wornLeft)) handled.add(baseId);
++      continue;
++    }
++    if (sp.Game.getFormEx(baseId)?.getType() !== sp.FormType.Weapon) continue;
++    handled.add(baseId); correctedPoisonBases.add(baseId);
++    if (sp.Utility.isInMenuMode()) continue;
++    if (totals(before, false) !== totals(after, false)) {
++      poisonTrace(sp, 'UNSUPPORTED-instance-difference', { baseId }); continue;
++    }
++    for (const entry of held) {
++      const left = !!entry.wornLeft, key = `${baseId}:${left ? 'left' : 'right'}`;
++      const target = after.find(e => left ? e.wornLeft : e.worn);
++      // A refusal can retain an unsplit clean server stack. It attests clean
++      // poison for both hands, but cannot select a poisoned ambiguous copy.
++      if (!target && after.some(e => e.poisonId)) {
++        poisonTrace(sp, 'UNSUPPORTED-authoritative-hand', { baseId, left }); continue;
++      }
++      const poisonId = target?.poisonId ?? 0, count = poisonId ? target?.poisonCount ?? 0 : 0;
++      if (!Number.isSafeInteger(count) || count < 0 || (poisonId && count === 0)) {
++        poisonTrace(sp, 'UNSUPPORTED-authoritative-poison', { baseId, left }); continue;
++      }
++      if ((entry.poisonId ?? 0) === poisonId && (entry.poisonCount ?? 0) === count) continue;
++      const attempt = JSON.stringify([entry.poisonId ?? 0, entry.poisonCount ?? 0, poisonId, count]);
++      if (poisonAttempts.get(key) === attempt) continue;
++      const actor = sp.Actor.from(refr);
++      if (!actor || actor.getEquippedObject(left ? 0 : 1)?.getFormID() !== baseId) continue;
++      poisonAttempts.set(key, attempt);
++      const functions: string[] = [];
++      const call = (name: string, ...args: any[]) => {
++        functions.push(name);
++        return sp.callNative('PO3_SKSEFunctions', name, null, actor, ...args);
++      };
++      try {
++        const potion = poisonId ? sp.Potion.from(sp.Game.getFormEx(poisonId)) : null;
++        if (poisonId && !potion) throw new Error('unresolved poison');
++        let ok: boolean;
++        if (!entry.poisonId && poisonId) {
++          ok = call('ApplyPoisonToEquippedWeapon', potion, count, left) === true;
++        } else {
++          ok = call('SetEquippedWeaponPoisonCount', count, left) === true;
++          if (ok && (entry.poisonId ?? 0) !== poisonId)
++            ok = call('SetEquippedWeaponPoison', potion, left) === true;
++        }
++        const actualPoison = call('GetEquippedWeaponPoison', left);
++        const actualCount = call('GetEquippedWeaponPoisonCount', left);
++        const actualId = actualPoison?.getFormID() ?? 0;
++        if (!ok || actualId !== poisonId || actualCount !== count) throw new Error('native result differs');
++        // Later 0/0 nodes compare exactly as absence, and duplicate same-base
++        // entries compare by multiset rather than getDiff's first match.
++        entry.poisonId = poisonId; entry.poisonCount = count;
++        projectedPoisonStates.set(key, { poisonId, count });
++        poisonTrace(sp, 'correct-in-place', { baseId, left,
++          before: JSON.parse(attempt).slice(0, 2), after: [actualId, actualCount], functions });
++      } catch (error) {
++        poisonTrace(sp, 'UNSUPPORTED-poison-native', { baseId, left, functions, reason: String(error) });
++      }
++    }
++    // Hand and poison are the only supported delta. This base stays excluded
++    // from reconstruction even on failure; all other bases keep their path.
++    if (ignoreWorn && totals(before, true) !== totals(after, true))
++      poisonTrace(sp, 'UNSUPPORTED-nonworn-poison-difference', { baseId });
++  }
++  return handled;
++}
++
++export class WeaponPoisonClient {
++  private pending?: { id: string; weaponId: number; poisonId: number; at: number };
++  private observed = new Map<string, { poisonId: number; count: number }>();
++  private sequence = 0;
++  constructor(private sp: any, private send: (packet: any) => void, private ready: () => boolean) {}
++  reset() { this.pending = undefined; this.observed.clear(); correctedPoisonBases.clear(); poisonAttempts.clear(); projectedPoisonStates.clear(); }
++  observe(local: Inventory, server: Inventory): Set<number> {
++    const blocked = new Set<number>();
++    if (!this.ready()) return blocked;
++    const held = new Set(local.entries.filter(e => e.worn || e.wornLeft).map(e => `${e.baseId}:${e.wornLeft ? 'left' : 'right'}`));
++    Array.from(this.observed.keys()).forEach(key => { if (!held.has(key)) this.observed.delete(key); });
++    for (const e of local.entries) {
++      if (!e.worn && !e.wornLeft) continue;
++      const hand = e.wornLeft ? 'left' : 'right', key = `${e.baseId}:${hand}`;
++      const previous = this.observed.get(key);
++      this.observed.set(key, { poisonId: e.poisonId ?? 0, count: e.poisonCount ?? 0 });
++      const authoritative = server.entries.some(x => x.baseId === e.baseId && x.poisonId === e.poisonId && x.poisonCount);
++      const projected = projectedPoisonStates.get(key);
++      const fromProjection = !!projected && projected.poisonId === e.poisonId && (e.poisonCount ?? 0) <= projected.count;
++      const application = e.poisonId && !authoritative && !fromProjection &&
++        (!previous || previous.poisonId !== e.poisonId || (e.poisonCount ?? 0) > previous.count);
++      if (!this.pending && application && this.sp.Game.getFormEx(e.baseId)?.getType() === this.sp.FormType.Weapon
++        && this.sp.Potion.from(this.sp.Game.getFormEx(e.poisonId))?.isPoison()) {
++        const id = `poison-${Date.now().toString(36)}-${this.sequence++}`;
++        this.pending = { id, weaponId: e.baseId, poisonId: e.poisonId!, at: Date.now() };
++        poisonTrace(this.sp, 'intent', { id, weaponId: e.baseId, poisonId: e.poisonId, hand });
++        // Runtime ids are session-bound evidence only, never saved identities.
++        this.send({ type: 'weaponPoison', id, weaponId: e.baseId, poisonId: e.poisonId, hand });
++      }
++    }
++    if (this.pending && Date.now() - this.pending.at > 10000) {
++      poisonTrace(this.sp, 'UNSUPPORTED-reply-timeout', { id: this.pending.id });
++      this.pending = undefined;
++    }
++    if (this.pending) { blocked.add(this.pending.weaponId); blocked.add(this.pending.poisonId); }
++    return blocked;
++  }
++  receive(p: any) {
++    if (!this.pending || p.id !== this.pending.id || !Number.isSafeInteger(p.result)) return;
++    // This is a snapshot from the authenticated server, replacing the existing
++    // pcInv projection. Native SetInventory still follows its unchanged path.
++    if (!p.inventory || !Array.isArray(p.inventory.entries) || p.inventory.entries.some((e: any) =>
++      !e || !Number.isSafeInteger(e.baseId) || e.baseId < 1 || !Number.isSafeInteger(e.count) || e.count < 0)) return;
++    this.sp.storage['pcInv'] = p.inventory;
++    poisonTrace(this.sp, 'result', { id: p.id, result: p.result });
++    this.pending = undefined;
++  }
++}

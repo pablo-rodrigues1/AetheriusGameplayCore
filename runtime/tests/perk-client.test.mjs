@@ -42,5 +42,52 @@ test('session replacement clears ownership; old hello/packets and callbacks cann
   c.receive({...packet(),session:'session-two',challenge:'challenge-two'});c.emitter.emit('connectionDisconnect',{});c.update();assert.equal(c.calls.length,0);
 });
 test('native calls can fail verification: removal stays failed and keeps ownership until actual absence',()=>{
-  const {c,packet}=setup();c.receive(packet());c.update();c.blockRemove();c.receive(packet([item(undefined,'remove',true)],2));c.update();assert.equal(c.sent.at(-1).items[0].status,'FAILED');assert(c.perks.has(c.forms.get(item().key).id));
+  const {c,packet}=setup();c.receive(packet());c.update();c.blockRemove();c.receive(packet([item(undefined,'remove',true)],2));c.update();assert.equal(c.sent.at(-1).id,'revision-1');for(let n=0;n<3;n++)c.update();assert.equal(c.sent.at(-1).items[0].status,'FAILED');assert(c.perks.has(c.forms.get(item().key).id));
+});
+
+test('deferred removal is checked next frame; one ordered ACK covers mixed items',()=>{
+  const {c,packet}=setup(),other=item('other.esl|000234');c.register(other);c.receive(packet());c.update();
+  const remove=packet([item(undefined,'remove',true),other],2);c.receive(remove);c.update();
+  assert(c.perks.has(c.forms.get(item().key).id));assert.equal(c.sent.filter(p=>p.type==='ack').length,1);
+  c.update();assert(!c.perks.has(c.forms.get(item().key).id));
+  const ack=c.sent.at(-1);assert.deepEqual(ack.items.map(i=>[i.key,i.status]),[[item().key,'REMOVED'],[other.key,'APPLIED']]);
+  c.update();assert.equal(c.sent.filter(p=>p.id===remove.id).length,1);
+  c.receive(packet([item(undefined,'remove',true)],3));c.update();assert.equal(c.sent.at(-1).items[0].status,'ALREADY_ABSENT');
+});
+test('later delivery and duplicate/conflicting packets cannot race a removal ACK',()=>{
+  const {c,packet}=setup();c.receive(packet());c.update();
+  const remove=packet([item(undefined,'remove',true)],2);c.receive(remove);c.update();
+  c.receive(remove);c.receive({...remove,items:[item()]});c.receive(packet([],1,'stale'));
+  const ensure=packet([item()],3);c.receive(ensure);
+  c.update();assert.equal(c.sent.at(-1).id,remove.id);assert.equal(c.sent.at(-1).items[0].status,'REMOVED');
+  assert.equal(c.calls.filter(x=>x[0]==='add').length,1);
+  c.update();assert.equal(c.sent.at(-1).id,ensure.id);assert.equal(c.calls.filter(x=>x[0]==='add').length,2);
+  assert.equal(c.sent.filter(p=>p.id===remove.id).length,1);
+});
+test('reentrant next packet during ACK emission waits until the next update',()=>{
+  const {c,packet}=setup();c.receive(packet());c.update();
+  const remove=packet([item(undefined,'remove',true)],2),ensure=packet([item()],3);
+  c.emitter.on('sendMessage',e=>{if(JSON.parse(e.message.contentJsonDump).id===remove.id)c.receive(ensure);});
+  c.receive(remove);c.update();c.update();assert.equal(c.calls.filter(x=>x[0]==='add').length,1);
+  c.update();assert.equal(c.sent.at(-1).id,ensure.id);assert.equal(c.calls.filter(x=>x[0]==='add').length,2);
+});
+test('500 ms bound finishes a genuinely failed removal without waiting for 3 frames',t=>{
+  t.mock.timers.enable({apis:['Date'],now:1000});
+  const {c,packet}=setup();c.receive(packet());c.update();c.blockRemove();c.receive(packet([item(undefined,'remove',true)],2));c.update();
+  t.mock.timers.tick(500);c.update();assert.equal(c.sent.at(-1).id,'revision-2');assert.equal(c.sent.at(-1).items[0].status,'FAILED');
+  assert.equal(c.calls.filter(x=>x[0]==='remove').length,1);
+});
+for(const reset of ['disconnect','spawn','load','hello'])test('reset '+reset+' cancels deferred checks and queued delivery',()=>{
+  const {c,packet}=setup();c.receive(packet());c.update();c.receive(packet([item(undefined,'remove',true)],2));c.update();c.receive(packet([item()],3));
+  const sent=c.sent.filter(p=>p.type==='ack').length,calls=c.calls.length;
+  if(reset==='disconnect')c.emitter.emit('connectionDisconnect',{});
+  if(reset==='spawn')c.spawn();
+  if(reset==='load')c.emitter.emit('gameLoad',{isCausedBySkyrimPlatform:false});
+  if(reset==='hello')c.receive({...base,type:'hello',session:'session-new'});
+  for(let n=0;n<5;n++)c.update();
+  assert.equal(c.sent.filter(p=>p.type==='ack').length,sent);assert.equal(c.calls.length,calls);
+});
+test('player lost during verification is FAILED after the bounded checks',()=>{
+  const {c,packet}=setup();c.receive(packet());c.update();c.receive(packet([item(undefined,'remove',true)],2));c.update();c.noPlayer();
+  for(let n=0;n<3;n++)c.update();assert.equal(c.sent.at(-1).items[0].status,'FAILED');
 });

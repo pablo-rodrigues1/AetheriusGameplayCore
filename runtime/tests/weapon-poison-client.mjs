@@ -1,8 +1,11 @@
 import { build } from 'esbuild';
+import {suspendedClientPlugin} from './suspended-client.mjs';
+// D-P1-fix3 is suspended. These unchanged behavioral assertions exercise its
+// preserved patch; they do not require poison in the installable client.
 import { fileURLToPath } from 'node:url';
 const workspace=fileURLToPath(new URL('../../../',import.meta.url));
 const compiled=await build({stdin:{loader:'ts',resolveDir:workspace,contents:`export * from './aetherius-client/client/src/sync/inventory.ts'; export * from './aetherius-client/client/src/services/services/gameplayGrantService.ts';`},
-  bundle:true,platform:'node',format:'cjs',external:['skyrimPlatform'],write:false});
+  bundle:true,platform:'node',format:'cjs',external:['skyrimPlatform'],write:false,plugins:[await suspendedClientPlugin()]});
 export function load(sp){const module={exports:{}};new Function('require','exports','module',compiled.outputFiles[0].text)(()=>sp,module.exports,module);return module.exports;}
 
 /** Model, not game proof. CallNativeApi.cpp:119-171 marshals registered globals;
