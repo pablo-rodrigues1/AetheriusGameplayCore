@@ -1,6 +1,6 @@
 # Ativação dos sistemas do GameplayCore num servidor
 
-Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 12/10/2026 (B5b-fix1).
+Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 12/10/2026 (C3c).
 
 Cada sistema do Core (pedras guardiãs, raças, e os que vierem) precisa de duas coisas no servidor onde roda: **tabelas próprias no PostgreSQL** e **uma opção de configuração que o liga**. No ambiente de desenvolvimento local esses dois passos foram feitos à mão a cada sistema. Este documento descreve o que foi feito, para ser repetido no servidor oficial com as diferenças necessárias.
 
@@ -13,6 +13,8 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 - As migrations são só aditivas: criam tabela e índice. Nenhuma altera ou remove coisa existente.
 
 ## 2. Tabelas, por migration
+
+**C3c:** nenhuma migration, tabela, pool ou ledger novo. A varredura usa as tabelas anteriores e um nível transitório por personagem em memória; não cria nem altera `gc_leveling_progress`. O ponto `awardLevelingXp` usa o adaptador durável Leveling e seu `eventId` no ledger `gc_commands`; só o adaptador escreve XP, nível e fadiga.
 
 **B5b-fix1:** nenhuma migration/tabela nova; formato do ACK e autoria durável permanecem iguais. Testes usam só `aetherius_test`.
 
@@ -68,6 +70,8 @@ npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
 **O servidor não aplica migrations sozinho.** Se faltar alguma, o Core sobe, deixa indisponíveis os sistemas que dependem do banco, e escreve no log o comando a rodar. O servidor do jogo não cai por isso.
 
 ## 4. Opções de configuração
+
+**C3c:** não há opção nova. Com a varredura aceita, `GAMEPLAY_CORE_DEV_CLASS_LEVEL` fornece o nível original que será restaurado; cada passo usa em memória o nível de `stages[].level` do catálogo. Fora da varredura, continua valendo o nível DEV configurado ou o Leveling. `GAMEPLAY_CORE_DEV_ATTRIBUTES` foi retirada do ambiente local pelo dono em 12/10; o código permanece inerte sem a opção.
 
 Ficam no `.env` do gamemode. O Core lê todas no boot; mudar exige reiniciar o servidor ou recarregar o gamemode.
 
@@ -177,7 +181,29 @@ Cliente instalável contém somente B5b + B5b-fix1. `sync/inventory.ts` voltou �
 
 Depois da instalação pelo revisor, o dono deve ver 18 linhas `result=OK`, todas com `failed=0` e `unresolved=0`; `removed` confirma os perks exclusivos removidos, sem removê-los de novo como `alreadyAbsent` no passo seguinte. A linha final deve ser `done: ok=18 fail=0; restored=<original>; delivery=CONFIRMED`. Isso confirma entrega, não efeitos de combate. Harness continua com os mesmos argumentos e é exclusivo do revisor; servidor local e jogo não foram executados nesta ordem.
 
+### Varredura por marcos (C3c, exclusivamente desenvolvimento)
+
+Depois do primeiro ACK `CONFIRMED`, percorre classes em ordem de id e os marcos em ordem de nível, ambos lidos do catálogo assinado. O catálogo atual tem 18 classes e 162 marcos no total. Uma chamada `classes.set` por classe; entre marcos da mesma classe só muda a leitura transitória de nível e a composição avança `revision.grants`. Não grava XP ou nível. O override some antes da restauração, inclusive em timeout, saída, morte, respawn, carga e shutdown aguardado. Staff continua recebendo `DEV_SWEEP_IN_PROGRESS`. Uma tentativa por personagem por boot, inclusive após reload do Core.
+
+Cada passo exige ACK `applied`, zero `unresolved` e `failed`, e presença confirmada exatamente igual aos perks de origem CLASS acumulados até esse marco. O esperado vem de `stages`, independentemente de `classGrants`. Perk futuro de CLASS dá `FAIL(UNEXPECTED_CLASS_PERK)`; ausente dá FAIL; erros por item continuam até o último passo. As confirmações cobrem os itens do protocolo, não uma enumeração de perks externos do save nem os efeitos. Perks compartilhados preservam a presença; o cliente responde `APPLIED` quando já são de autoria do Core.
+
+Exemplo: `[classes] DEV sweep 1/162 anti_mago@1: expected=4; new=4; applied=4; alreadyPresent=0; unresolved=0; failed=0; removed=...; alreadyAbsent=0; result=OK`. No fim: `[classes] DEV sweep done: ok=162 fail=0; classes=18; milestones=162; restored=<original>; delivery=CONFIRMED`. Os números são calculados do catálogo, não constantes de execução. A reposição tem linha `restore <classe>@<nível original>`. `new` conta os perks definidos naquele marco; `expected` conta o acumulado sem duplicatas.
+
+**Roteiro do dono/revisor:** com o cliente B5b-fix1 instalado (D538B93B2FA6), a trava local da seção 4, classes e perks em active, DEV_CLASS_LEVEL aceito e DEV_CLASS_SWEEP=true, instalar o bundle C3c quando a sessão estiver disponível para teste. Entrar com personagem que já tenha classe e permanecer sem morrer, sair ou carregar save até a linha final. Espera normal estimada: 15–60 segundos depois da primeira confirmação, a conferir no jogo. Limite nominal atual: (162 passos + 1 reposição) × 10 segundos = **1630 segundos, 27 min 10 s**, além da primeira entrega e das transações. Timeout aborta, não espera todos os passos. Conferir todas as linhas OK e a classe original no nível anterior. Reconectar no mesmo boot não deve repetir; repetir exige um boot novo autorizado pelo dono. Remover a opção desfaz a ativação em uma recarga posterior à reposição. Não apagar autoria no banco. Servidor em execução e jogo não foram manipulados pelo executor.
+
+O harness `runtime/harness/class-sweep.mjs` usa os mesmos argumentos apresentados abaixo, conta marcos do catálogo, testa reposição no nível original 17 e recusa 7777. **Não executado pelo Sol: exige servidor local**; execução fica com Opus. Não recompilar o host ou cliente para esta ordem.
+
+### Entrada durável de XP e entrega online (C3c)
+
+`core.awardLevelingXp(input)` é o único ponto de prêmio de XP do runtime. Recebe a evidência e o snapshot de grupo do contrato existente, CharacterKey e epoch, chama o adaptador durável e só após COMMIT pede `ClassSystem.refresh` quando o nível mudou. O `eventId` do adaptador deduplica eventos; replay não reentrega nem avança revisão. Captura o vínculo antes de aguardar e confirma o epoch depois do commit: saída ou troca de sessão não publica pelo vínculo antigo; a próxima entrada recompõe do banco. Sem vínculo, persiste sem entrega. Um prêmio que alcance mais de um marco compõe todos os marcos alcançados numa entrega. Nível DEV aceito: grava XP normalmente e não reentrega porque o nível efetivo da classe permanece fixo.
+
+As regras de Leveling são incorporadas ao bundle a partir dos JSON existentes, sem mudar seu conteúdo. O prêmio máximo fixo atual é 1000 e não cruza os níveis 5 e 10 em um único evento; o teste desse salto usa um balanceamento explicitamente de teste, validado pelo mesmo adaptador, contra PostgreSQL real e o mesmo cliente simulado.
+
+**Fonte futura de abates deverá chamar `awardLevelingXp`, nunca `createDurableLeveling(...).award` diretamente.** O export de baixo nível permanece para caracterização de persistência. Nenhuma fonte de abates foi conectada. Capability de leveling permanece `UNSUPPORTED` / `SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED`, com `entryPoint.name=awardLevelingXp`, `caller=NONE`. O ponto faz I/O e deve ser chamado fora de hit/tick; não é prova de autoridade de abate.
+
 ### Varredura de classes (C3b, exclusivamente desenvolvimento)
+
+**Histórico supersedido pela C3c:** os 18 passos no nível máximo, o limite de 190 segundos e o roteiro de 18 linhas desta seção descrevem a varredura anterior. A implementação vigente é a seção “Varredura por marcos (C3c)” acima. O roteiro de 18 linhas da B5b-fix1 acima também é histórico; com o bundle C3c são os marcos do catálogo.
 
 Após a primeira entrega de perks `CONFIRMED`, uma vez por boot do host e por personagem, percorre as 18 classes em ordem de `id`. Cada passo grava pelo comando idempotente `classes.set`, compõe uma nova revisão de publicação, mantém a publicação inicial em voo até seu ACK (sem duplicá-la na varredura), entrega pelo adaptador B5b e espera até 10 segundos pelo ACK exato já registrado no banco. Nunca altera XP, nível, catálogo ou protocolo. A nova revisão evita a recusa do cliente a payload diferente na mesma revisão, inclusive ao restaurar a classe que já era a última da lista.
 
@@ -420,6 +446,10 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+**Máximos de teste desligados (12/10/2026, revisor, a pedido do dono do projeto):** a linha `GAMEPLAY_CORE_DEV_ATTRIBUTES=300,300,300` foi retirada do `gamemode\.env` do servidor local (cópia anterior em `_work\backups\gamemode.env.before-remove-dev-attributes-20261012`). Vida, magia e vigor voltam aos valores dos records na subida seguinte do servidor; não há dado a apagar. O código da DEV-A1 permanece, inerte sem a opção. Para religar: repor a linha. **Nunca no servidor oficial.**
+
+**C3c (12/10/2026, Sol 6.1):** Core alterado somente nos caminhos da ordem: varredura por marcos, entrada de XP após commit, testes e harness. Nenhuma configuração local, migration de desenvolvimento ou dado de aetherius_dev alterado. PostgreSQL usado apenas em schemas descartáveis de aetherius_test. Servidor/client intocados, sem recompilação, start/stop ou porta aberta. GAMEPLAY_CORE_DEV_ATTRIBUTES permanece retirada conforme o dono; seu código não mudou. Bundle gerado para revisão; instalação, teste do harness nativo e sessão em jogo ficam com revisor/dono. Reverter a ativação removendo DEV_CLASS_SWEEP depois da reposição e recarregando numa sessão autorizada; não apagar grants/autoria. Evidências e resultados finais no relatório C3c; G-C3 não foi marcado.
 
 **B5b-fix1 (12/10/2026, Sol 6.1):** cliente voltou à B5b pura por `git apply -R`/`git apply`, e o build reproduziu o instalado EE6EF143294D byte a byte; depois foi corrigida a confirmação de remoção. Veneno preservado no patch suspenso do Core `85b7066`. Cliente compilado só em evidência, deploy/zip desligados. Nenhum commit, configuração local, jogo/MO2, servidor ou `aetherius_dev` alterado; nenhuma porta aberta. Para futura reversão, o revisor repõe o bundle que preservou, com o jogo fechado; não apagar autoria ou dados. Validação em jogo/harness nativo permanece pendente do revisor/dono.
 

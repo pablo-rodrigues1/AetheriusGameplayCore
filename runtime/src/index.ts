@@ -25,6 +25,9 @@ import { RaceSystem } from './races.ts';
 import { developmentClassSweep } from './class-sweep.ts';
 export { developmentClassSweep, DevelopmentClassSweep } from './class-sweep.ts';
 import { ClassSystem } from './classes.ts';
+import { scopedPool } from './persistence-scope.ts';
+import { RuntimeLeveling, levelingConfigs } from './leveling.ts';
+import type { XpEventInput } from '../../modules/leveling-system/src/integration/durable.ts';
 import { PoisonProjection } from './poison.ts';
 import { developmentAttributes, DevelopmentAttributesProjection } from './attributes.ts';
 export { developmentAttributes } from './attributes.ts';
@@ -123,6 +126,7 @@ export function createGameplayCore(host: HostContext) {
   let standingStones: StandingStoneSystem | undefined;
   let races: RaceSystem | undefined;
   let classes: ClassSystem | undefined;
+  let leveling: RuntimeLeveling | undefined;
   let devClassLevel:number|undefined;
   let devSweep=false;
   const sweepAttempts=host.mp?(sweepBoots.get(host.mp)??new Set<string>()):new Set<string>();
@@ -173,7 +177,7 @@ export function createGameplayCore(host: HostContext) {
           resultAuthority:'NATIVE_CLIENT', hostMutations:0, limitations:['BASE_NPC_RACE_USED_BY_NATIVE_ADD_SPELL', 'MULTIPLAYER_RESULTS_UNVERIFIED'] }) } : {}),
       ...(spec.id==='classes'?{levelOrigin:devClassLevel===undefined?'LEVELING':'DEV',devClassLevel:devClassLevel??null,
         perkDelivery:projection?.capability().perks??{status:'UNSUPPORTED',reason:'CLIENT_PERK_DELIVERY_OFF_OR_UNAVAILABLE'},proof:['runtime/tests/classes.acceptance.mjs','runtime/tests/perks.test.mjs']} : {}),
-      ...(spec.id==='leveling'?{adapter:'DURABLE_POSTGRESQL',eventSource:{status:'UNSUPPORTED',reason:'SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED'},proof:['runtime/tests/classes.acceptance.mjs']} : {}),
+      ...(spec.id==='leveling'?{adapter:'DURABLE_POSTGRESQL',eventSource:{status:'UNSUPPORTED',reason:'SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED'},entryPoint:{name:'awardLevelingXp',available:!!leveling,caller:'NONE',afterCommit:'ClassSystem.refresh',devLevelBehavior:'XP_PERSISTED_NO_REDELIVERY'},proof:['runtime/tests/classes.acceptance.mjs']} : {}),
       ...(spec.id === 'standing-stones' ? { ownership: Object.freeze({ grants: 'AETHERIUS_SERVER', results: 'NATIVE_CLIENT' }),
         playerFeedback: Object.freeze({ status: host.mp?.makeProperty && host.mp.set ? 'PARTIAL' : 'UNSUPPORTED',
           channel: 'OWNER_PROPERTY_DEBUG_NOTIFICATION', delivery: 'UNCONFIRMED', proof: ['runtime/tests/standing-stones.test.mjs'] }) } : {}),
@@ -190,6 +194,7 @@ export function createGameplayCore(host: HostContext) {
   }
   function disposeNow() { wanted = false; initialized = false; controller.abort(); spike?.shutdown(); spike = undefined; scope.close(); }
   async function stopSystems() {
+    await leveling?.shutdown(); leveling = undefined;
     for (const stop of stops.splice(0).reverse()) { try { await stop(); } catch { warn('system shutdown failed'); } }
     await composition?.shutdown(); composition = undefined; standingStones = undefined; races = undefined; classes=undefined;
     await projection?.shutdown(); projection = undefined; clientDelivery=undefined;
@@ -225,7 +230,7 @@ export function createGameplayCore(host: HostContext) {
     try{devAttributes=developmentAttributes(env);
       if(devAttributes)warn(`DEV attributes override=${devAttributes.health},${devAttributes.magicka},${devAttributes.stamina}; transient; never use on official server`);
     }catch(error){warn(`ERROR ${(error as Error).message}; DEV attributes refused; record maxima retained`);}
-    failures.set('leveling','SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED: durable adapter available; no event source connected');
+    failures.set('leveling','SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED: runtime awardLevelingXp entry available after boot; no caller/event source connected');
     for (const spec of specs.values()) mode(spec.id);
     if (devEnabled('ENABLE_STANDING_STONE_SPIKE') && ['canary', 'active'].includes(mode('standing-stones'))) {
       failures.set('standing-stones', 'STANDING_STONE_SPIKE_CONFLICT: disable ENABLE_STANDING_STONE_SPIKE before canary/active');
@@ -374,6 +379,12 @@ export function createGameplayCore(host: HostContext) {
       catch (error) { spike.shutdown(); spike = undefined; warn(`standing-stone spike unavailable: ${safeCode(error)}`); }
     }
     if (!current()) { disposeNow(); await stopSystems(); return; }
+    if (pool && db.status === 'SUPPORTED' && !failures.has('classes')) {
+      const check = () => { if (!initialized || !current()) throw Error('LEVELING_RUNTIME_UNAVAILABLE'); };
+      leveling = new RuntimeLeveling({configs:levelingConfigs,pool:scopedPool(pool,env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public',check),check,
+        binding:key=>actors.forCharacter(key),current:binding=>current()&&actors.isCurrent(binding),devLevel:devClassLevel,
+        refresh:binding=>classes?.refresh(binding)??Promise.resolve({status:'UNSUPPORTED',reason:'CLASSES_NOT_STARTED'})});
+    }
     initialized = true; warn(`bundle ${BUNDLE_VERSION}; initialized; active instances=1`);
     for (const item of report().systems) if (item.status === 'UNSUPPORTED') warn(`${item.id}: UNSUPPORTED; ${item.missing.join(' | ')}`);
   }
@@ -406,6 +417,7 @@ export function createGameplayCore(host: HostContext) {
       reason: failures.get('standing-stones') ?? 'STANDING_STONES_NOT_STARTED', committed: false }),
     observeRace: (binding: SessionBinding) => races?.observe(binding) ?? Promise.resolve({status:'UNSUPPORTED' as const,raceKey:null,reason:'RACES_NOT_STARTED'}),
     setCharacterClass:(input:{binding:SessionBinding;requestId:string;classId:string})=>classes?.set(input)??Promise.resolve({status:'UNSUPPORTED' as const,reason:failures.get('classes')??'CLASSES_NOT_STARTED'}),
+    awardLevelingXp:(input:XpEventInput)=>leveling?.award(input)??Promise.reject(Error('LEVELING_RUNTIME_UNAVAILABLE')),
     inspectActor:(binding:SessionBinding)=>composition?.inspect(binding)??Promise.reject(Error('COMPOSITION_UNAVAILABLE')),
     refreshClass:(binding:SessionBinding)=>classes?.refresh(binding)??Promise.resolve({status:'UNSUPPORTED' as const,reason:failures.get('classes')??'CLASSES_NOT_STARTED'}),
     get identity() { return actors; },

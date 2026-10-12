@@ -8,7 +8,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const [operation, ...flags] = process.argv.slice(2);
 if (!['typecheck', 'test', 'build'].includes(operation)) throw Error('Usage: packages.mjs typecheck|test|build [--foundation] [--unit]');
 // A fresh snapshot avoids stale source/tests when another order removes a file.
-const staging = path.join(root, 'runtime/.packages', `${operation}-${process.pid}`, 'Core');
+const staging = path.join(root, 'runtime/.packages', `${operation}-${process.pid}-${Date.now()}`, 'Core');
 const runtimeRequire = createRequire(new URL('./package.json', import.meta.url));
 const tooling = path.dirname(path.dirname(runtimeRequire.resolve('typescript/package.json')));
 const npmCli = process.env.npm_execpath;

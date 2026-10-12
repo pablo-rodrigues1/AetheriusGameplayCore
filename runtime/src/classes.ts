@@ -16,7 +16,7 @@ export class ClassSystem {
     const ctx=this.context,port=withDevelopmentLevel(levelingLevelPort,this.devLevel);
     if(['active','canary'].includes(ctx.mode))ctx.composition.register({id:'classes',read:async(tx,key)=>{
       if(!this.canCompose(key))return {revision:0,grants:[]};
-      const fact=await readClass(tx,key),level=await port.read(tx,key),revision=(fact?.revision??0)+level.revision;
+      const fact=await readClass(tx,key),actual=await port.read(tx,key),level={...actual,level:this.sweep?.level(key)??actual.level},revision=(fact?.revision??0)+level.revision;
       return {revision,grants:classGrants(this.data,ctx.catalog,fact,level.level,revision)};
     }});
     if(this.sweepEnabled){
@@ -24,7 +24,8 @@ export class ClassSystem {
         ctx.log.info('[classes] ERROR DEV sweep unavailable: classes, database and client delivery must be active');
       }else{
         const pool=ctx.persistence.pool;
-        this.sweep=new DevelopmentClassSweep({context:ctx,data:this.data,...this.sweepAttempts?{attempted:this.sweepAttempts}:{},
+        this.sweep=new DevelopmentClassSweep({context:ctx,data:this.data,settleInitial:()=>Promise.allSettled([...this.tails]).then(()=>{}),...this.sweepAttempts?{attempted:this.sweepAttempts}:{},
+          readLevel:binding=>withTransaction(scopedPool(pool,this.schema,()=>this.check(binding)),async tx=>(await port.read(tx,binding.characterKey)).level),
           readOriginal:binding=>withTransaction(scopedPool(pool,this.schema,()=>this.check(binding)),async tx=>(await readClass(tx,binding.characterKey))?.classId),
           change:async(binding,classId,requestId,detached)=>{
             const commands=createClassCommands(scopedPool(pool,this.schema,detached?undefined:()=>this.check(binding)),this.data);
@@ -44,6 +45,7 @@ export class ClassSystem {
   private check(binding:SessionBinding){if(this.context.signal.aborted||!this.context.canMutate(binding))throw Error('MODE_OR_STALE_BINDING');}
   private track(task:Promise<unknown>){this.tails.add(task);void task.finally(()=>this.tails.delete(task)).catch(()=>{});}
   async refresh(binding:SessionBinding){
+    if(this.sweep?.active(binding.characterKey))await this.sweep.idle(binding.characterKey);
     try{const set=await this.context.composition.inspect(binding);
       const available=this.context.projection.capability().perks.status==='SUPPORTED';
       const projection=available&&this.context.canMutate(binding)?await this.context.composition.recompose(binding):undefined;

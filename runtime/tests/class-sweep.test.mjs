@@ -10,6 +10,7 @@ import {officialHost} from './official-host.mjs';
 import {logger} from './host.mjs';
 import {developmentEnv} from './development-env.mjs';
 import {client} from './perk-client.mjs';
+import {xpInput} from './xp-event.mjs';
 import {perksPerClass} from '../../tools/catalog/perks-per-class.mjs';
 // Client executes gameplayGrantService.ts itself, using SP's void add/remove
 // and boolean HasPerk. Wire ACK: receivePerks/apply/update in that file;
@@ -18,30 +19,47 @@ const {Pool}=createRequire(import.meta.url)('pg'),url=new URL(process.env.AETHER
 assert(['localhost','127.0.0.1','[::1]'].includes(url.hostname)&&url.pathname==='/aetherius_test','Only local aetherius_test');
 const schema='gc_c3b_sweep_'+randomBytes(8).toString('hex');
 const pool=new Pool({connectionString:process.env.AETHERIUS_TEST_DATABASE_URL,max:8,connectionTimeoutMillis:2000,options:'-c search_path='+schema+',pg_catalog'});
-const data=load('catalog/classes.json'),runtimes=[];let profile=993000;
+const data=load('catalog/classes.json'),runtimes=[];
+const milestones=[...data.classes].sort((a,b)=>a.id.localeCompare(b.id,'en')).flatMap(c=>[...c.stages].sort((a,b)=>a.level-b.level).map(s=>({classId:c.id,level:s.level,stage:s})));
+const total=milestones.length,stepLines=f=>f.log.messages.filter(l=>/DEV sweep \d+\/\d+ /.test(l));
+const expected=(id,level)=>new Set(data.classes.find(c=>c.id===id).stages.filter(s=>s.level<=level).flatMap(s=>s.perks.filter(p=>p.status==='SUPPORTED').map(p=>p.stableFormKey)));
+let profile=993000;
 before(async()=>{await pool.query('CREATE SCHEMA "'+schema+'"');await utils.applyMigrations(pool,[...await utils.readMigrations(root+'/database/migrations'),perkMigration],schema);});
 after(async()=>{await Promise.all(runtimes.map(c=>c.shutdown()));await pool.query('DROP SCHEMA "'+schema+'" CASCADE');await pool.end();});
 async function until(fn,timeout=15000){const end=performance.now()+timeout;while(!(await fn())){if(performance.now()>end)throw Error('C3b condition timeout');await delay(5);}}
-async function fixture({enabled=true,env={},original='viper',intercept}={}){
+async function fixture({enabled=true,env={},original='viper',intercept,extraPerk=false,seedProgress=false}={}){
   const mp=classHost({catalogAvailable:true,offlineMode:true}),log=logger(),c=client(),packets=[],acks=[],callsAtAck=[],atSend=new Map();
   mp.profiles.set(91,++profile);mp.appearances.set(91,{raceId:mp.ids.get('skyrim.esm|013746')});
   mp.getUserActor=user=>[...mp.users].find(([actor,u])=>u===user&&mp.online.includes(actor))?.[0]??0;
   const official=officialHost(mp);official.authenticate(91);
   let f,automatic=true,outstanding=false;
-  mp.sendCustomPacket=(user,raw)=>{assert.equal(user,0);const p=JSON.parse(raw);packets.push(p);if(['hello','challenge'].includes(p.type))outstanding=false;
+  mp.sendCustomPacket=(user,raw)=>{try{assert.equal(user,0);const p=JSON.parse(raw);packets.push(p);if(['hello','challenge'].includes(p.type))outstanding=false;
     if(p.type==='perks'){atSend.set(p.id,{calls:c.calls.length,present:new Set(p.items.filter(i=>i.action==='ensure'&&c.forms.has(i.key)&&c.perks.has(c.forms.get(i.key).id)).map(i=>i.key))});if(enabled&&env.GAMEPLAY_CORE_DEV_CLASS_SWEEP!=='false')assert.equal(outstanding,false,'never two deliveries in flight');outstanding=true;intercept?.(p,packets.filter(p=>p.type==='perks').length,f);}
-    c.receive(p);};
+    c.receive(p);}catch(error){log.info('HARNESS_SEND_ERROR: '+error.message);throw error;}};
   c.emitter.on('sendMessage',e=>{const p=JSON.parse(e.message.contentJsonDump);
     if(p.type==='ack'){acks.push(p);callsAtAck.push(c.calls.length);const sent=atSend.get(p.id);for(const key of sent.present)assert(!c.calls.slice(sent.calls).some(call=>call[1]===key),'shared presence never triggers add/remove');outstanding=false;}
     if(automatic)mp.emitter.emit('customPacket',0,e.message.contentJsonDump);});
   for(const r of data.records)c.register({stableFormKey:r.stableFormKey});
   const barrier=c.spawn();
-  const core=api.createGameplayCore({mp,pg:{init:()=>pool},log,env:{...developmentEnv,GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_MODE_CLASSES:'active',GAMEPLAY_CORE_CLIENT_PERKS_MODE:'active',GAMEPLAY_CORE_DEV_CLASS_LEVEL:'40',...enabled?{GAMEPLAY_CORE_DEV_CLASS_SWEEP:'true'}:{},...env}});
+  const core=api.createGameplayCore({mp,pg:{init:()=>pool},log,env:{...developmentEnv,GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_MODE_CLASSES:'active',GAMEPLAY_CORE_CLIENT_PERKS_MODE:'active',GAMEPLAY_CORE_DEV_CLASS_LEVEL:'40',...extraPerk?{GAMEPLAY_CORE_MODE_SWEEP_EXTRA_TEST:'active'}:{},...enabled?{GAMEPLAY_CORE_DEV_CLASS_SWEEP:'true'}:{},...env}});
+  if(extraPerk)core.register({id:'sweep-extra-test',requiresDatabase:false,start(ctx){
+    ctx.composition.register({id:'sweep-extra-test',async read(tx,key){
+      const cls=(await tx.query('SELECT class_id FROM gc_character_class WHERE character_key=$1',[key])).rows[0]?.class_id;
+      if(packets.filter(p=>p.type==='perks').length!==1||cls!==data.classes[0].id)return {grants:[],revision:0};
+      const p=data.classes[0].stages.at(-1).perks[0];
+      return {grants:[{kind:'perk',rank:p.rank,source:{kind:'CLASS',key:cls},revision:0,
+        definition:{recordType:'PERK',stableFormKey:p.stableFormKey,catalogSignature:data.records.find(r=>r.stableFormKey===p.stableFormKey).signature}}],revision:0};
+    }});
+  }});
   runtimes.push(core);await core.initialize();const binding=core.identity.lookup({actorId:91}).value;
   f={mp,log,c,packets,acks,callsAtAck,core,binding,official,set automatic(v){automatic=v;},get automatic(){return automatic;},
     pump:()=>c.update(),ready:()=>{for(const task of ['spells','appearance','equipment','placement'])barrier.complete(task);},
     finish:async()=>{try{await until(()=>{c.update();return log.messages.some(l=>l.includes('DEV sweep done:'));});}catch(e){throw Error(e.message+'\n'+log.messages.join('\n')+'\nPackets: '+JSON.stringify(packets.filter(p=>p.type==='perks').map(p=>({id:p.id,revision:p.revision,keys:p.items.filter(i=>i.action==='ensure').map(i=>i.key)}))));}},
     currentClass:async()=>(await pool.query('SELECT class_id FROM gc_character_class WHERE character_key=$1',[binding.characterKey])).rows[0]?.class_id};
+  if(seedProgress){
+    const adapter=api.createDurableLeveling(pool,(await new utils.ConfigLoader(root+'/modules/leveling-system').load()).configs);
+    await adapter.award({characterKey:binding.characterKey,epoch:binding.epoch,...xpInput('sweep-seed')});
+  }
   if(original)assert.equal((await core.setCharacterClass({binding,classId:original,requestId:randomBytes(8).toString('hex')})).status,'SUPPORTED');
   return f;
 }
@@ -68,16 +86,16 @@ test('sweep flag false/empty outside development is explicitly refused, other sy
     assert(f.log.messages.some(m=>m.includes('ERROR')&&m.includes('GAMEPLAY_CORE_DEV_CLASS_SWEEP')));await f.core.shutdown();
   }
 });
-test('all 18 classes sequentially confirmed and original restored; shared perks already present; second session never repeats',async()=>{
-  const f=await fixture();f.ready();await f.finish();
+test('all catalog classes and milestones confirmed; original level restored; second session never repeats',async()=>{
+  let staff;const f=await fixture({env:{GAMEPLAY_CORE_DEV_CLASS_LEVEL:'17'},intercept(p,n,f){if(n===2)staff=f.core.setCharacterClass({binding:f.binding,classId:'guardiao',requestId:'staff-during-sweep'});}});f.ready();await f.finish();
+  assert.equal((await staff).reason,'DEV_SWEEP_IN_PROGRESS');
   console.log(f.log.messages.filter(l=>l.includes('DEV sweep ')).join('\n'));
-  const steps=f.log.messages.filter(l=>/DEV sweep \d+\/18/.test(l));assert.equal(steps.length,18);assert(steps.every(l=>l.endsWith('result=OK')));
-  const ids=[...data.classes].map(c=>c.id).sort();
-  steps.forEach((line,i)=>{const n=new Set(data.classes.find(c=>c.id===ids[i]).stages.flatMap(s=>s.perks.map(p=>p.stableFormKey))).size;
-    assert(line.includes((i+1)+'/18 '+ids[i]+': expected='+n+';'));});
-  assert.equal(await f.currentClass(),'viper');assert(f.log.messages.some(l=>l.includes('done: ok=18 fail=0; restored=viper; delivery=CONFIRMED')));
-  assert.equal(f.packets.filter(p=>p.type==='perks').length,20);
-  
+  const steps=stepLines(f);assert.equal(steps.length,total);assert(steps.every(l=>l.endsWith('result=OK')));
+  steps.forEach((line,i)=>{const m=milestones[i],n=expected(m.classId,m.level).size;
+    assert(line.includes((i+1)+'/'+total+' '+m.classId+'@'+m.level+': expected='+n+'; new='+new Set(m.stage.perks.map(p=>p.stableFormKey)).size+';'));});
+  assert.equal(await f.currentClass(),'viper');assert(f.log.messages.some(l=>l.includes('done: ok='+total+' fail=0; classes='+data.classes.length+'; milestones='+total+'; restored=viper; delivery=CONFIRMED')));
+  assert.equal(f.packets.filter(p=>p.type==='perks').length,total+2);
+  assert.deepEqual(new Set(f.packets.filter(p=>p.type==='perks').at(-1).items.filter(i=>i.action==='ensure').map(i=>i.key)),expected('viper',17));
   for(let n=1;n<f.acks.length;n++){
     const previous=new Set(f.acks[n-1].items.filter(i=>i.action==='ensure'&&!['FAILED','UNRESOLVED'].includes(i.status)).map(i=>i.key));
     const current=f.acks[n];
@@ -87,14 +105,14 @@ test('all 18 classes sequentially confirmed and original restored; shared perks 
   }
   assert(!f.log.messages.some(l=>/REVISION_CONTENT_CONFLICT|STALE_OR_INCOMPARABLE/.test(l)));
   const progress=await pool.query('SELECT * FROM gc_leveling_progress WHERE character_key=$1',[f.binding.characterKey]);assert.equal(progress.rows.length,0);
-  const commands=await pool.query('SELECT command_type FROM gc_commands WHERE character_key=$1',[f.binding.characterKey]);assert(commands.rows.every(r=>r.command_type==='classes.set'));
+  const commands=await pool.query('SELECT command_type FROM gc_commands WHERE character_key=$1',[f.binding.characterKey]);assert(commands.rows.every(r=>r.command_type==='classes.set'));assert.equal(commands.rows.length,data.classes.length+2,'one set per class plus seed and restoration');
   f.mp.online=[];f.mp.emitter.emit('disconnect',0);f.mp.online=[91];f.official.authenticate(91);f.core.identity.poll();
   const next=f.c.spawn();for(const task of ['spells','appearance','equipment','placement'])next.complete(task);
-  await until(()=>{f.pump();return f.acks.length>=21;});await delay(30);f.pump();assert.equal(f.log.messages.filter(l=>/DEV sweep \d+\/18/.test(l)).length,18);
+  await until(()=>{f.pump();return f.acks.length>=total+3;});await delay(30);f.pump();assert.equal(stepLines(f).length,total);
   await f.core.shutdown();
 });
 test('initial same class still obtains a fresh ACK',async()=>{
-  const f=await fixture({original:'anti_mago'});f.ready();await f.finish();
+  const f=await fixture({original:'anti_mago',env:{GAMEPLAY_CORE_DEV_CLASS_LEVEL:'1'}});f.ready();await f.finish();
   const initial=f.acks[0],step=f.acks[1];assert(step.revision.grants>initial.revision.grants);assert.notEqual(step.id,initial.id);
   assert(step.items.every(i=>i.status==='APPLIED'));assert.equal(f.callsAtAck[1],f.callsAtAck[0],'same class keeps present perks without readding');assert.equal(await f.currentClass(),'anti_mago');await f.core.shutdown();
 });
@@ -108,15 +126,16 @@ test('actual client UNRESOLVED/FAILED ACKs become FAIL and continue to the last 
   }});
   f.ready();await f.finish();assert(f.acks.some(p=>p.items.some(i=>i.status==='UNRESOLVED')));assert(f.acks.some(p=>p.items.some(i=>i.status==='FAILED')));
   assert(f.log.messages.some(l=>l.includes('FAIL(UNRESOLVED)')));assert(f.log.messages.some(l=>l.includes('FAIL(FAILED_ITEMS)')));
-  assert.equal(f.log.messages.filter(l=>/DEV sweep \d+\/18/.test(l)).length,18);assert.equal(await f.currentClass(),'viper');await f.core.shutdown();
+  assert.equal(stepLines(f).length,total);assert.equal(await f.currentClass(),'viper');await f.core.shutdown();
 });
 test('ACK timeout aborts and restores the durable class and its delivery',async()=>{
-  const f=await fixture({intercept(p,n,f){if(n===2)f.automatic=false;if(n===3)f.automatic=true;}});
-  f.ready();await f.finish();assert(f.log.messages.some(l=>l.includes('ABORTED step=1/18; reason=ACK_TIMEOUT')));
-  assert.equal(await f.currentClass(),'viper');assert(f.log.messages.some(l=>l.includes('restored=viper; delivery=CONFIRMED')));await f.core.shutdown();
+  const f=await fixture({env:{GAMEPLAY_CORE_DEV_CLASS_LEVEL:'17'},intercept(p,n,f){if(n===2)f.automatic=false;if(n===3)f.automatic=true;}});
+  f.ready();await f.finish();assert(f.log.messages.some(l=>l.includes('ABORTED step=1/'+total+'; reason=ACK_TIMEOUT')));
+  assert.equal(await f.currentClass(),'viper');assert(f.log.messages.some(l=>l.includes('restored=viper; delivery=CONFIRMED')));
+  assert.deepEqual(new Set((await f.core.inspectActor(f.binding)).grants.filter(g=>g.source.kind==='CLASS').map(g=>g.definition.stableFormKey)),expected('viper',17));await f.core.shutdown();
 });
 for(const action of ['leave','death','respawn','loading','shutdown'])test(action+' aborts with original class restored even with stale binding',async()=>{
-  const f=await fixture({intercept(p,n,f){if(n!==2)return;
+  const f=await fixture({env:{GAMEPLAY_CORE_DEV_CLASS_LEVEL:'17'},intercept(p,n,f){if(n!==2)return;
     f.automatic=false;
     if(action==='leave'){f.mp.online=[];f.mp.emitter.emit('disconnect',0);}
     if(action==='death')f.mp.onDeath(91,0);
@@ -127,7 +146,8 @@ for(const action of ['leave','death','respawn','loading','shutdown'])test(action
   if(action==='shutdown'){await until(()=>{f.pump();return f.packets.filter(p=>p.type==='perks').length>=2;});await f.core.shutdown();}
   else await f.finish();
   assert(f.log.messages.some(l=>l.includes('DEV sweep ABORTED')));assert.equal(await f.currentClass(),'viper');
-  assert.equal(f.log.messages.filter(l=>/DEV sweep \d+\/18/.test(l)).length,0);await f.core.shutdown();
+  assert.equal(stepLines(f).length,0);
+  if(!['leave','loading','shutdown'].includes(action))assert.deepEqual(new Set((await f.core.inspectActor(f.binding)).grants.filter(g=>g.source.kind==='CLASS').map(g=>g.definition.stableFormKey)),expected('viper',17));await f.core.shutdown();
 });
 test('ready during an aborted spawn waits for restoration before class composition',async()=>{
   let barrier;
@@ -161,4 +181,23 @@ test('Core reload on the same native host never repeats the sweep',async()=>{
   runtimes.push(next);await next.initialize();for(const task of ['spells','appearance','equipment','placement'])barrier.complete(task);
   await until(()=>{f.pump();return log.messages.some(l=>l.includes('perks ')&&l.includes('CONFIRMED'));});
   await delay(30);assert(!log.messages.some(l=>l.includes('DEV sweep ')));assert.equal(await f.currentClass(),'viper');await next.shutdown();
+});
+
+test('future class milestone perk confirmed by the real simulated client is FAIL and sweep continues',async()=>{
+  const f=await fixture({extraPerk:true});f.ready();await f.finish();
+  assert(f.log.messages.some(l=>l.includes('1/'+total+' '+milestones[0].classId+'@'+milestones[0].level)&&l.endsWith('FAIL(UNEXPECTED_CLASS_PERK)')));
+  assert.equal(stepLines(f).length,total);assert.equal(await f.currentClass(),'viper');await f.core.shutdown();
+});
+test('missing milestone perk produces FAIL, recovery continues, sweep cannot overwrite existing leveling progress',async()=>{
+  const f=await fixture({seedProgress:true,intercept(p,n,f){
+    if(n===2)f.c.blockAdd();
+    if(n===3)f.c.sp.Game.getPlayer().addPerk=perk=>{f.c.calls.push(['add',perk.key]);f.c.perks.add(perk.id);};
+  }});
+  const before=(await pool.query('SELECT * FROM gc_leveling_progress WHERE character_key=$1',[f.binding.characterKey])).rows;
+  f.ready();await f.finish();
+  const first=f.acks[1],wanted=expected(milestones[0].classId,milestones[0].level);
+  assert([...wanted].some(k=>!first.items.some(i=>i.key===k&&i.action==='ensure'&&['APPLIED','ALREADY_PRESENT'].includes(i.status))));
+  assert(stepLines(f)[0]?.includes('result=FAIL('),f.log.messages.join('\n'));assert.equal(stepLines(f).length,total);
+  assert.deepEqual((await pool.query('SELECT * FROM gc_leveling_progress WHERE character_key=$1',[f.binding.characterKey])).rows,before);
+  assert.equal(await f.currentClass(),'viper');await f.core.shutdown();
 });

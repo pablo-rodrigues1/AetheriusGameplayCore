@@ -107,8 +107,8 @@ test('D-P1: viper DEV40 reenters on ready, class switch clears bonus, stale epoc
   assert.equal(f.mp.poisonDoses.length,n);await f.core.shutdown();assert.equal(f.mp.poisonDoses.at(-1).value,0);
 });
 test('XP level up appends milestones on fresh composition, preserves class on process rehydration',async t=>{
-  const f=await setup(t);await f.set('elementalista');const before=await f.core.inspectActor(f.binding),adapter=coreApi.createDurableLeveling(pool,configs);
-  for(let i=0;i<4;i++)await award(adapter,f.binding.characterKey,`milestone-${i}`);
+  const f=await setup(t);await f.set('elementalista');const before=await f.core.inspectActor(f.binding);
+  for(let i=0;i<4;i++)await f.core.awardLevelingXp({characterKey:f.binding.characterKey,epoch:f.binding.epoch,eventName:'aetherius.enemy.killed.v1',event:event(`milestone-${i}`),recipientId:91,partySnapshot:party});
   const state=await progress(f.binding.characterKey),next=await f.core.inspectActor(f.binding);assert(state.character_level>=5);assert(next.grants.length>before.grants.length);assert.equal(api.diff(before,next).removed.length,0);
   await f.set('guardiao');assert.deepEqual(await progress(f.binding.characterKey),state);assert.equal(f.mp.mutations().length,0);
 });

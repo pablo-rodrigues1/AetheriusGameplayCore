@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { SessionBinding, GrantProjectionAck } from '../../shared/contracts/src/index.ts';
+import type { SessionBinding, GrantProjectionAck, StableFormKey } from '../../shared/contracts/src/index.ts';
 import type { DomainData } from '../../shared/record-catalog/src/types.ts';
 import type { SystemContext } from './index.ts';
 import type { ProjectionItem } from './projection/index.ts';
@@ -15,10 +15,12 @@ export function developmentClassSweep(env: CoreEnvironment, level: number | unde
   if (deliveryMode !== 'active') throw Error('DEV_CLASS_SWEEP_REQUIRES_ACTIVE_CLIENT_PERKS');
   return true;
 }
-interface Run { binding: SessionBinding; controller: AbortController; step: string; reason?: string }
+interface Run { binding: SessionBinding; controller: AbortController; step: string; level?: number; initial: Promise<void>; reason?: string }
 interface Options {
   context: SystemContext; data: DomainData;
+  settleInitial(): Promise<void>;
   readOriginal(binding: SessionBinding): Promise<string | undefined>;
+  readLevel(binding: SessionBinding): Promise<number>;
   /** Always classes.set. Detached is exclusively for restoration after invalidation. */
   change(binding: SessionBinding, classId: string, requestId: string, detached: boolean): Promise<void>;
   timeoutMs?: number;
@@ -40,7 +42,10 @@ export class DevelopmentClassSweep {
       if (ack.status !== 'applied' || ctx.projection.perkStatus(ack.binding).state !== 'CONFIRMED'
         || !ctx.canMutate(ack.binding) || this.attempted.has(ack.binding.characterKey)) return;
       this.attempted.add(ack.binding.characterKey);
-      const run: Run = {binding:ack.binding, controller:new AbortController(), step:'0'};
+      // Snapshot existing ready work before marking the sweep active; later ready
+      // work waits for restoration and must not be included in this barrier.
+      const initial = this.options.settleInitial();
+      const run: Run = {binding:ack.binding, controller:new AbortController(), step:'0', initial};
       this.runs.set(ack.binding.characterKey,run);
       // Let the initial ACK complete its logging before issuing another command.
       const task = Promise.resolve().then(() => this.execute(run));
@@ -62,13 +67,14 @@ export class DevelopmentClassSweep {
     this.stops.push(() => ctx.signal.removeEventListener('abort',shutdown));
   }
   active(key: string) { return this.runs.has(key); }
+  level(key: string) { return this.runs.get(key)?.level; }
   async idle(key: string) { await this.tasks.get(key); }
   private log(message: string) { this.options.context.log.info('[classes] DEV sweep ' + message); }
   private check(run: Run) {
     if (run.controller.signal.aborted) throw Error(run.reason ?? 'ABORTED');
     if (!this.options.context.canMutate(run.binding)) throw Error('STALE_BINDING');
   }
-  private async deliver(run: Run, classId: string) {
+  private async deliver(run: Run, classId: string, level: number) {
     const ctx = this.options.context, binding = run.binding;
     this.check(run);
     const received: {ack:GrantProjectionAck; items:readonly ProjectionItem[]}[] = [];
@@ -82,7 +88,14 @@ export class DevelopmentClassSweep {
     const cancelled = () => rejectWait?.(Error(run.reason ?? 'ABORTED'));
     try {
       const set = await ctx.composition.inspect(binding); this.check(run);
-      const wanted = new Set(set.grants.filter(g => g.kind === 'perk' && g.source.kind === 'CLASS' && g.source.key === classId)
+      // Expected entitlement comes directly from stages, independently of classGrants.
+      const definition = this.options.data.classes?.find(c => c.id === classId);
+      if (!definition) throw Error('CLASS_UNKNOWN');
+      const wanted = new Set<StableFormKey>(definition.stages.filter(s => s.level <= level)
+        .flatMap(s => s.perks.filter(p => p.status === 'SUPPORTED').map(p => p.stableFormKey!)));
+      const newPerks = new Set(definition.stages.filter(s => s.level === level)
+        .flatMap(s => s.perks.filter(p => p.status === 'SUPPORTED').map(p => p.stableFormKey!)));
+      const declared = new Set(set.grants.filter(g => g.kind === 'perk' && g.source.kind === 'CLASS')
         .map(g => g.definition.stableFormKey));
       const result = await ctx.composition.recompose(binding,true); this.check(run);
       if (result.status !== 'SUPPORTED' || ['FAILED','REJECTED','PENDING'].includes(result.value.state)) throw Error('PROJECTION_UNAVAILABLE');
@@ -97,50 +110,66 @@ export class DevelopmentClassSweep {
       });
       this.check(run);
       const items = report.items, count = (status: string) => items.filter(i => i.status === status).length;
-      const ensure = items.filter(i => wanted.has(i.definition.stableFormKey) && ['APPLIED_CLIENT','ALREADY_PRESENT'].includes(i.status));
+      const ensure = items.filter(i => declared.has(i.definition.stableFormKey) && ['APPLIED_CLIENT','ALREADY_PRESENT'].includes(i.status));
+      const present = new Set(ensure.map(i => i.definition.stableFormKey));
       const applied = ensure.filter(i => i.status === 'APPLIED_CLIENT').length, alreadyPresent = ensure.filter(i => i.status === 'ALREADY_PRESENT').length;
       const unresolved = count('UNSUPPORTED'), failed = count('FAILED'), removed = count('REMOVED_CLIENT'), alreadyAbsent = count('ALREADY_ABSENT');
-      const ok = report.ack.status === 'applied' && unresolved === 0 && failed === 0 && applied + alreadyPresent === wanted.size;
-      const reason = unresolved ? 'UNRESOLVED' : failed ? 'FAILED_ITEMS' : applied + alreadyPresent !== wanted.size ? 'EXPECTED_COUNT_MISMATCH' : 'DELIVERY_PARTIAL';
-      this.log(run.step + ' ' + classId + ': expected=' + wanted.size + '; applied=' + applied + '; alreadyPresent=' + alreadyPresent
-        + '; unresolved=' + unresolved + '; failed=' + failed + '; removed=' + removed + '; alreadyAbsent=' + alreadyAbsent + '; result=' + (ok ? 'OK' : 'FAIL(' + reason + ')'));
+      const extra = [...declared, ...present].some(key => !wanted.has(key));
+      const missing = [...wanted].some(key => !present.has(key));
+      const ok = report.ack.status === 'applied' && unresolved === 0 && failed === 0 && !extra && !missing;
+      const reason = unresolved ? 'UNRESOLVED' : failed ? 'FAILED_ITEMS' : extra ? 'UNEXPECTED_CLASS_PERK'
+        : missing ? 'MISSING_CLASS_PERK' : 'DELIVERY_PARTIAL';
+      this.log(run.step + ' ' + classId + '@' + level + ': expected=' + wanted.size + '; new=' + newPerks.size
+        + '; applied=' + applied + '; alreadyPresent=' + alreadyPresent + '; unresolved=' + unresolved + '; failed=' + failed
+        + '; removed=' + removed + '; alreadyAbsent=' + alreadyAbsent + '; result=' + (ok ? 'OK' : 'FAIL(' + reason + ')'));
       return ok;
     } finally { stop(); clearTimeout(timer); run.controller.signal.removeEventListener('abort',cancelled); }
   }
   private async execute(run: Run) {
     const {binding} = run;
-    let original: string | undefined, changed = false, ok = 0, fail = 0, restored = 'NONE', restorationDelivery = 'NOT_SENT';
+    let original: string | undefined, originalLevel = 0, changed = false, ok = 0, fail = 0, restored = 'NONE', restorationDelivery = 'NOT_SENT';
     try {
-      this.check(run); original = await this.options.readOriginal(binding); this.check(run);
+      await run.initial; this.check(run); original = await this.options.readOriginal(binding); this.check(run);
       // No classes.unset command exists. Never invent one or write domain SQL.
       if (!original) throw Error('ORIGINAL_CLASS_REQUIRED');
-      const ids = [...this.options.data.classes ?? []].map(c => c.id).sort();
-      for (let i = 0; i < ids.length; i++) {
-        run.step = (i+1) + '/' + ids.length;
-        this.check(run); changed = true;
-        await this.options.change(binding,ids[i]!,randomUUID(),false); this.check(run);
-        if (await this.deliver(run,ids[i]!)) ok++; else fail++;
+      originalLevel = await this.options.readLevel(binding); this.check(run);
+      const classes = [...this.options.data.classes ?? []].sort((a,b) => a.id.localeCompare(b.id,'en'));
+      const total = classes.reduce((n,c) => n + c.stages.length,0);
+      let step = 0;
+      for (const cls of classes) {
+        const stages = [...cls.stages].sort((a,b) => a.level-b.level);
+        for (let i = 0; i < stages.length; i++) {
+          run.step = (++step) + '/' + total;
+          this.check(run); run.level = stages[i]!.level;
+          if (i === 0) {
+            changed = true;
+            await this.options.change(binding,cls.id,randomUUID(),false); this.check(run);
+          }
+          if (await this.deliver(run,cls.id,run.level)) ok++; else fail++;
+        }
       }
     } catch (error) {
       run.reason ??= (error as Error).message;
       this.log('ABORTED step=' + run.step + '; reason=' + run.reason);
     } finally {
+      // Drop the transient read override before restoring any domain fact/delivery.
+      delete run.level;
       if (original && changed) {
         try {
           // Restoration deliberately does not require a live actor/epoch.
           await this.options.change(binding,original,randomUUID(),true); restored = original;
           if ((!run.reason || run.reason === 'ACK_TIMEOUT') && this.options.context.canMutate(binding)) {
-            const restoration: Run = {binding,step:'restore',controller:new AbortController()};
+            const restoration: Run = {binding,step:'restore',controller:new AbortController(),initial:Promise.resolve()};
             // The live run now points at the restoration wait, so disconnects
             // during its ACK cannot leave a hanging wait or start a new sweep.
             this.runs.set(binding.characterKey,restoration);
-            try { restorationDelivery = await this.deliver(restoration,original) ? 'CONFIRMED' : 'FAIL'; }
+            try { restorationDelivery = await this.deliver(restoration,original,originalLevel) ? 'CONFIRMED' : 'FAIL'; }
             catch (error) { restorationDelivery = (error as Error).message; this.log('ABORTED step=restore; reason=' + restorationDelivery); }
           }
         } catch { restored = 'FAILED'; this.log('ERROR RESTORE_FAILED; original=' + original + '; staff must retry classes.set'); }
       } else if (original) restored = original;
       this.runs.delete(binding.characterKey);
-      this.log('done: ok=' + ok + ' fail=' + fail + '; restored=' + restored + '; delivery=' + restorationDelivery);
+      this.log('done: ok=' + ok + ' fail=' + fail + '; classes=' + (this.options.data.classes?.length ?? 0) + '; milestones=' + (this.options.data.classes ?? []).reduce((n,c) => n+c.stages.length,0) + '; restored=' + restored + '; delivery=' + restorationDelivery);
     }
   }
   async shutdown() {

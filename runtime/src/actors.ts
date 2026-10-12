@@ -100,6 +100,9 @@ export class Actors implements IdentityPort {
     return binding && this.isCurrent(binding) ? { status: 'SUPPORTED' as const, value: binding }
       : { status: 'UNSUPPORTED' as const, reason: 'No live authenticated profile binding (official session required when available; old offline hosts require development opt-in)' };
   }
+  forCharacter(key: CharacterKey): SessionBinding | undefined {
+    return [...this.bindings.values()].find(binding => binding.characterKey === key && this.isCurrent(binding));
+  }
   isCurrent(binding: SessionBinding): boolean {
     const live = this.bindings.get(binding.actorRef.actorId);
     const auth = this.authentication(binding.actorRef.actorId);

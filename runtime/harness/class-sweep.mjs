@@ -26,6 +26,7 @@ const {ScampServer}=require(addon),server=new ScampServer(JSON.stringify(setting
 const schema='gc_c3b_native_'+randomBytes(8).toString('hex');
 const pool=new Pool({connectionString:process.env.AETHERIUS_TEST_DATABASE_URL,max:8,options:'-c search_path='+schema+',pg_catalog'});
 const data=load('catalog/classes.json'),packets=[],c=client(),log=[];
+const total=data.classes.reduce((n,c)=>n+c.stages.length,0),originalLevel=17;
 const {createGameplayCore,createClassCommands}=require(path.join(root,'dist/aetherius-gameplay-core.cjs'));
 let core,ticker,actor,bot;
 try{
@@ -48,19 +49,23 @@ try{
   core=createGameplayCore({mp,pg:{init:()=>pool},log:{info:m=>{log.push(m);console.log(m);}},env:{
     NODE_ENV:'local',GAMEPLAY_CORE_ALLOW_DEV_OPTIONS:'true',GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY:'true',
     GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_MODE_CLASSES:'active',
-    GAMEPLAY_CORE_CLIENT_PERKS_MODE:'active',GAMEPLAY_CORE_DEV_CLASS_LEVEL:'40',GAMEPLAY_CORE_DEV_CLASS_SWEEP:'true'
+    GAMEPLAY_CORE_CLIENT_PERKS_MODE:'active',GAMEPLAY_CORE_DEV_CLASS_LEVEL:String(originalLevel),GAMEPLAY_CORE_DEV_CLASS_SWEEP:'true'
   }});
   ticker=setInterval(()=>{for(const message of outgoing.splice(0))bot.send(message);server.tick();c.update();},5);
   await core.initialize();assert.equal(core.capabilityReport().systems.find(s=>s.id==='classes').status,'SUPPORTED');
   for(const task of ['spells','appearance','equipment','placement'])barrier.complete(task);
-  const deadline=performance.now()+30000;
+  const deadline=performance.now()+(total+2)*10000;
   while(!log.some(l=>l.includes('DEV sweep done:'))){assert(performance.now()<deadline,'Native sweep timed out');await delay(10);}
-  const steps=log.filter(l=>/DEV sweep \d+\/18/.test(l));assert.equal(steps.length,18);assert(steps.every(l=>l.endsWith('result=OK')));
-  assert(log.some(l=>l.includes('done: ok=18 fail=0; restored=viper; delivery=CONFIRMED')));
+  const steps=log.filter(l=>/DEV sweep \d+\/\d+ /.test(l));assert.equal(steps.length,total);assert(steps.every(l=>l.endsWith('result=OK')));
+  assert(log.some(l=>l.includes('done: ok='+total+' fail=0; classes='+data.classes.length+'; milestones='+total+'; restored=viper; delivery=CONFIRMED')));
   assert.equal((await pool.query('SELECT class_id FROM gc_character_class WHERE character_key=$1',['profile:991003'])).rows[0].class_id,'viper');
-  assert.equal(packets.filter(p=>p.type==='perks').length,20);
-  console.log('PASS C3b compiled host: 18 domain changes, native bot ACK bridge, restore confirmed. Harness client evidence; no Skyrim effect certification.');
-}catch(error){console.error('FAIL C3b native harness: '+(error.code??error.name)+' '+String(error.message).slice(0,600));try{console.error(JSON.stringify(core?.capabilityReport().systems.map(s=>[s.id,s.status,s.reason])));}catch{}process.exitCode=1;}
+  assert.equal(packets.filter(p=>p.type==='perks').length,total+2);
+  const wanted=new Set(data.classes.find(c=>c.id==='viper').stages.filter(s=>s.level<=originalLevel).flatMap(s=>s.perks.map(p=>p.stableFormKey)));
+  assert.deepEqual(new Set(packets.filter(p=>p.type==='perks').at(-1).items.filter(i=>i.action==='ensure').map(i=>i.key)),wanted);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM gc_leveling_progress')).rows[0].n,0);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM gc_commands')).rows[0].n,data.classes.length+2);
+  console.log('PASS C3c compiled host: '+total+' milestones; '+data.classes.length+' class commands; native bot ACK bridge; original level '+originalLevel+' restored. Harness client evidence; no Skyrim effect certification.');
+}catch(error){console.error('FAIL C3c native harness: '+(error.code??error.name)+' '+String(error.message).slice(0,600));try{console.error(JSON.stringify(core?.capabilityReport().systems.map(s=>[s.id,s.status,s.reason])));}catch{}process.exitCode=1;}
 finally{
   clearInterval(ticker);await core?.shutdown();
   await pool.query('DROP SCHEMA IF EXISTS "'+schema+'" CASCADE');await pool.end();

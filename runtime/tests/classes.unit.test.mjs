@@ -30,3 +30,16 @@ test('DEV decorates only a read; removal returns real leveling state',async()=>{
   assert.deepEqual(await withDevelopmentLevel(port,undefined).read(null,'profile:1'),actual);
 });
 import { developmentEnv } from './development-env.mjs';
+
+test('every class at every level 1..40 exactly matches independent catalog accumulation including source and rank',()=>{
+  let checks=0;
+  for(const cls of data.classes)for(let level=1;level<=40;level++){
+    const wanted=new Map();for(const s of [...cls.stages].sort((a,b)=>a.level-b.level))if(s.level<=level)
+      for(const p of s.perks)if(p.status==='SUPPORTED')wanted.set(p.stableFormKey,p.rank);
+    const grants=classGrants(data,catalog,{classId:cls.id,revision:7},level);
+    assert.deepEqual(grants.map(g=>({key:g.definition.stableFormKey,rank:g.rank,source:g.source,revision:g.revision})),
+      [...wanted].sort(([a],[b])=>a.localeCompare(b,'en')).map(([key,rank])=>({key,rank,source:{kind:'CLASS',key:cls.id},revision:7})),cls.id+'@'+level);
+    checks++;
+  }
+  console.log('C3c pure catalog comparisons='+checks+'; classes='+data.classes.length);
+});
