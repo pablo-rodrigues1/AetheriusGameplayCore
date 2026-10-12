@@ -409,6 +409,8 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 
 ## 9. O que foi feito no ambiente local, como referência
 
+**C3b-varredura, ativação local (12/10/2026, revisor):** `GAMEPLAY_CORE_DEV_CLASS_SWEEP=true` acrescentada ao `gamemode.env` do servidor local (cópia anterior em `_workackupsgamemode.env.before-class-sweep-20261012`); boot conferido, opção aceita. `aetheriusCombat.weaponPoison` voltou a `false` e o cliente instalado voltou ao build da B5b, por decisão do dono do projeto de suspender o veneno. Harness com o servidor compilado: 18 de 18 classes `OK`. Para desfazer: apagar a linha da opção. **Não levar ao servidor oficial.**
+
 **C3b-varredura (12/10/2026):** opção, testes, harness e tabela preparados no Core. Nenhum `.env` ou setting alterado; servidor/cliente não recompilados, iniciados ou interrompidos; nenhuma porta aberta. Veneno continua suspenso, e seus arquivos não foram alterados. PostgreSQL somente `aetherius_test`. A ativação local e a sessão em jogo são do revisor/dono. Desfazer a futura ativação removendo `GAMEPLAY_CORE_DEV_CLASS_SWEEP` e recarregando o Core depois da restauração. O catálogo real tem 350 entradas; o item de 351 da ordem não foi satisfeito.
 
 **D-P1-fix3 (10/10/2026):** cliente compilado somente em evidência, com deploy/zip
