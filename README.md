@@ -12,21 +12,44 @@ A política transversal de configuração e balanceamento está em [docs/archite
 
 O planejamento holístico de 02/10/2026 permanece como auditoria histórica e pacote de evidências. Quando houver conflito de regra arquitetural, prevalece a arquitetura canônica. Em particular, `aetherius-server` e `aetherius-client` podem receber alterações controladas para expor Host APIs públicas, mínimas e versionadas; a lógica de gameplay permanece no GameplayCore.
 
-## Estado atual da integração UI
+## Classes, perks e atributos — estado em 13/10/2026
 
-O ClassSystem integra CLASSE/GRUPO ao AetheriusUI_Core em modo de consulta, com persistência protegida e SDK compartilhado. Ações dependentes de CombatProfile, grants e transações de grupo permanecem bloqueadas.
+O fluxo **autoritativo de progressão de classes** evoluiu desde a baseline inicial da UI. O código ativo dessa evolução está em `modules/class-progression-system/`, `runtime/src/classes.ts`, `runtime/src/attribute-system.ts` e na composição/projeção compartilhada do GameplayCore. O `modules/class-system/` preserva a implementação anterior de classes, grupos/raids e apresentação Meridian; **não deve ser confundido com o único writer atual de classe, XP ou atributos**.
 
-Consulte [estado atual](docs/ui-integration/CURRENT_STATE.md) e [implementação restante](docs/ui-integration/REMAINING_IMPLEMENTATION.md). As alterações pertinentes de aetherius-server, aetherius-client e MeridianUI estão preservadas neste repositório em [integrations/ui-runtime-changes](integrations/ui-runtime-changes/README.md), com uma cópia idêntica no UI Core. São patches/fontes sobre baselines exatas, não repositórios externos aninhados.
+### Escolha, níveis e marcos de classe (C3a–C3c)
 
-Build do ClassSystem aprovado; testes atuais: 49/55, com seis falhas preexistentes explicitadas nos documentos. A integração não habilita autoridade de gameplay no cliente.
+- Catálogo em [`catalog/classes.json`](catalog/classes.json): **18 classes**, com **9 marcos por classe** (níveis 1, 5, 10, 15, 20, 25, 30, 35 e 40), totalizando **162 marcos e 350 entradas de perks**. [Tabela de perks por classe](docs/classes/PERKS_POR_CLASSE.md), regenerável por `node tools/catalog/perks-per-class.mjs`.
+- A escolha é persistida pelo comando idempotente `classes.set` em `gc_character_class`; `LevelingSystem` permanece o **único owner de XP, nível e fadiga**, com progresso em `gc_leveling_progress` e recibos no ledger `gc_commands`. Classe compõe grants de origem `CLASS` para os marcos alcançados, sem conceder ranks extras nem pressupor que as conditions nativas tenham sido satisfeitas.
+- A entrada interna `core.awardLevelingXp(input)` pode solicitar a atualização dos perks quando um XP autoritativo muda o nível **após o commit**. **Ainda falta conectar uma fonte confiável de XP por abates**; não se deve aceitar relatos de morte provenientes da interface.
+- A varredura **C3b/C3c** de todas as classes e marcos é um mecanismo **exclusivo de desenvolvimento**, dependente de sessão/entrega confirmadas e de opções DEV explicitamente autorizadas. Não se destina ao servidor oficial e recusa personagens com progresso ou pontos gastos que seriam zerados.
+
+### Entrega de perks ao jogador (B5b e correções)
+
+- O servidor compõe as concessões por fonte; a projeção envia ao cliente, por **CustomPacket**, apenas o conjunto necessário e exige ACK associado à sessão e à revisão. O estado durável de autoria/entrega está em `gc_perk_projections` (migration 0008). Perks preexistentes ou atribuídos por outras fontes não devem ser removidos arbitrariamente.
+- A fila de `PerkDelivery` limita a **uma entrega em andamento por personagem/ciclo**. Uma revisão posterior aguarda o ACK/COMMIT da anterior; timeout ou envio isolado **não equivalem a confirmação**. Consulte [contrato da fila](runtime/src/projection/DELIVERY.md).
+- A varredura foi **revalidada em jogo no servidor local em 12/10/2026**, com 162/162 passos `OK`, restauração `OK` e entrega `CONFIRMED`, conforme o [guia de integração](integrations/INSTALL.md). Isso confirma a **entrega de perks**, não a execução de seus efeitos, fórmulas ou condições pelo motor do jogo.
+
+### Pontos de atributo (C3d)
+
+- Ganho de **15 pontos por nível após o primeiro**: `15 × (nível − 1)`, até **585 no nível 40**. Distribuição em **vida, magia e vigor**, por incrementos inteiros não negativos, **múltiplos de 5** e soma positiva; cada ponto acrescenta **1** ao máximo correspondente.
+- O comando `attributes.allocate` persiste os gastos em `gc_attribute_allocation` (migration 0009); o saldo é derivado do nível, nunca confiado ao cliente. A escrita é idempotente, serializada por personagem e rejeita gastos inválidos ou acima do disponível.
+- **Troca efetiva de classe zera XP, nível e distribuição de pontos na mesma transação**; escolher novamente a mesma classe não zera. Fadiga, ciclo e limite diário são preservados. Esta regra **substitui** a descrição histórica C3a que preservava o progresso ao trocar de classe.
+- O bônus normal de máximos usa a propriedade nativa `aetheriusAttributeBonuses` do host (records + pontos gastos), com reidratação em reconexão/prontidão. Sem suporte do host, a capacidade responde `UNSUPPORTED` em vez de simular máximos. A tela utiliza os contratos `core.attributeState(binding)` e `core.allocateAttributes(...)`; **a tela e os três máximos ainda carecem de homologação no servidor oficial**. Consulte o [contrato C3d](docs/classes/ATRIBUTOS_C3d.md).
+
+### Integração e estado de implantação
+
+O pacote instalável atual é descrito em [`integrations/INSTALL.md`](integrations/INSTALL.md), com [patch/fontes do host](integrations/host/LEIA-ME.md), [integração do cliente](integrations/client/LEIA-ME.md) e [ativação, migrations e configuração](docs/operations/ATIVACAO_DOS_SISTEMAS.md). A integração de ponta a ponta **não foi executada no servidor oficial**; não confundir implementação, testes e validação local com implantação de produção.
+
+A integração Meridian/CEF da UI de **CLASSE/GRUPO** verificada em 04/10/2026 foi inicialmente de **consulta**, com mutações bloqueadas pelas capabilities então ausentes. Esse é um **registro histórico** em [estado da integração UI](docs/ui-integration/CURRENT_STATE.md) e [pendências dessa etapa](docs/ui-integration/REMAINING_IMPLEMENTATION.md), não a fotografia das APIs C3a–C3d. O resultado de 49/55 testes refere-se àquela baseline anterior e **não deve ser apresentado como resultado atual de toda a suíte**. As alterações externas de UI permanecem em [`integrations/ui-runtime-changes`](integrations/ui-runtime-changes/README.md); o [guia de compilação das DLLs e UI](docs/ui-integration/BUILD_AND_DLLS.md) documenta essa integração.
 
 ## Módulos
 
 O [guia completo de compilação das DLLs e integração UI](docs/ui-integration/BUILD_AND_DLLS.md) documenta o bridge CommonLibSSE-NG, Meridian/CEF, addon nativo do servidor, ClassSystem, empacotamento e validação. A mesma referência está preservada no UI Core; os caches locais e a reprodução em máquina limpa estão explicitamente diferenciados.
 
-- `modules/class-system/` — progressão de classes, skills, perks, grupos/raids e projeções associadas.
+- `modules/class-system/` — baseline anterior de classes, grupos/raids e integração de UI Meridian; mantida como referência de migração.
+- `modules/class-progression-system/` — escolha de classe e perks por marco, com persistência durável e distribuição autoritativa de pontos C3d.
 - `modules/damage-system/` — combate autoritativo, dano físico/mágico, perks, efeitos e estado de combate.
-- `modules/actor-state-system/` — compositor autoritativo de facts/grants/projeções do ator; ainda em implementação, sem criar um segundo combat/effects store.
+- `modules/actor-state-system/` — composição autoritativa de facts/grants por origem, integrada à projeção; não cria um segundo combat/effects store.
 - `modules/enemy-system/` — descoberta/classificação de inimigos, dungeons, encounter data e integrações.
 - `modules/leveling-system/` — XP, progressão global, fadiga, party XP e integração com inimigos.
 - `modules/durability-system/` — manutenção/durabilidade, materiais, persistência e integração SkyMP.
@@ -171,7 +194,7 @@ A referência canônica é [AETHERIUS_BALANCE_CONFIGURATION_POLICY.md](docs/arch
 
 A importação inicial é **lossless**: os cinco repositórios existentes foram copiados para módulos próprios com conteúdo e modos Git idênticos aos snapshots de origem. Nenhuma deduplicação ou refatoração funcional foi feita durante o transporte.
 
-O `ActorStateSystem` ainda não possuía repositório próprio; por isso foi criado somente como scaffold arquitetural, sem implementação especulativa.
+Na migração inicial, o `ActorStateSystem` ainda não possuía repositório próprio e entrou como scaffold; sua composição/projeção foi implementada em etapas posteriores (B4/B5b).
 
 Consulte `MIGRATION_MANIFEST.md` para os commits de origem e a prova de integridade.
 
