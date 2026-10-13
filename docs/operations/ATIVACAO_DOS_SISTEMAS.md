@@ -1,6 +1,6 @@
 # Ativação dos sistemas do GameplayCore num servidor
 
-Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 12/10/2026 (C3c).
+Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 12/10/2026 (C3d-fix1).
 
 Cada sistema do Core (pedras guardiãs, raças, e os que vierem) precisa de duas coisas no servidor onde roda: **tabelas próprias no PostgreSQL** e **uma opção de configuração que o liga**. No ambiente de desenvolvimento local esses dois passos foram feitos à mão a cada sistema. Este documento descreve o que foi feito, para ser repetido no servidor oficial com as diferenças necessárias.
 
@@ -13,6 +13,11 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 - As migrations são só aditivas: criam tabela e índice. Nenhuma altera ou remove coisa existente.
 
 ## 2. Tabelas, por migration
+
+**C3d-fix1:** migration `0009_gc_attribute_allocation.sql`, com distribuição por CharacterKey e revisão, sem saldo armazenado. Usa PRIMARY KEY e NOT NULL, sem CHECK conforme a política fixa. Não negativos/múltiplos de 5 são garantidos pelo único comando writer; leitura inválida declara `ATTRIBUTE_ALLOCATION_INVALID`, conserva a linha e suprime bônus. A 0008 da B5b permanece intacta. A 0009 foi aplicada pelo runner somente em schemas descartáveis de aetherius_test. O bloqueio do relatório parcial C3d está supersedido por esta retomada.
+
+**Regra atual C3d:** 15 pontos por nível após o primeiro, blocos de 5 e ganho 1:1 de máximo; troca efetiva zera XP, nível e distribuição preservando fadiga/ciclo/limite diário. Trechos históricos C3a/C3c abaixo sobre preservar XP estão supersedidos pelo [contrato de atributos](../classes/ATRIBUTOS_C3d.md). Compilação/aceite nativo pendentes do revisor; validação com tela será no oficial.
+
 
 **C3c:** nenhuma migration, tabela, pool ou ledger novo. A varredura usa as tabelas anteriores e um nível transitório por personagem em memória; não cria nem altera `gc_leveling_progress`. O ponto `awardLevelingXp` usa o adaptador durável Leveling e seu `eventId` no ledger `gc_commands`; só o adaptador escreve XP, nível e fadiga.
 
@@ -35,9 +40,10 @@ Arquivos em `database/migrations/`, mais a migration B5b em
 | `0003_gc_spell_projection.sql` | `gc_spell_projection_heads`, `gc_spell_projections` | o que o Core já aplicou de feitiços em cada personagem, para enviar só a diferença e nunca remover o que não concedeu | pedras guardiãs e qualquer sistema que conceda feitiço |
 | `0004_gc_standing_stone_choice.sql` | `gc_standing_stone_choice` | a pedra guardiã escolhida por personagem | pedras guardiãs |
 | `0005_gc_race_observation.sql` | `gc_race_observation` | a raça que o servidor observou em cada personagem | raças |
-| `0006_gc_character_class.sql` | `gc_character_class` | classe escolhida e revisão por personagem; não altera XP | classes |
+| `0006_gc_character_class.sql` | `gc_character_class` | classe escolhida e revisão por personagem; C3d chama o dono Leveling para reset na troca | classes |
 | `0007_gc_leveling_progress.sql` | `gc_leveling_progress` | XP total, nível e estado de fadiga do único writer Leveling | adaptador Leveling e leitura de nível pelas classes |
 | `0008_gc_perk_projection.sql` (runtime) | `gc_perk_projections` | aplicação confirmada de perks, autoria e revisão por personagem; proteção permanente de perks preexistentes | entrega B5b |
+| `0009_gc_attribute_allocation.sql` | `gc_attribute_allocation` | pontos gastos por atributo e revisão; saldo derivado do nível | classes e atributos |
 
 D-P1 não cria migration: revestimento e cargas usam o inventário nativo existente; o bônus por ator e os ticks do veneno são transitórios. Não há ledger ou store de efeitos novo.
 
@@ -70,6 +76,9 @@ npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
 **O servidor não aplica migrations sozinho.** Se faltar alguma, o Core sobe, deixa indisponíveis os sistemas que dependem do banco, e escreve no log o comando a rodar. O servidor do jogo não cai por isso.
 
 ## 4. Opções de configuração
+
+**C3d-fix1:** nenhuma opção nova. Classes em active/canary exigem também a 0009. Propriedade nativa normal `aetheriusAttributeBonuses`: records + bônus, entrega após commit/vínculo/pronto, limpeza no desvínculo/shutdown. O host oficial precisa ser recompilado com ela; ausente, `UNSUPPORTED` explícito sem propriedade customizada. DEV-A1 aceito permanece absoluto sem somar bônus. O boot da varredura avisa que a troca zera progressão, e ela recusa XP/distribuição gravados com `SWEEP_WOULD_RESET_PROGRESS`, sem mutação. Não levar opções DEV ao oficial.
+
 
 **C3c:** não há opção nova. Com a varredura aceita, `GAMEPLAY_CORE_DEV_CLASS_LEVEL` fornece o nível original que será restaurado; cada passo usa em memória o nível de `stages[].level` do catálogo. Fora da varredura, continua valendo o nível DEV configurado ou o Leveling. `GAMEPLAY_CORE_DEV_ATTRIBUTES` foi retirada do ambiente local pelo dono em 12/10; o código permanece inerte sem a opção.
 
@@ -173,6 +182,15 @@ A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolviment
 
 ## 5. O que cada sistema faz quando ligado
 
+### Atributos distribuídos (C3d-fix1)
+
+15 × (nível − 1) pontos, um por unidade de máximo, acréscimos em blocos de 5. API e recusas no [contrato para a tela](../classes/ATRIBUTOS_C3d.md). Troca efetiva de classe zera XP/nível/distribuição; mesma classe não zera; fadiga/ciclo/limite diário preservados. Leitura acima do ganho declara ATTRIBUTE_ALLOCATION_EXCEEDS_LEVEL; linha inválida declara ATTRIBUTE_ALLOCATION_INVALID. Ambos suprimem bônus, sem apagar/corrigir fatos.
+
+Staff: `node runtime/allocate-attributes.mjs <pg.js> <profile:id> <vida delta> <magia delta> <vigor delta> [schema] [requestId]`. Usa o ambiente do gamemode, pool existente e comando de domínio. Só persiste (NOT_SENT); reconectar/pronto entrega ao host. Explicação: `node runtime/explain-character.mjs <pg.js> <profile:id> [schema]`, com pontos e origem do nível; máximos atuais exigem API online.
+
+Harness exclusivo do revisor, não executado nesta entrega: `node runtime/harness/attribute-allocation.mjs --port <porta-isolada> --work-dir <pasta-vazia> --addon <scam_native.node> --data-dir <pasta-plugins>`, com AETHERIUS_TEST_DATABASE_URL. Recusa 7777 e banco diferente de aetherius_test. Usa addon/bot reais, autoridade de identidade TS real com autenticação de fixture e Leveling durável; confere alocação, máximo nativo, reconexão e reset. Não certifica login de produção nem barras do Skyrim. A validação com tela será no oficial pelo desenvolvedor; não usar o ambiente local para homologar esta entrega.
+
+
 ### Confirmação de remoção de perks (B5b-fix1)
 
 A sessão real de 12/10 às 17:10 mostrou concessões certas nas 18 classes, mas remoções relatadas como `FAILED` antes de ficarem observáveis. A bridge da Platform aguarda a chamada nativa; o atraso interno do motor é inferência do log, não uma fila específica demonstrada no fonte. O cliente corrigido confere a ausência em updates posteriores, até três verificações ou 500 ms para a entrega inteira. Perk que continua presente é `FAILED`; perk já ausente é `ALREADY_ABSENT`. A entrega seguinte só começa a aplicar depois do ACK anterior. Ensure e formato/ordem do ACK permanecem iguais; reset de sessão/ciclo cancela callbacks antigos. Sem updates, não há confirmação fabricada; timeout do servidor continua em 10 segundos.
@@ -183,7 +201,7 @@ Depois da instalação pelo revisor, o dono deve ver 18 linhas `result=OK`, toda
 
 ### Varredura por marcos (C3c, exclusivamente desenvolvimento)
 
-Depois do primeiro ACK `CONFIRMED`, percorre classes em ordem de id e os marcos em ordem de nível, ambos lidos do catálogo assinado. O catálogo atual tem 18 classes e 162 marcos no total. Uma chamada `classes.set` por classe; entre marcos da mesma classe só muda a leitura transitória de nível e a composição avança `revision.grants`. Não grava XP ou nível. O override some antes da restauração, inclusive em timeout, saída, morte, respawn, carga e shutdown aguardado. Staff continua recebendo `DEV_SWEEP_IN_PROGRESS`. Uma tentativa por personagem por boot, inclusive após reload do Core.
+Depois do primeiro ACK `CONFIRMED`, percorre classes em ordem de id e os marcos em ordem de nível, ambos lidos do catálogo assinado. O catálogo atual tem 18 classes e 162 marcos no total. Uma chamada `classes.set` por classe; entre marcos da mesma classe só muda a leitura transitória de nível e a composição avança `revision.grants`. **Com C3d, as trocas chamam o reset Leveling; só começa sem progresso/distribuição.** O override some antes da restauração, inclusive em timeout, saída, morte, respawn, carga e shutdown aguardado. Staff continua recebendo `DEV_SWEEP_IN_PROGRESS`. Uma tentativa por personagem por boot, inclusive após reload do Core.
 
 Cada passo exige ACK `applied`, zero `unresolved` e `failed`, e presença confirmada exatamente igual aos perks de origem CLASS acumulados até esse marco. O esperado vem de `stages`, independentemente de `classGrants`. Perk futuro de CLASS dá `FAIL(UNEXPECTED_CLASS_PERK)`; ausente dá FAIL; erros por item continuam até o último passo. As confirmações cobrem os itens do protocolo, não uma enumeração de perks externos do save nem os efeitos. Perks compartilhados preservam a presença; o cliente responde `APPLIED` quando já são de autoria do Core.
 
@@ -205,7 +223,7 @@ As regras de Leveling são incorporadas ao bundle a partir dos JSON existentes, 
 
 **Histórico supersedido pela C3c:** os 18 passos no nível máximo, o limite de 190 segundos e o roteiro de 18 linhas desta seção descrevem a varredura anterior. A implementação vigente é a seção “Varredura por marcos (C3c)” acima. O roteiro de 18 linhas da B5b-fix1 acima também é histórico; com o bundle C3c são os marcos do catálogo.
 
-Após a primeira entrega de perks `CONFIRMED`, uma vez por boot do host e por personagem, percorre as 18 classes em ordem de `id`. Cada passo grava pelo comando idempotente `classes.set`, compõe uma nova revisão de publicação, mantém a publicação inicial em voo até seu ACK (sem duplicá-la na varredura), entrega pelo adaptador B5b e espera até 10 segundos pelo ACK exato já registrado no banco. Nunca altera XP, nível, catálogo ou protocolo. A nova revisão evita a recusa do cliente a payload diferente na mesma revisão, inclusive ao restaurar a classe que já era a última da lista.
+Após a primeira entrega de perks `CONFIRMED`, uma vez por boot do host e por personagem, percorre as 18 classes em ordem de `id`. Cada passo grava pelo comando idempotente `classes.set`, compõe uma nova revisão de publicação, mantém a publicação inicial em voo até seu ACK (sem duplicá-la na varredura), entrega pelo adaptador B5b e espera até 10 segundos pelo ACK exato já registrado no banco. **Histórico supersedido por C3d:** os comandos de troca agora zeram XP/nível/distribuição; a varredura recusa progresso existente. Catálogo e protocolo permanecem os existentes. A nova revisão evita a recusa do cliente a payload diferente na mesma revisão, inclusive ao restaurar a classe que já era a última da lista.
 
 `UNRESOLVED` e `FAILED` produzem `FAIL` no passo, e a varredura segue. Saída, morte, respawn, início de carga ou shutdown interrompem com `ABORTED`; timeout também interrompe. A restauração usa `classes.set` mesmo sem ator vigente, antes de encerrar o sistema. Se houver ator pronto após o término normal ou timeout, aguarda também a entrega da classe original. Depois de saída/respawn, a próxima entrada pronta recompõe a classe restaurada. Um pronto recebido durante a restauração aguarda seu término. Sem classe original, registra `ORIGINAL_CLASS_REQUIRED`, sem mutação: o domínio atual não dispõe de comando para remover uma escolha. Staff não pode mudar a classe durante a varredura (`DEV_SWEEP_IN_PROGRESS`).
 
@@ -252,11 +270,11 @@ Para o revisor/dono testar: configurar somente no ambiente local `GAMEPLAY_CORE_
 - **Raça fora das dez jogáveis:** o personagem é marcado como não suportado no registro; nada é feito a ele nem à sessão.
 - **Não verificado:** se os efeitos raciais que vêm de perk valem no multiplayer, em especial os que alteram dano (Nord, Elfo da Floresta), já que o servidor calcula o golpe. Tabela completa em `modules/race-system/ownership.json`.
 
-### Classes (`classes`, C3a)
+### Classes (`classes`, C3a; regra atual C3d)
 
-- **Precisa de:** fundação 0001 a 0004, migrations 0006 e 0007 e `catalog/classes.json`. Não exige que raças estejam ligadas. O catálogo confere só os plugins relevantes de definição e winner dos perks (Skyrim, Vokrii e os patches listados no próprio catálogo), sem depender da posição deles na load order.
+- **Precisa de:** fundação 0001 a 0004, migrations 0006, 0007 e 0009 e `catalog/classes.json`. Não exige que raças estejam ligadas. O catálogo confere só os plugins relevantes de definição e winner dos perks (Skyrim, Vokrii e os patches listados no próprio catálogo), sem depender da posição deles na load order.
 - **Em `active`:** lê a classe e o nível e compõe os perks dos marcos atingidos com origem `CLASS`. Ao entrar novamente, recompõe dos fatos duráveis. Em `canary`, só compõe para os personagens autorizados. Em `audit`/`shadow`, nenhuma concessão de classe entra na composição ativa.
-- A escolha é persistida pelo comando idempotente `classes.set`. Staff, inclusive com servidor parado: `node runtime/set-character-class.mjs "<caminho>\gamemode\core\pg.js" profile:<id> elementalista [schema] [requestId]`. O argumento `requestId` opcional permite repetir a mesma operação. Classe desconhecida é recusada. A ferramenta permite troca livre e não muda nível, XP, skills ou atributos.
+- A escolha é persistida pelo comando idempotente `classes.set`. Staff, inclusive com servidor parado: `node runtime/set-character-class.mjs "<caminho>\gamemode\core\pg.js" profile:<id> elementalista [schema] [requestId]`. O argumento `requestId` opcional permite repetir a mesma operação. Classe desconhecida é recusada. A ferramenta permite troca livre; com C3d, troca efetiva zera XP/nível/distribuição na mesma transação, preservando fadiga/ciclo/limite diário. Definir a mesma classe não zera.
 - Sem progresso gravado, nível 1. O adaptador `createDurableLeveling(pool, configs).award(...)` calcula XP pelos JSONs e pelas políticas existentes e guarda progresso em `gc_leveling_progress`, usando `gc_commands` para replay por evento e personagem. Nunca cria outro pool ou ledger.
 - **Leveling sem fonte de eventos:** C3a não assina `onDeath` nem aceita relatos de abate do cliente. Ainda faltam dono da confirmação de morte no servidor, cobertura dos inimigos/contextos, descoberta de exclusividade do writer de XP e vínculo autoritativo dos membros do grupo ao `CharacterKey`. Depois de definidos, o integrador poderá encaminhar `aetherius.enemy.killed.v1` e o snapshot de grupo ao adaptador. Até lá, nenhuma opção liga XP automático.
 - **Entrega de perks (B5b, supersede a pendência C3a):** com o protocolo ativo,
@@ -446,6 +464,9 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+**C3d-fix1 (12/10/2026, Sol 6.1):** retomada com a 0009 sem CHECK; testes exclusivamente em schemas descartáveis de aetherius_test; nenhuma migration em aetherius_dev, opção local ou .env alterada. Servidor/jogo não iniciados, parados ou reiniciados, nenhuma porta aberta e nenhum binário copiado para build/dist. Core verificado e bundle gerado para revisão; C++ não recompilado neste sandbox, comandos entregues ao revisor. Decisão do dono: homologação de atributos com tela no servidor oficial, pelo desenvolvedor responsável. Não há ativação local a desfazer. O roteiro oficial está no contrato de atributos; ler ACKs, máximos e barras antes/depois de alocar, reconectar e trocar classe.
+
 
 **Máximos de teste desligados (12/10/2026, revisor, a pedido do dono do projeto):** a linha `GAMEPLAY_CORE_DEV_ATTRIBUTES=300,300,300` foi retirada do `gamemode\.env` do servidor local (cópia anterior em `_work\backups\gamemode.env.before-remove-dev-attributes-20261012`). Vida, magia e vigor voltam aos valores dos records na subida seguinte do servidor; não há dado a apagar. O código da DEV-A1 permanece, inerte sem a opção. Para religar: repor a linha. **Nunca no servidor oficial.**
 

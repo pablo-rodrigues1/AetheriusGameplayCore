@@ -32,7 +32,8 @@ async function fixture({enabled=true,env={},original='viper',intercept,extraPerk
   mp.profiles.set(91,++profile);mp.appearances.set(91,{raceId:mp.ids.get('skyrim.esm|013746')});
   mp.getUserActor=user=>[...mp.users].find(([actor,u])=>u===user&&mp.online.includes(actor))?.[0]??0;
   const official=officialHost(mp);official.authenticate(91);
-  let f,automatic=true,outstanding=false;
+  let f,automatic=true,outstanding=false,canPump=()=>true;
+  const pump=()=>{if(canPump())c.update();};
   mp.sendCustomPacket=(user,raw)=>{try{assert.equal(user,0);const p=JSON.parse(raw);packets.push(p);if(['hello','challenge'].includes(p.type))outstanding=false;
     if(p.type==='perks'){atSend.set(p.id,{calls:c.calls.length,present:new Set(p.items.filter(i=>i.action==='ensure'&&c.forms.has(i.key)&&c.perks.has(c.forms.get(i.key).id)).map(i=>i.key))});if(enabled&&env.GAMEPLAY_CORE_DEV_CLASS_SWEEP!=='false')assert.equal(outstanding,false,'never two deliveries in flight');outstanding=true;intercept?.(p,packets.filter(p=>p.type==='perks').length,f);}
     c.receive(p);}catch(error){log.info('HARNESS_SEND_ERROR: '+error.message);throw error;}};
@@ -53,14 +54,14 @@ async function fixture({enabled=true,env={},original='viper',intercept,extraPerk
   }});
   runtimes.push(core);await core.initialize();const binding=core.identity.lookup({actorId:91}).value;
   f={mp,log,c,packets,acks,callsAtAck,core,binding,official,set automatic(v){automatic=v;},get automatic(){return automatic;},
-    pump:()=>c.update(),ready:()=>{for(const task of ['spells','appearance','equipment','placement'])barrier.complete(task);},
-    finish:async()=>{try{await until(()=>{c.update();return log.messages.some(l=>l.includes('DEV sweep done:'));});}catch(e){throw Error(e.message+'\n'+log.messages.join('\n')+'\nPackets: '+JSON.stringify(packets.filter(p=>p.type==='perks').map(p=>({id:p.id,revision:p.revision,keys:p.items.filter(i=>i.action==='ensure').map(i=>i.key)}))));}},
+    pump,holdFrameUntil:predicate=>{canPump=predicate;},ready:()=>{for(const task of ['spells','appearance','equipment','placement'])barrier.complete(task);},
+    finish:async()=>{try{await until(()=>{pump();return log.messages.some(l=>l.includes('DEV sweep done:'));});}catch(e){throw Error(e.message+'\n'+log.messages.join('\n')+'\nPackets: '+JSON.stringify(packets.filter(p=>p.type==='perks').map(p=>({id:p.id,revision:p.revision,keys:p.items.filter(i=>i.action==='ensure').map(i=>i.key)}))));}},
     currentClass:async()=>(await pool.query('SELECT class_id FROM gc_character_class WHERE character_key=$1',[binding.characterKey])).rows[0]?.class_id};
+  if(original)assert.equal((await core.setCharacterClass({binding,classId:original,requestId:randomBytes(8).toString('hex')})).status,'SUPPORTED');
   if(seedProgress){
     const adapter=api.createDurableLeveling(pool,(await new utils.ConfigLoader(root+'/modules/leveling-system').load()).configs);
     await adapter.award({characterKey:binding.characterKey,epoch:binding.epoch,...xpInput('sweep-seed')});
   }
-  if(original)assert.equal((await core.setCharacterClass({binding,classId:original,requestId:randomBytes(8).toString('hex')})).status,'SUPPORTED');
   return f;
 }
 for(const nodeEnv of [undefined,'local','production','staging'])for(const access of [undefined,'true'])for(const optin of [undefined,'true']){
@@ -151,8 +152,13 @@ for(const action of ['leave','death','respawn','loading','shutdown'])test(action
 });
 test('ready during an aborted spawn waits for restoration before class composition',async()=>{
   let barrier;
-  const f=await fixture({intercept(p,n,f){if(n===2){f.mp.onRespawn(91);barrier=f.c.spawn();for(const task of ['spells','appearance','equipment','placement'])barrier.complete(task);}}});
-  f.ready();await f.finish();await until(()=>{f.pump();return f.log.messages.some(l=>l.includes('perks ')&&l.includes('CONFIRMED'))&&f.acks.length>=2;}).catch(e=>{throw Error(e.message+'\n'+f.log.messages.join('\n')+'\n'+JSON.stringify(f.packets.map(p=>({type:p.type,revision:p.revision,challenge:p.challenge}))));});
+  const f=await fixture({intercept(p,n,f){if(n===2){
+    // Deliberately complete the new ready owners before its first client frame.
+    // This ordering exposed the race; it must never replace an unacknowledged id.
+    const readyLogs=f.log.messages.filter(l=>l.startsWith('[classes] active:')).length;
+    f.holdFrameUntil(()=>f.log.messages.filter(l=>l.startsWith('[classes] active:')).length>readyLogs);
+    f.mp.onRespawn(91);barrier=f.c.spawn();for(const task of ['spells','appearance','equipment','placement'])barrier.complete(task);}}});
+  f.ready();await f.finish();await until(()=>{f.pump();const last=f.packets.filter(p=>p.type==='perks').at(-1);return last&&f.acks.some(a=>a.id===last.id)&&last.items.filter(i=>i.action==='ensure').length===expected('viper',40).size&&last.items.filter(i=>i.action==='ensure').every(i=>expected('viper',40).has(i.key));}).catch(e=>{throw Error(e.message+'\n'+f.log.messages.join('\n')+'\n'+JSON.stringify(f.packets.map(p=>({type:p.type,revision:p.revision,challenge:p.challenge}))));});
   assert.equal(await f.currentClass(),'viper');const last=f.packets.filter(p=>p.type==='perks').at(-1);
   const keys=new Set(data.classes.find(c=>c.id==='viper').stages.flatMap(s=>s.perks.map(p=>p.stableFormKey)));
   assert.deepEqual(new Set(last.items.filter(i=>i.action==='ensure').map(i=>i.key)),keys);await f.core.shutdown();
@@ -188,16 +194,20 @@ test('future class milestone perk confirmed by the real simulated client is FAIL
   assert(f.log.messages.some(l=>l.includes('1/'+total+' '+milestones[0].classId+'@'+milestones[0].level)&&l.endsWith('FAIL(UNEXPECTED_CLASS_PERK)')));
   assert.equal(stepLines(f).length,total);assert.equal(await f.currentClass(),'viper');await f.core.shutdown();
 });
-test('missing milestone perk produces FAIL, recovery continues, sweep cannot overwrite existing leveling progress',async()=>{
-  const f=await fixture({seedProgress:true,intercept(p,n,f){
-    if(n===2)f.c.blockAdd();
-    if(n===3)f.c.sp.Game.getPlayer().addPerk=perk=>{f.c.calls.push(['add',perk.key]);f.c.perks.add(perk.id);};
-  }});
+test('C3d: sweep refuses stored XP before any mutation, one error line, class/progress retained',async()=>{
+  const f=await fixture({seedProgress:true});
   const before=(await pool.query('SELECT * FROM gc_leveling_progress WHERE character_key=$1',[f.binding.characterKey])).rows;
-  f.ready();await f.finish();
-  const first=f.acks[1],wanted=expected(milestones[0].classId,milestones[0].level);
-  assert([...wanted].some(k=>!first.items.some(i=>i.key===k&&i.action==='ensure'&&['APPLIED','ALREADY_PRESENT'].includes(i.status))));
-  assert(stepLines(f)[0]?.includes('result=FAIL('),f.log.messages.join('\n'));assert.equal(stepLines(f).length,total);
+  const receipts=(await pool.query('SELECT count(*)::int AS n FROM gc_commands WHERE character_key=$1',[f.binding.characterKey])).rows[0].n;
+  f.ready();await until(()=>{f.pump();return f.log.messages.some(l=>l.includes('SWEEP_WOULD_RESET_PROGRESS'));});
+  assert.equal(f.log.messages.filter(l=>l.includes('SWEEP_WOULD_RESET_PROGRESS')).length,1);
+  assert.equal(stepLines(f).length,0);assert.equal(await f.currentClass(),'viper');
   assert.deepEqual((await pool.query('SELECT * FROM gc_leveling_progress WHERE character_key=$1',[f.binding.characterKey])).rows,before);
-  assert.equal(await f.currentClass(),'viper');await f.core.shutdown();
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM gc_commands WHERE character_key=$1',[f.binding.characterKey])).rows[0].n,receipts);await f.core.shutdown();
+});
+test('C3d: sweep refuses saved allocation before any class command',async()=>{
+  const f=await fixture();await f.core.allocateAttributes({binding:f.binding,requestId:'sweep-allocation',health:5,magicka:0,stamina:0});
+  const before=(await pool.query('SELECT * FROM gc_attribute_allocation WHERE character_key=$1',[f.binding.characterKey])).rows;
+  f.ready();await until(()=>{f.pump();return f.log.messages.some(l=>l.includes('SWEEP_WOULD_RESET_PROGRESS'));});
+  assert.equal(stepLines(f).length,0);assert.equal(await f.currentClass(),'viper');
+  assert.deepEqual((await pool.query('SELECT * FROM gc_attribute_allocation WHERE character_key=$1',[f.binding.characterKey])).rows,before);await f.core.shutdown();
 });

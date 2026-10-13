@@ -1,3 +1,6 @@
+import progressionConfig from '../../config/level-progression.json' with { type: 'json' };
+// @ts-expect-error immutable Leveling math has no TypeScript declarations
+import { ProgressionRules } from '../domain/progression.mjs';
 import type { CharacterKey } from '../../../../shared/contracts/src/identity.ts';
 import type { QueryExecutor } from '../../../../shared/persistence/src/index.ts';
 import { assertCharacterKey } from '../../../../shared/persistence/src/transaction.ts';
@@ -26,4 +29,14 @@ export async function saveProgress(tx:QueryExecutor,key:CharacterKey,state:Recor
   await tx.query(`INSERT INTO gc_leveling_progress(character_key,total_xp,character_level,progress,revision) VALUES($1,$2,$3,$4::jsonb,$5)
     ON CONFLICT(character_key) DO UPDATE SET total_xp=EXCLUDED.total_xp,character_level=EXCLUDED.character_level,progress=EXCLUDED.progress,revision=EXCLUDED.revision`,
     [key,state.totalXpAccumulated,state.classLevel,JSON.stringify(progress),revision]);
+}
+
+/** Called under the command character lock, in the caller's transaction.
+ * Keep fatigue/cycle/cap facts verbatim; no second ledger or XP writer. */
+export async function resetProgress(tx:QueryExecutor,key:CharacterKey):Promise<void> {
+  const prior=await readProgress(tx,key);
+  if(!prior)return;
+  const initial=new ProgressionRules(progressionConfig).createInitialState({playerId:key});
+  await saveProgress(tx,key,{...prior.state,classLevel:initial.classLevel,currentXp:initial.currentXp,
+    totalXpAccumulated:initial.totalXpAccumulated,nextLevelXp:initial.nextLevelXp},prior.revision+1);
 }

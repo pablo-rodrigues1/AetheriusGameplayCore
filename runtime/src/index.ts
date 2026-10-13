@@ -29,13 +29,15 @@ import { scopedPool } from './persistence-scope.ts';
 import { RuntimeLeveling, levelingConfigs } from './leveling.ts';
 import type { XpEventInput } from '../../modules/leveling-system/src/integration/durable.ts';
 import { PoisonProjection } from './poison.ts';
+import { AttributeSystem } from './attribute-system.ts';
+import type { AttributeValues } from '../../modules/class-progression-system/src/attributes.ts';
 import { developmentAttributes, DevelopmentAttributesProjection } from './attributes.ts';
 export { developmentAttributes } from './attributes.ts';
 import { PoisonIntents } from './poison-intents.ts';
 export { PoisonIntents } from './poison-intents.ts';
 export { poisonDoseBonus } from './poison.ts';
 import { developmentLevel } from '../../modules/class-progression-system/src/index.ts';
-export { classGrants, readClass, createClassCommands, developmentLevel, withDevelopmentLevel } from '../../modules/class-progression-system/src/index.ts';
+export { classGrants, readClass, createClassCommands, developmentLevel, withDevelopmentLevel, createAttributeCommands, readAttributeState, readAllocation, earnedAttributePoints } from '../../modules/class-progression-system/src/index.ts';
 export { createDurableLeveling } from '../../modules/leveling-system/src/integration/durable.ts';
 export { levelingLevelPort, readProgress } from '../../modules/leveling-system/src/persistence/durable.ts';
 import type { RaceOwnership } from '../../modules/race-system/src/ownership.ts';
@@ -126,6 +128,7 @@ export function createGameplayCore(host: HostContext) {
   let standingStones: StandingStoneSystem | undefined;
   let races: RaceSystem | undefined;
   let classes: ClassSystem | undefined;
+  let attributes: AttributeSystem | undefined;
   let leveling: RuntimeLeveling | undefined;
   let devClassLevel:number|undefined;
   let devSweep=false;
@@ -137,7 +140,7 @@ export function createGameplayCore(host: HostContext) {
   registrations.set('classes',{id:'classes',domain:'classes',requiresDatabase:true,start(context){
     const eligible=new Set((env.GAMEPLAY_CORE_CANARY_CHARACTERS??'').split(',').map(s=>s.trim()));
     classes=new ClassSystem(context,BUILD_DOMAINS.find(d=>d.domain==='classes')!,devClassLevel,env.GAMEPLAY_CORE_DATABASE_SCHEMA??'public',
-      key=>context.mode==='active'||context.mode==='canary'&&eligible.has(key),devSweep,sweepAttempts);
+      key=>context.mode==='active'||context.mode==='canary'&&eligible.has(key),devSweep,sweepAttempts,attributes);
     classes.start();return()=>classes!.shutdown();
   }});
   registrations.set('races', { id:'races', domain:'races', requiresDatabase:true, observeUnavailable:true, start(context) {
@@ -196,6 +199,7 @@ export function createGameplayCore(host: HostContext) {
   async function stopSystems() {
     await leveling?.shutdown(); leveling = undefined;
     for (const stop of stops.splice(0).reverse()) { try { await stop(); } catch { warn('system shutdown failed'); } }
+    await attributes?.shutdown(); attributes=undefined;
     await composition?.shutdown(); composition = undefined; standingStones = undefined; races = undefined; classes=undefined;
     await projection?.shutdown(); projection = undefined; clientDelivery=undefined;
   }
@@ -224,7 +228,7 @@ export function createGameplayCore(host: HostContext) {
     }catch(error){failures.set('classes',refusedDevOptions.get('GAMEPLAY_CORE_DEV_CLASS_LEVEL') ?? (error as {code:string}).code);warn(`ERROR ${failures.get('classes')}; classes refused`);}
     devSweep=false;
     try{devSweep=developmentClassSweep(env,devClassLevel,deliveryMode);
-      if(devSweep)warn('DEV class sweep enabled: temporary class commands and restoration; never use on official server');
+      if(devSweep)warn('DEV class sweep enabled: temporary class commands reset XP, level and allocation; restoration restores only the original class; never use on official server');
     }catch(error){warn('ERROR '+(error as Error).message+'; DEV class sweep refused');}
     let devAttributes:ReturnType<typeof developmentAttributes>;
     try{devAttributes=developmentAttributes(env);
@@ -264,7 +268,7 @@ export function createGameplayCore(host: HostContext) {
         await migrationStatus(view,subset,schema);
       };
       await verifySlice([]);
-      for(const [id,versions] of [['races',['0005_gc_race_observation.sql']],['classes',['0006_gc_character_class.sql','0007_gc_leveling_progress.sql']]] as const){
+      for(const [id,versions] of [['races',['0005_gc_race_observation.sql']],['classes',['0006_gc_character_class.sql','0007_gc_leveling_progress.sql','0009_gc_attribute_allocation.sql']]] as const){
         try{await verifySlice(versions);}
         catch{if(!failures.has(id))failures.set(id,`${id.toUpperCase()}_MIGRATION_UNAVAILABLE: apply ${versions.join(', ')}`);}
       }
@@ -294,7 +298,7 @@ export function createGameplayCore(host: HostContext) {
       for(const cls of classData?.classes??[])for(const stage of cls.stages)for(const perk of stage.perks)if(perk.stableFormKey&&perk.rank){
         if(!ranks.has(perk.stableFormKey))ranks.set(perk.stableFormKey,new Set());ranks.get(perk.stableFormKey)!.add(perk.rank);
       }
-      perks=new PerkDelivery({pool,schema:env.GAMEPLAY_CORE_DATABASE_SCHEMA??'public',channel:clientDelivery,catalogs:[...catalogs.values()],rankRecords:ranks,serializeSameRevision:devSweep,
+      perks=new PerkDelivery({pool,schema:env.GAMEPLAY_CORE_DATABASE_SCHEMA??'public',channel:clientDelivery,catalogs:[...catalogs.values()],rankRecords:ranks,
         check:binding=>{if(!deliveryAllowed(binding))throw Error('STALE_BINDING_OR_CLIENT_MODE');},nativeRecords:(binding,set)=>new Set([
           ...races?.nativeKeys(binding)??[],...nativeStonePerkKeys(set,BUILD_DOMAINS.find(d=>d.domain==='standing-stones'))]),warn});
       }
@@ -323,6 +327,11 @@ export function createGameplayCore(host: HostContext) {
       check: binding => { if (!current() || !actors.isCurrent(binding)) throw Object.assign(Error('STALE_BINDING'), { code: 'STALE_BINDING' }); },
       publish: (binding, set) => commonProjection.publish({ binding, set }),
       onComposed:(binding,set)=>poisonProjection.publish(binding,set) });
+    if(pool&&db.status==='SUPPORTED'&&!failures.has('classes')){
+      attributes=new AttributeSystem({mp:host.mp,pool,schema:env.GAMEPLAY_CORE_DATABASE_SCHEMA??'public',actors,devLevel:devClassLevel,devValues:devAttributes,warn,
+        current:binding=>current()&&actors.isCurrent(binding)&&(mode('classes')==='active'||mode('classes')==='canary'&&canary.has(binding.characterKey))});
+      attributes.start();
+    }
     actors.start();
     const health = (reply: (healthy: boolean) => void) => reply(initialized);
     process.on(healthEvent, health); scope.add(() => process.removeListener(healthEvent, health));
@@ -383,7 +392,7 @@ export function createGameplayCore(host: HostContext) {
       const check = () => { if (!initialized || !current()) throw Error('LEVELING_RUNTIME_UNAVAILABLE'); };
       leveling = new RuntimeLeveling({configs:levelingConfigs,pool:scopedPool(pool,env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public',check),check,
         binding:key=>actors.forCharacter(key),current:binding=>current()&&actors.isCurrent(binding),devLevel:devClassLevel,
-        refresh:binding=>classes?.refresh(binding)??Promise.resolve({status:'UNSUPPORTED',reason:'CLASSES_NOT_STARTED'})});
+        refresh:async binding=>{await attributes?.publish(binding);return classes?.refresh(binding)??{status:'UNSUPPORTED',reason:'CLASSES_NOT_STARTED'};}});
     }
     initialized = true; warn(`bundle ${BUNDLE_VERSION}; initialized; active instances=1`);
     for (const item of report().systems) if (item.status === 'UNSUPPORTED') warn(`${item.id}: UNSUPPORTED; ${item.missing.join(' | ')}`);
@@ -417,6 +426,11 @@ export function createGameplayCore(host: HostContext) {
       reason: failures.get('standing-stones') ?? 'STANDING_STONES_NOT_STARTED', committed: false }),
     observeRace: (binding: SessionBinding) => races?.observe(binding) ?? Promise.resolve({status:'UNSUPPORTED' as const,raceKey:null,reason:'RACES_NOT_STARTED'}),
     setCharacterClass:(input:{binding:SessionBinding;requestId:string;classId:string})=>classes?.set(input)??Promise.resolve({status:'UNSUPPORTED' as const,reason:failures.get('classes')??'CLASSES_NOT_STARTED'}),
+    allocateAttributes:(input:{binding:SessionBinding;requestId:string}&AttributeValues)=>classes?.isSweeping(input.binding)
+      ?Promise.resolve({status:'UNSUPPORTED' as const,reason:'DEV_SWEEP_IN_PROGRESS',committed:false})
+      :attributes?.allocate(input)??Promise.resolve({status:'UNSUPPORTED' as const,reason:failures.get('classes')??'ATTRIBUTES_NOT_STARTED',committed:false}),
+    attributeState:async(binding:SessionBinding)=>{try{return await attributes?.state(binding)??{status:'UNSUPPORTED' as const,reason:'ATTRIBUTES_NOT_STARTED'};}
+      catch(error){return {status:'UNSUPPORTED' as const,reason:(error as Error).message};}},
     awardLevelingXp:(input:XpEventInput)=>leveling?.award(input)??Promise.reject(Error('LEVELING_RUNTIME_UNAVAILABLE')),
     inspectActor:(binding:SessionBinding)=>composition?.inspect(binding)??Promise.reject(Error('COMPOSITION_UNAVAILABLE')),
     refreshClass:(binding:SessionBinding)=>classes?.refresh(binding)??Promise.resolve({status:'UNSUPPORTED' as const,reason:failures.get('classes')??'CLASSES_NOT_STARTED'}),

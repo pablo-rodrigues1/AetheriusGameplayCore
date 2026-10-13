@@ -89,7 +89,7 @@ test('separate process preserves progress',async()=>{
   const output=await new Promise((resolve,reject)=>{const child=spawn(process.execPath,['-e',code],{cwd:root,env:process.env,stdio:['ignore','pipe','pipe']});let text='';child.stdout.on('data',b=>text+=b);child.on('error',reject);child.on('close',exit=>exit===0?resolve(text):reject(Error('CHILD_READ_FAILED')));});
   const prior=await progress('profile:97001'),row=JSON.parse(output);assert.equal(row.total_xp,prior.total_xp);assert.equal(row.character_level,prior.character_level);assert.equal(row.revision,prior.revision);
 });
-test('class command idempotent, default level 1, switching preserves progress and diffs grants',async t=>{
+test('class command idempotent, default level 1, switching resets progress and diffs grants (C3d supersedes C3a preservation)',async t=>{
   const f=await setup(t);const result=await f.set('elementalista');assert.equal(result.status,'SUPPORTED');
   const before=await f.core.inspectActor(f.binding);assert.equal(before.grants.length,4);assert.equal(await progress(f.binding.characterKey),undefined);
   const input={binding:f.binding,classId:'elementalista',requestId:'staff-replay'};assert.equal((await f.core.setCharacterClass(input)).receipt.replayed,false);assert.equal((await f.core.setCharacterClass({...input,binding:{...f.binding,epoch:f.binding.epoch}})).receipt.replayed,true);
@@ -110,7 +110,8 @@ test('XP level up appends milestones on fresh composition, preserves class on pr
   const f=await setup(t);await f.set('elementalista');const before=await f.core.inspectActor(f.binding);
   for(let i=0;i<4;i++)await f.core.awardLevelingXp({characterKey:f.binding.characterKey,epoch:f.binding.epoch,eventName:'aetherius.enemy.killed.v1',event:event(`milestone-${i}`),recipientId:91,partySnapshot:party});
   const state=await progress(f.binding.characterKey),next=await f.core.inspectActor(f.binding);assert(state.character_level>=5);assert(next.grants.length>before.grants.length);assert.equal(api.diff(before,next).removed.length,0);
-  await f.set('guardiao');assert.deepEqual(await progress(f.binding.characterKey),state);assert.equal(f.mp.mutations().length,0);
+  await f.set('guardiao');const reset=await progress(f.binding.characterKey);assert.equal(Number(reset.total_xp),0);assert.equal(reset.character_level,1);
+  for(const field of ['dailyCycleKey','dailyXpGained','dailyXpCap','isFatigued','nextResetAt'])assert.deepEqual(reset.progress[field],state.progress[field]);assert.equal(f.mp.mutations().length,0);
 });
 test('DEV 40: all milestones, warning/capability/explanation, no XP row; remove returns level 1',async t=>{
   const f=await setup(t,{offlineMode:true,env:{GAMEPLAY_CORE_DEV_CLASS_LEVEL:'40'}});assert.equal((await f.set('elementalista')).status,'SUPPORTED');

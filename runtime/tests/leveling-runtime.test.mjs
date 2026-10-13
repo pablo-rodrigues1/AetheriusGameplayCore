@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test,before,after} from 'node:test';
 import {createRequire} from 'node:module';
 import {randomBytes} from 'node:crypto';
-import {setTimeout as delay} from 'node:timers/promises';
+import {setTimeout as delay,setImmediate as nextTurn} from 'node:timers/promises';
 import {api,utils,root,load,perkMigration} from './b5b-source.mjs';
 import {classHost} from './class-host.mjs';
 import {officialHost} from './official-host.mjs';
@@ -17,8 +17,15 @@ const data=load('catalog/classes.json'),cores=[];let profile=994000;
 before(async()=>{await pool.query('CREATE SCHEMA "'+schema+'"');await utils.applyMigrations(pool,[...await utils.readMigrations(root+'/database/migrations'),perkMigration],schema);});
 after(async()=>{await Promise.all(cores.map(c=>c.shutdown()));await pool.query('DROP SCHEMA "'+schema+'" CASCADE');await pool.end();});
 async function until(fn){const end=performance.now()+10000;while(!(await fn())){assert(performance.now()<end,'XP delivery timeout');await delay(5);}}
-async function fixture({env={},pgPool=pool}={}){
+async function fixture({env={},pgPool=pool,prepareReady=()=>{},beforeConfirm=async()=>{}}={}){
   const mp=classHost({catalogAvailable:true,offlineMode:true}),log=logger(),c=client(),packets=[],acks=[];
+  // Match the server's notification after ACK COMMIT, not SENT_UNCONFIRMED
+  // or the client's earlier ACK. A committing ACK cannot be superseded.
+  const confirmed=new Set(),info=log.info;
+  log.info=message=>{info(message);if(/^\[gameplay-core\] perks .*: CONFIRMED;/.test(message))confirmed.add(packets.filter(p=>p.type==='perks').at(-1)?.id);};
+  const classCompletions=()=>log.messages.filter(l=>l.startsWith('[classes] active:')).length;
+  const deliveryConfirmed=()=>{const last=packets.filter(p=>p.type==='perks').at(-1);
+    return last&&acks.at(-1)?.id===last.id&&confirmed.has(last.id);};
   mp.profiles.set(91,++profile);mp.getUserActor=user=>[...mp.users].find(([actor,u])=>u===user&&mp.online.includes(actor))?.[0]??0;
   const official=officialHost(mp);official.authenticate(91);
   mp.sendCustomPacket=(user,raw)=>{const p=JSON.parse(raw);packets.push(p);c.receive(p);};
@@ -27,11 +34,17 @@ async function fixture({env={},pgPool=pool}={}){
   const core=api.createGameplayCore({mp,pg:{init:()=>pgPool},log,env:{...developmentEnv,GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_MODE_CLASSES:'active',GAMEPLAY_CORE_CLIENT_PERKS_MODE:'active',...env}});
   cores.push(core);await core.initialize();const binding=core.identity.lookup({actorId:91}).value;
   await core.setCharacterClass({binding,classId:'elementalista',requestId:randomBytes(8).toString('hex')});
+  prepareReady();
+  const beforeReady=classCompletions();
   for(const task of ['spells','appearance','equipment','placement'])barrier.complete(task);
-  await until(()=>{c.update();return core.refreshClass&&acks.length&&log.messages.some(l=>l.includes('CONFIRMED'));});
+  await beforeConfirm({core,binding,c,packets,acks,log,readyFinished:()=>classCompletions()>beforeReady});
+  // Pending-set reconciliation can ACK before ClassSystem.ready's
+  // inspect/recompose. Start XP assertions only after both ready listeners and
+  // the latest packet's server ACK transaction have finished.
+  await until(()=>{c.update();return classCompletions()>beforeReady&&deliveryConfirmed();});
   return {core,binding,mp,official,c,packets,acks,log,
     award:(id,category)=>core.awardLevelingXp({characterKey:binding.characterKey,epoch:binding.epoch,...xpInput(id,category)}),
-    async confirm(n){await until(()=>{c.update();return acks.length>=n&&log.messages.filter(l=>l.includes('CONFIRMED')).length>=n;});}};
+    async confirm(n){await until(()=>{c.update();return acks.length>=n&&deliveryConfirmed();});}};
 }
 const keysAt=level=>new Set(data.classes.find(c=>c.id==='elementalista').stages.filter(s=>s.level<=level).flatMap(s=>s.perks.map(p=>p.stableFormKey)));
 const progress=async key=>(await pool.query('SELECT * FROM gc_leveling_progress WHERE character_key=$1',[key])).rows[0];
@@ -53,8 +66,9 @@ test('online XP enters the runtime, commits then refreshes; only new milestone p
   await f.core.shutdown();
 });
 
-test('no projection before XP COMMIT; replacement epoch while commit is waiting receives no stale delivery',async()=>{
+test('no projection before XP COMMIT; replacement epoch while commit is waiting receives no stale delivery',async t=>{
   let armed=false,release,reached=false;
+  t.after(()=>release());
   const gate=new Promise(resolve=>release=resolve),pgPool={async connect(){const c=await pool.connect();return {release:e=>c.release(e),async query(sql,params){
     if(armed&&sql==='COMMIT'){armed=false;reached=true;await gate;}return c.query(sql,params);
   }};}};
@@ -108,4 +122,55 @@ test('one durable award crossing two catalog milestones refreshes both in one de
   assert.deepEqual(new Set(f.c.calls.filter(c=>c[0]==='add').map(c=>c[1])),keysAt(target));
   assert.equal(f.c.calls.length,keysAt(target).size);assert.equal(f.acks.length,n+1);
   await point.shutdown();await f.core.shutdown();
+});
+
+// A real PostgreSQL ACK transaction is held after its writes. The ready tail
+// finishes first, so the old substring-based fixture would return prematurely.
+test('fixture waits for the ready tail and the latest ACK COMMIT before counting publications',async t=>{
+  let release,commitReached=false,returned=false;
+  const gate=new Promise(resolve=>release=resolve);
+  t.after(()=>release());
+  const pgPool={async connect(){const connection=await pool.connect();let ack=false;
+    return {release:error=>connection.release(error),async query(sql,params){
+      if(sql.startsWith('INSERT INTO')&&sql.includes('.gc_perk_projections'))ack=true;
+      if(ack&&sql==='COMMIT'){commitReached=true;await gate;}
+      return connection.query(sql,params);
+    }};
+  }};
+  const pending=fixture({pgPool,env:{GAMEPLAY_CORE_DEV_CLASS_LEVEL:'17'},
+    beforeConfirm:async({readyFinished})=>until(readyFinished)}).then(f=>{returned=true;return f;});
+  await until(()=>commitReached);await nextTurn();
+  assert.equal(returned,false,'client ACK and SENT_UNCONFIRMED cannot finish the fixture before server ACK COMMIT');
+  release();const f=await pending;
+  const packets=structuredClone(f.packets),acks=structuredClone(f.acks);
+  for(let i=0;i<4;i++)assert.equal((await f.award('gated-dev-'+i)).status,'accepted');
+  assert.deepEqual(f.packets,packets,'DEV XP must publish no extra packet after initial delivery settles');
+  assert.deepEqual(f.acks,acks,'DEV XP must generate no extra ACK');
+  assert((await progress(f.binding.characterKey)).character_level>=5);
+  await f.core.shutdown();
+});
+
+// Reconciliation can confirm the pending set while ClassSystem.ready is still
+// composing. Delay the COMMIT response only after PostgreSQL released its lock.
+test('fixture waits for ClassSystem.ready even after pending-set ACK COMMIT',async t=>{
+  let armed=false,reached=false,release,returned=false,observed;
+  const gate=new Promise(resolve=>release=resolve);t.after(()=>release());
+  const pgPool={async connect(){const c=await pool.connect();let composing=false;
+    return {release:e=>c.release(e),async query(sql,params){
+      if(armed&&sql.startsWith('SELECT grant_set FROM'))composing=true;
+      const result=await c.query(sql,params);
+      if(armed&&composing&&sql==='COMMIT'){armed=false;reached=true;await gate;}
+      return result;
+    }};
+  }};
+  const pending=fixture({pgPool,prepareReady:()=>armed=true,env:{GAMEPLAY_CORE_DEV_CLASS_LEVEL:'17'},
+    beforeConfirm:async f=>{observed=f;}}).then(f=>{returned=true;return f;});
+  await until(()=>reached&&observed?.log.messages.some(l=>/^\[gameplay-core\] perks .*: CONFIRMED;/.test(l)));
+  await nextTurn();assert.equal(returned,false,'the first committed ACK cannot finish the fixture while ClassSystem.ready is pending');
+  release();const f=await pending,packets=structuredClone(f.packets),acks=structuredClone(f.acks);
+  for(let i=0;i<4;i++)assert.equal((await f.award('gated-ready-dev-'+i)).status,'accepted');
+  assert.deepEqual(f.packets,packets,'DEV XP must publish no extra packet after the ready tail finishes');
+  assert.deepEqual(f.acks,acks,'DEV XP must generate no extra ACK');
+  assert((await progress(f.binding.characterKey)).character_level>=5);
+  await f.core.shutdown();
 });

@@ -16,7 +16,7 @@ const schema=`gc_b5b_${process.pid}_${randomBytes(4).toString('hex')}`;
 const pool=new Pool({connectionString:process.env.AETHERIUS_TEST_DATABASE_URL,max:8,connectionTimeoutMillis:2000,options:`-c search_path=${schema},pg_catalog`});
 const classes=load('catalog/classes.json'),runtimes=[];let profile=98000;
 before(async()=>{await pool.query(`CREATE SCHEMA "${schema}"`);const migrations=[...await utils.readMigrations(`${root}/database/migrations`),perkMigration];
-  assert.equal((await utils.applyMigrations(pool,migrations,schema)).applied.length,8);assert.equal((await utils.applyMigrations(pool,migrations,schema)).unchanged,8);});
+  assert.equal((await utils.applyMigrations(pool,migrations,schema)).applied.length,9);assert.equal((await utils.applyMigrations(pool,migrations,schema)).unchanged,9);});
 after(async()=>{await Promise.all(runtimes.map(c=>c.shutdown()));await pool.query(`DROP SCHEMA "${schema}" CASCADE`);await pool.end();});
 async function until(fn){const end=performance.now()+10000;while(!(await fn())){if(performance.now()>end)throw Error('B5b condition timeout');await delay(10);}}
 async function setup({mode='active',devLevel='40',natural=false,character,attach=true,shift=1000,env={}}={}){
@@ -89,7 +89,11 @@ test('no ACK stays unconfirmed; reconciliation resends; wrong revision/session/u
   const ack=f.acks.at(-1),send=(p,user=0)=>f.mp.emitter.emit('customPacket',user,JSON.stringify(p));
   send({...ack,revision:{...ack.revision,facts:999}});send({...ack,session:'old'});send(ack,1);send({...ack,items:ack.items.slice(1)});send({...ack,items:ack.items.map(i=>({...i,status:'REMOVED'}))});
   await delay(30);assert.equal((await rows(f.binding.characterKey)).length,0);
-  f.auto=true;await f.refresh();await until(async()=>{f.c.update();return (await rows(f.binding.characterKey)).length===19;});
+  // An unexpired delivery is shared, including after an ACK was lost. Retry
+  // only when the existing protocol deadline expires; never supersede its id.
+  const pendingCount=f.packets.filter(p=>p.type==='perks').length;
+  f.auto=true;await f.refresh();assert.equal(f.packets.filter(p=>p.type==='perks').length,pendingCount);
+  await delay(10020);await f.refresh();assert.equal(f.packets.filter(p=>p.type==='perks').length,pendingCount+1);await until(async()=>{f.c.update();return (await rows(f.binding.characterKey)).length===19;});
   assert.equal(f.c.calls.filter(c=>c[0]==='add').length,19);
   const before=await rows(f.binding.characterKey);send(f.acks.at(-1));await delay(20);assert.deepEqual(await rows(f.binding.characterKey),before);
 });

@@ -11,6 +11,7 @@ import type { DeliveryCycle } from '../client-delivery.ts';
 import { nativeGrantKeys, portGrantSet } from '../composition.ts';
 import type { ProjectionItem } from './index.js';
 
+interface Deferred { projection: GrantProjection; reconcile: boolean; cycle: DeliveryCycle; challenge: string }
 interface Row { stable_form_key: StableFormKey; definition: DefinitionRef; revision: GrantProjection['set']['revision']; owned: boolean; active: boolean; item_status: string }
 interface WireItem { key: StableFormKey; plugin: string; localFormId: number; signature: string; action: 'ensure' | 'remove'; owned: boolean }
 interface Pending { projection: GrantProjection; cycle: DeliveryCycle; challenge: string; id: string; items: WireItem[]; definitions: Map<string, DefinitionRef>; committing: boolean; expires: number; timer?: ReturnType<typeof setTimeout> }
@@ -23,12 +24,13 @@ interface Options {
   rankRecords: ReadonlyMap<StableFormKey, ReadonlySet<number>>;
   warn(message: string): void;
   ackTimeoutMs?: number;
-  serializeSameRevision?: boolean;
 }
 /** Internal PERK adapter of the single GrantProjectionPort, not a grant store.
  * Authorship is saved only after an exact current-session ACK transaction. */
 export class PerkDelivery {
   private pending = new Map<string, Pending>();
+  private deferred = new Map<string, Deferred>();
+  private publications = new Map<string, Promise<unknown>>();
   private results = new Map<string, { epoch: string; revision: GrantProjection['set']['revision']; state: PerkDeliveryState; items: readonly ProjectionItem[] }>();
   private listeners = new Set<(ack: GrantProjectionAck) => void>();
   private tails = new Set<Promise<unknown>>();
@@ -37,10 +39,10 @@ export class PerkDelivery {
   constructor(private options: Options) {
     this.stops = [options.channel.onReset(binding => {
       clearTimeout(this.pending.get(binding.characterKey)?.timer);
-      this.pending.delete(binding.characterKey); this.results.delete(binding.characterKey);
+      this.pending.delete(binding.characterKey); this.deferred.delete(binding.characterKey); this.results.delete(binding.characterKey);
     }), options.channel.onAck((cycle, p) => this.ack(cycle, p))];
   }
-  capability() { return { status: 'SUPPORTED', reason: 'CLIENT_PROTOCOL_AVAILABLE', proof: ['runtime/tests/client-delivery.test.mjs', 'runtime/tests/perks.test.mjs'],
+  capability() { return { status: 'SUPPORTED', reason: 'CLIENT_PROTOCOL_AVAILABLE', proof: ['runtime/tests/client-delivery.test.mjs', 'runtime/tests/perks.test.mjs', 'runtime/tests/perk-concurrency.test.mjs'],
     limitations: ['PERK_ACK_IS_DELIVERY_EVIDENCE_ONLY', 'SPELL_DELIVERY_UNCONFIRMED', 'EXTERNAL_GRANTS_AFTER_CORE_ADDITION_UNOBSERVABLE', 'UNRECORDED_ADDITIONS_PRESERVED'] }; }
   status(binding: SessionBinding): { state: PerkDeliveryState; items: readonly ProjectionItem[] } {
     const state = this.results.get(binding.characterKey);
@@ -52,20 +54,50 @@ export class PerkDelivery {
   }
   onAck(fn: (ack: GrantProjectionAck) => void): () => void { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   private check(binding: SessionBinding): void { if (this.closed) throw Error('PERK_DELIVERY_CLOSED'); this.options.check(binding); }
-  async publish(projection: GrantProjection, reconcile: boolean): Promise<{ state: PerkDeliveryState; items: readonly ProjectionItem[] }> {
+  /** A publication receipt does not wait for a client frame/ACK. Keep the latest
+   * requested set behind the one live delivery, then derive removals from its
+   * committed authorship. All callers, including ready, use this boundary. */
+  publish(projection: GrantProjection, reconcile: boolean): Promise<{ state: PerkDeliveryState; items: readonly ProjectionItem[] }> {
+    const key = projection.binding.characterKey;
+    const cycle = this.options.channel.current(projection.binding), challenge = cycle?.challenge;
+    const task = (this.publications.get(key) ?? Promise.resolve()).catch(() => {}).then(() => {
+      this.check(projection.binding);
+      if (!cycle || this.options.channel.current(projection.binding) !== cycle || cycle.challenge !== challenge)
+        return {state:'ACTOR_NOT_READY' as const,items:[]};
+      return this.publishNow(projection, reconcile);
+    });
+    const tail = task.finally(() => { if (this.publications.get(key) === tail) this.publications.delete(key); });
+    this.publications.set(key, tail); return tail;
+  }
+  private flush(key: string): void {
+    const next = this.deferred.get(key);
+    if (!next) return;
+    this.deferred.delete(key);
+    if (this.closed || this.options.channel.current(next.projection.binding) !== next.cycle
+      || !next.cycle.ready || next.cycle.challenge !== next.challenge) return;
+    void this.publish(next.projection, next.reconcile).catch(() => this.options.warn('deferred perk delivery failed'));
+  }
+  private async publishNow(projection: GrantProjection, reconcile: boolean): Promise<{ state: PerkDeliveryState; items: readonly ProjectionItem[] }> {
     const { binding, set } = projection;
     this.check(binding);
     const cycle = this.options.channel.current(binding), current = this.results.get(binding.characterKey);
     if (!cycle?.ready || !cycle.challenge || !cycle.cycle) return { state: !cycle?.cycle ? 'CLIENT_UNSUPPORTED' : 'ACTOR_NOT_READY', items: [] };
     const cycleChallenge = cycle.challenge;
     if (current?.epoch === binding.epoch && current.state === 'CONFIRMED' && !reconcile && compareRevisions(current.revision, set.revision) === 'equal') return this.status(binding);
-    // Never supersede an ACK transaction with the same revision; wait for its outcome.
+    if (current?.epoch === binding.epoch && ['before','incomparable'].includes(compareRevisions(set.revision,current.revision))) return this.status(binding);
     const busy = this.pending.get(binding.characterKey);
-    // DEV sweep must not replace a still-unconfirmed initial ready delivery.
-    // Other ready providers can request the same set before its ACK commits.
-    if (this.options.serializeSameRevision && busy?.cycle === cycle && busy.challenge === cycleChallenge
-      && canonicalJson(busy.projection.set) === canonicalJson(set)) return this.status(binding);
-    if (busy?.committing) { await Promise.allSettled([...this.tails]); this.check(binding); return this.publish(projection, reconcile); }
+    if (busy?.cycle === cycle && busy.challenge === cycleChallenge) {
+      if (busy.committing || performance.now() <= busy.expires) {
+        // Equal requests share the current ACK; a newer set waits for it.
+        // Never replace a queued newer revision with a late older request.
+        const next = this.deferred.get(binding.characterKey);
+        const relation = compareRevisions(set.revision, (next?.projection ?? busy.projection).set.revision);
+        if (canonicalJson(busy.projection.set) !== canonicalJson(set) && relation !== 'before' && relation !== 'incomparable')
+          this.deferred.set(binding.characterKey, {projection,reconcile,cycle,challenge:cycleChallenge});
+        return this.status(binding);
+      }
+      clearTimeout(busy.timer); this.pending.delete(binding.characterKey);
+    }
     const table = `"${this.options.schema}".gc_perk_projections`;
     const rows = await withTransaction(scopedPool(this.options.pool, this.options.schema, () => this.check(binding)), async tx => {
       await lockCharacter(tx, binding.characterKey);
@@ -118,6 +150,7 @@ export class PerkDelivery {
       if (this.pending.get(binding.characterKey) !== pending || pending.committing) return;
       try { this.check(binding); if (this.options.channel.current(binding) !== cycle) return; } catch { return; }
       this.options.warn(`perks ${binding.characterKey}: ACK_TIMEOUT; ${items.length} items; delivery=SENT_UNCONFIRMED`);
+      this.flush(binding.characterKey);
     }, timeout);
     pending.timer.unref();
     const outcome = { epoch: binding.epoch, revision: set.revision, state: 'SENT_UNCONFIRMED' as PerkDeliveryState,
@@ -179,10 +212,16 @@ export class PerkDelivery {
         status: result.state === 'CONFIRMED' ? 'applied' : 'unsupported', reason: 'PERK_ITEMS_ONLY; SPELL_DELIVERY_UNCONFIRMED; NOT_GAMEPLAY_RESULT_PROOF' };
       for (const fn of [...this.listeners]) { try { fn(ack); } catch { this.options.warn('perk ACK subscriber failed'); } }
       this.options.warn(`perks ${binding.characterKey}: ${result.state}; ${reports.length} items; delivery evidence only`);
+      this.flush(binding.characterKey);
     }).catch(() => {
-      if (this.pending.get(binding.characterKey) === pending) { pending.committing = false; this.options.warn('perk ACK recording failed; delivery remains unconfirmed'); }
+      if (this.pending.get(binding.characterKey) === pending) {
+        pending.committing = false; this.options.warn('perk ACK recording failed; delivery remains unconfirmed');
+        // COMMIT failure does not release the live delivery before its deadline.
+        pending.timer = setTimeout(() => { if (this.pending.get(binding.characterKey) === pending) this.flush(binding.characterKey); }, Math.max(0, pending.expires - performance.now()));
+        pending.timer.unref();
+      }
     });
     this.tails.add(task); void task.finally(() => this.tails.delete(task));
   }
-  async shutdown(): Promise<void> { this.closed = true; for (const stop of this.stops) stop(); for (const p of this.pending.values()) clearTimeout(p.timer); this.pending.clear(); this.results.clear(); await Promise.allSettled([...this.tails]); this.listeners.clear(); }
+  async shutdown(): Promise<void> { this.closed = true; for (const stop of this.stops) stop(); for (const p of this.pending.values()) clearTimeout(p.timer); this.pending.clear(); this.deferred.clear(); this.results.clear(); await Promise.allSettled([...this.publications.values(), ...this.tails]); this.listeners.clear(); }
 }

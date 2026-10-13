@@ -4,6 +4,7 @@ import type { QueryExecutor, PoolPort } from '../../../shared/persistence/src/in
 import { executeCommand } from '../../../shared/persistence/src/index.ts';
 import { assertCharacterKey } from '../../../shared/persistence/src/transaction.ts';
 import { requireDevelopmentOption, type CoreEnvironment } from '../../../runtime/src/development.js';
+import { resetProgress } from '../../leveling-system/src/persistence/durable.ts';
 export interface ClassFact { readonly classId:string; readonly revision:number }
 export interface CharacterLevel { readonly level:number; readonly origin:'LEVELING'|'LEVELING_DEFAULT'|'DEV'; readonly revision:number }
 export interface CharacterLevelPort { read(tx:QueryExecutor,key:CharacterKey):Promise<CharacterLevel> }
@@ -42,6 +43,10 @@ export function createClassCommands(pool:PoolPort,data:DomainData) {
       const classId=(command.payload as {classId:string}).classId,prior=await readClass(tx,command.characterKey);
       const changed=prior?.classId!==classId,revision=(prior?.revision??0)+(changed?1:0);
       if(!Number.isSafeInteger(revision))throw new ClassError('CLASS_REVISION_EXHAUSTED');
+      if(changed){
+        await resetProgress(tx,command.characterKey);
+        await tx.query('DELETE FROM gc_attribute_allocation WHERE character_key=$1',[command.characterKey]);
+      }
       await tx.query(`INSERT INTO gc_character_class(character_key,class_id,revision) VALUES($1,$2,$3)
         ON CONFLICT(character_key) DO UPDATE SET class_id=EXCLUDED.class_id,revision=EXCLUDED.revision`,[command.characterKey,classId,revision]);
       return {classId,previousClass:prior?.classId??null,revision,changed};
@@ -58,3 +63,6 @@ export function developmentLevel(raw:string|undefined,env:CoreEnvironment):numbe
 export function withDevelopmentLevel(port:CharacterLevelPort,level:number|undefined):CharacterLevelPort {
   return {async read(tx,key){const actual=await port.read(tx,key);return level===undefined?actual:Object.freeze({level,origin:'DEV',revision:actual.revision});}};
 }
+
+export { earnedAttributePoints, readAllocation, readAttributeState, createAttributeCommands } from './attributes.ts';
+export type { AttributeValues, AttributeState } from './attributes.ts';

@@ -2,6 +2,10 @@ import type { SessionBinding } from '../../shared/contracts/src/index.ts';
 import type { DomainData } from '../../shared/record-catalog/src/types.ts';
 import { classGrants, readClass, createClassCommands, withDevelopmentLevel } from '../../modules/class-progression-system/src/index.ts';
 import { levelingLevelPort } from '../../modules/leveling-system/src/persistence/durable.ts';
+import type { AttributeSystem } from './attribute-system.ts';
+import { readProgress } from '../../modules/leveling-system/src/persistence/durable.ts';
+import { readAllocation } from '../../modules/class-progression-system/src/index.ts';
+import { lockCharacter } from '../../shared/persistence/src/transaction.ts';
 import type { SystemContext } from './index.ts';
 import { DevelopmentClassSweep } from './class-sweep.ts';
 import { withTransaction } from '../../shared/persistence/src/index.ts';
@@ -11,7 +15,7 @@ export class ClassSystem {
   private sweep?:DevelopmentClassSweep;
   private stops:(()=>void)[]=[];
   private tails=new Set<Promise<unknown>>();
-  constructor(private context:SystemContext,private data:DomainData,private devLevel:number|undefined,private schema:string,private canCompose:(key:string)=>boolean=()=>true,private sweepEnabled=false,private sweepAttempts?:Set<string>){}
+  constructor(private context:SystemContext,private data:DomainData,private devLevel:number|undefined,private schema:string,private canCompose:(key:string)=>boolean=()=>true,private sweepEnabled=false,private sweepAttempts?:Set<string>,private attributes?:AttributeSystem){}
   start(){
     const ctx=this.context,port=withDevelopmentLevel(levelingLevelPort,this.devLevel);
     if(['active','canary'].includes(ctx.mode))ctx.composition.register({id:'classes',read:async(tx,key)=>{
@@ -25,6 +29,11 @@ export class ClassSystem {
       }else{
         const pool=ctx.persistence.pool;
         this.sweep=new DevelopmentClassSweep({context:ctx,data:this.data,settleInitial:()=>Promise.allSettled([...this.tails]).then(()=>{}),...this.sweepAttempts?{attempted:this.sweepAttempts}:{},
+          ensureSafe:binding=>withTransaction(scopedPool(pool,this.schema,()=>this.check(binding)),async tx=>{
+            await lockCharacter(tx,binding.characterKey);
+            const progress=await readProgress(tx,binding.characterKey),allocation=await readAllocation(tx,binding.characterKey);
+            if((progress?.totalXp??0)>0||!allocation.valid||Object.values(allocation.spent).some(n=>n!==0))throw Error('SWEEP_WOULD_RESET_PROGRESS');
+          }),
           readLevel:binding=>withTransaction(scopedPool(pool,this.schema,()=>this.check(binding)),async tx=>(await port.read(tx,binding.characterKey)).level),
           readOriginal:binding=>withTransaction(scopedPool(pool,this.schema,()=>this.check(binding)),async tx=>(await readClass(tx,binding.characterKey))?.classId),
           change:async(binding,classId,requestId,detached)=>{
@@ -61,8 +70,10 @@ export class ClassSystem {
       const commands=createClassCommands(scopedPool(ctx.persistence.pool,this.schema,check),this.data);
       const receipt=await commands.set({characterKey:binding.characterKey,epoch:binding.epoch,requestId:input.requestId,classId:input.classId});check();
       if(receipt.status==='conflict')return {status:'UNSUPPORTED' as const,reason:receipt.reason};
-      return {status:'SUPPORTED' as const,receipt,composition:await this.refresh(binding)};
+      const attributes=await this.attributes?.publish(binding);
+      return {status:'SUPPORTED' as const,receipt,attributes,composition:await this.refresh(binding)};
     }catch(error){return {status:'UNSUPPORTED' as const,reason:(error as {code?:string}).code??((error as Error).message==='MODE_OR_STALE_BINDING'?'MODE_OR_STALE_BINDING':'CLASS_COMMAND_FAILED')};}
   }
+  isSweeping(binding:SessionBinding){return this.sweep?.active(binding.characterKey)??false;}
   async shutdown(){await this.sweep?.shutdown();for(const stop of this.stops.splice(0))stop();await Promise.allSettled([...this.tails]);}
 }

@@ -19,6 +19,7 @@ interface Run { binding: SessionBinding; controller: AbortController; step: stri
 interface Options {
   context: SystemContext; data: DomainData;
   settleInitial(): Promise<void>;
+  ensureSafe(binding: SessionBinding): Promise<void>;
   readOriginal(binding: SessionBinding): Promise<string | undefined>;
   readLevel(binding: SessionBinding): Promise<number>;
   /** Always classes.set. Detached is exclusively for restoration after invalidation. */
@@ -129,7 +130,7 @@ export class DevelopmentClassSweep {
     const {binding} = run;
     let original: string | undefined, originalLevel = 0, changed = false, ok = 0, fail = 0, restored = 'NONE', restorationDelivery = 'NOT_SENT';
     try {
-      await run.initial; this.check(run); original = await this.options.readOriginal(binding); this.check(run);
+      await run.initial; this.check(run); await this.options.ensureSafe(binding); this.check(run); original = await this.options.readOriginal(binding); this.check(run);
       // No classes.unset command exists. Never invent one or write domain SQL.
       if (!original) throw Error('ORIGINAL_CLASS_REQUIRED');
       originalLevel = await this.options.readLevel(binding); this.check(run);
@@ -150,7 +151,7 @@ export class DevelopmentClassSweep {
       }
     } catch (error) {
       run.reason ??= (error as Error).message;
-      this.log('ABORTED step=' + run.step + '; reason=' + run.reason);
+      this.log((run.reason==='SWEEP_WOULD_RESET_PROGRESS'?'ERROR ':'ABORTED step=' + run.step + '; reason=') + run.reason);
     } finally {
       // Drop the transient read override before restoring any domain fact/delivery.
       delete run.level;
@@ -169,7 +170,7 @@ export class DevelopmentClassSweep {
         } catch { restored = 'FAILED'; this.log('ERROR RESTORE_FAILED; original=' + original + '; staff must retry classes.set'); }
       } else if (original) restored = original;
       this.runs.delete(binding.characterKey);
-      this.log('done: ok=' + ok + ' fail=' + fail + '; classes=' + (this.options.data.classes?.length ?? 0) + '; milestones=' + (this.options.data.classes ?? []).reduce((n,c) => n+c.stages.length,0) + '; restored=' + restored + '; delivery=' + restorationDelivery);
+      if(run.reason!=='SWEEP_WOULD_RESET_PROGRESS')this.log('done: ok=' + ok + ' fail=' + fail + '; classes=' + (this.options.data.classes?.length ?? 0) + '; milestones=' + (this.options.data.classes ?? []).reduce((n,c) => n+c.stages.length,0) + '; restored=' + restored + '; delivery=' + restorationDelivery);
     }
   }
   async shutdown() {

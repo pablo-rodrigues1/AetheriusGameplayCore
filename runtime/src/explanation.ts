@@ -7,7 +7,7 @@ import { readRace, raceGrants, initialRaceAttributes } from '../../modules/race-
 import type { RaceOwnership } from '../../modules/race-system/src/ownership.ts';
 import { readStandingStone, standingStoneGrants } from '../../modules/standing-stone-system/src/index.ts';
 import { nativeGrantKeys, portGrantSet } from './composition.ts';
-import { readClass, classGrants, withDevelopmentLevel, classDefinition } from '../../modules/class-progression-system/src/index.ts';
+import { readClass, classGrants, withDevelopmentLevel, classDefinition, readAttributeState } from '../../modules/class-progression-system/src/index.ts';
 import { levelingLevelPort } from '../../modules/leveling-system/src/persistence/durable.ts';
 
 /** Signed offline definitions, with no fabricated runtime IDs or live-host claim. */
@@ -25,6 +25,8 @@ export async function explainCharacter(tx:QueryExecutor,key:CharacterKey,stones:
   const stone=await readStandingStone(tx,key),race=await readRace(tx,key);
   const stoneCatalog=definitionCatalog(stones),raceCatalog=definitionCatalog(races);
   const classFact=classes?await readClass(tx,key):undefined,level=classes?await withDevelopmentLevel(levelingLevelPort,devLevel).read(tx,key):undefined;
+  const attributeRelation=classes?(await tx.query<{relation:string|null}>("SELECT to_regclass('gc_attribute_allocation') AS relation")).rows[0]?.relation:undefined;
+  const attributes=classes&&attributeRelation?await readAttributeState(tx,key,withDevelopmentLevel(levelingLevelPort,devLevel)):null;
   const classOutput=classes&&level?classGrants(classes,definitionCatalog(classes),classFact,level.level,(classFact?.revision??0)+level.revision):[];
   const revision=(stone?.revision??0)+(race?.revision??0)+(classFact?.revision??0)+(level?.revision??0);
   const set=compose(key,[standingStoneGrants(stoneCatalog,stone),raceGrants(raceCatalog,race),classOutput],
@@ -37,7 +39,7 @@ export async function explainCharacter(tx:QueryExecutor,key:CharacterKey,stones:
   const delivery=(recordKey:string)=>!relation?'UNSUPPORTED: PERK_MIGRATION_UNAVAILABLE':deliveries.has(recordKey)
     ?`LAST_CLIENT_ACK:${deliveries.get(recordKey)!.item_status}; current session status requires runtime`:'NOT_CONFIRMED: client protocol off, unavailable, or awaiting ACK';
   return {characterKey:key,facts:{standingStone:stone??null,race:race??null,...(classes?{class:classFact??null,level}: {})},revision:set.revision,
-    ...(classes?{classMilestones:classFact?classDefinition(classes,classFact.classId).stages.map(stage=>({...stage,reached:stage.level<=level!.level,
+    ...(classes?{attributes:attributes?{...attributes,status:attributes.applicable?'SUPPORTED':'UNSUPPORTED',maximum:null,maximumStatus:'UNSUPPORTED: host records and current session required; race alone omits NPC offsets'}:{status:'UNSUPPORTED',reason:'ATTRIBUTE_MIGRATION_UNAVAILABLE'},classMilestones:classFact?classDefinition(classes,classFact.classId).stages.map(stage=>({...stage,reached:stage.level<=level!.level,
       delivery:'GRANT_PROJECTION_PORT: current session status requires runtime'})):[],perkDelivery:{status:relation?'DELIVERY_BOOKKEEPING_AVAILABLE':'UNSUPPORTED',items:perkRows,limitation:'Past ACK is not confirmation of a current session or gameplay result'}}:{}),
     observationStatus:race?.status??'UNSUPPORTED',
     initialAttributes:race?.status==='SUPPORTED'&&race.raceKey?initialRaceAttributes(raceCatalog,race.raceKey):null,
