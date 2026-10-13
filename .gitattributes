@@ -2,6 +2,14 @@
 integrations/ui-runtime-changes/** -text
 modules/class-system/vendor/ui-core/** -text
 
+# Pacotes de integracao do host e do cliente: um patch convertido para CRLF nao aplica, e os
+# SHA-256 do manifest sao dos bytes exatos do patch e dos arquivos espelhados.
+integrations/host/changes.patch -text
+integrations/host/files/** -text
+integrations/host/manifest.json -text
+integrations/client/*.patch -text
+integrations/client/suspenso/*.patch -text
+
 # O hash de cada migration aplicada fica gravado no banco, e os dados do catalogo sao assinados:
 # estes arquivos precisam ter os mesmos bytes em qualquer maquina, qualquer que seja o core.autocrlf.
 database/migrations/*.sql text eol=lf

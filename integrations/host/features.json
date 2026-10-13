@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 1,
+  "repository": {
+    "name": "aetherius-server",
+    "url": "https://github.com/AetheriusRP/aetherius-server.git",
+    "baseline": "340449fae21bb4404439cad0814e60759f944857"
+  },
+  "exclude": [
+    "build/",
+    "build-nospace/",
+    "vcpkg/"
+  ],
+  "features": {
+    "core-loader": {
+      "title": "Carregamento do GameplayCore pelo gamemode",
+      "orders": [
+        "A6-S1"
+      ],
+      "requiresNativeBuild": false,
+      "defaultState": "desligado: ENABLE_GAMEPLAY_CORE=false no .env.example",
+      "officialServer": "necessario"
+    },
+    "fix-1010": {
+      "title": "Correcao da queda do servidor em ActionListener::OnHostAttempt (lastMovUpdateByIdx)",
+      "orders": [
+        "FIX-1010"
+      ],
+      "requiresNativeBuild": true,
+      "defaultState": "sempre ativo depois de compilado; nao tem opcao",
+      "officialServer": "recomendado: o defeito existe no codigo do mantenedor na base 340449f"
+    },
+    "dev-attributes": {
+      "title": "Maximos de vida, magia e vigor de teste (DEV-A1); criou o ponto unico MpActor::GetMaximumValues, que a C3d reutiliza",
+      "orders": [
+        "DEV-A1"
+      ],
+      "requiresNativeBuild": true,
+      "defaultState": "inerte: so age quando o Core entrega a propriedade aetheriusDevAttributes, o que exige GAMEPLAY_CORE_DEV_ATTRIBUTES e a trava de desenvolvimento",
+      "officialServer": "so desenvolvimento: a opcao nunca pode existir no servidor oficial"
+    },
+    "attribute-bonus": {
+      "title": "Bonus de atributos distribuidos pelo jogador (C3d): propriedade nativa aetheriusAttributeBonuses; maximo = records + bonus",
+      "orders": [
+        "C3d",
+        "C3d-fix1"
+      ],
+      "requiresNativeBuild": true,
+      "defaultState": "inerte ate o Core entregar um bonus; o Core so entrega com classes em canary/active, migration 0009 aplicada e pontos distribuidos",
+      "officialServer": "necessario para os pontos de atributo; sem a propriedade o Core declara UNSUPPORTED. Nao validado em jogo"
+    },
+    "weapon-poison": {
+      "title": "Veneno em arma no host (D-P1, D-P1-fix1, D-P1-fix2 e as protecoes da FIX-1010)",
+      "orders": [
+        "D-P1",
+        "D-P1-fix1",
+        "D-P1-fix2",
+        "FIX-1010"
+      ],
+      "requiresNativeBuild": true,
+      "defaultState": "desligado: aetheriusCombat.weaponPoison ausente ou false em server-settings.json",
+      "officialServer": "SUSPENSO pelo dono do projeto em 12/10/2026; manter desligado"
+    },
+    "damage-shadow": {
+      "title": "Formula de dano Aetherius em sombra (spike A6-S3)",
+      "orders": [
+        "A6-S3"
+      ],
+      "requiresNativeBuild": true,
+      "defaultState": "desligado: aetheriusCombat.shadow ausente ou false em server-settings.json",
+      "officialServer": "nao ligar; trilha de dano adiada"
+    }
+  },
+  "featuresWithoutHostFiles": {
+    "official-identity": "B1-fix1: nenhum arquivo do host foi alterado. O Core le mp.aetheriusOfficialIdentity, que ja existe na base 340449f (server/ts/systems/login.ts).",
+    "spell-and-perk-projection": "B5a, B5b e B5b-fix1: nenhum arquivo do host foi alterado. O Core usa a API do gamemode que ja existe na base (feiticos pelo host; perks pelo canal de pacote customizado aetherius.gameplay.grants, com a contraparte no pacote do cliente)."
+  },
+  "files": {
+    "server/gamemode/phase0-basic.js": [
+      "core-loader"
+    ],
+    "server/gamemode/.env.example": [
+      "core-loader"
+    ],
+    "server/cpp/CMakeLists.txt": [
+      "damage-shadow",
+      "attribute-bonus",
+      "dev-attributes",
+      "weapon-poison",
+      "fix-1010"
+    ],
+    "server/cpp/addon/ScampServer.cpp": [
+      "damage-shadow",
+      "weapon-poison"
+    ],
+    "server/cpp/addon/property_bindings/PropertyBindingFactory.cpp": [
+      "weapon-poison",
+      "dev-attributes",
+      "attribute-bonus"
+    ],
+    "server/cpp/addon/property_bindings/DevAttributesBinding.cpp": [
+      "dev-attributes"
+    ],
+    "server/cpp/addon/property_bindings/DevAttributesBinding.h": [
+      "dev-attributes"
+    ],
+    "server/cpp/addon/property_bindings/PoisonDoseBinding.cpp": [
+      "weapon-poison"
+    ],
+    "server/cpp/addon/property_bindings/PoisonDoseBinding.h": [
+      "weapon-poison"
+    ],
+    "server/cpp/server_guest_lib/ActionListener.cpp": [
+      "fix-1010",
+      "weapon-poison",
+      "dev-attributes",
+      "attribute-bonus"
+    ],
+    "server/cpp/server_guest_lib/ActiveMagicEffectsMap.cpp": [
+      "weapon-poison"
+    ],
+    "server/cpp/server_guest_lib/ActiveMagicEffectsMap.h": [
+      "weapon-poison"
+    ],
+    "server/cpp/server_guest_lib/CropRegeneration.cpp": [
+      "dev-attributes",
+      "attribute-bonus"
+    ],
+    "server/cpp/server_guest_lib/MpActor.cpp": [
+      "weapon-poison",
+      "dev-attributes",
+      "attribute-bonus"
+    ],
+    "server/cpp/server_guest_lib/MpActor.h": [
+      "weapon-poison",
+      "dev-attributes",
+      "attribute-bonus"
+    ],
+    "server/cpp/server_guest_lib/WorldState.h": [
+      "weapon-poison"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/DevAttributes.cpp": [
+      "dev-attributes",
+      "attribute-bonus"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/DevAttributes.h": [
+      "dev-attributes",
+      "attribute-bonus"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/WeaponPoison.h": [
+      "weapon-poison"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/WeaponPoisonHost.h": [
+      "weapon-poison"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/AetheriusDamageFormula.cpp": [
+      "damage-shadow"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/AetheriusDamageFormula.h": [
+      "damage-shadow"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/README.md": [
+      "damage-shadow",
+      "weapon-poison"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/ShadowStatus.h": [
+      "damage-shadow"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/config/CombatSettings.h": [
+      "damage-shadow"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/context/DamageContext.h": [
+      "damage-shadow"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/debug/CombatTrace.h": [
+      "damage-shadow"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/forms/StableFormKey.h": [
+      "damage-shadow"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/perks/PerkRegistry.h": [
+      "damage-shadow"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/physical/ArmorCurve.h": [
+      "damage-shadow"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/physical/PhysicalDamagePipeline.h": [
+      "damage-shadow"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/state/ActorCombatState.h": [
+      "damage-shadow"
+    ],
+    "server/cpp/server_guest_lib/formulas/ShadowDamageFormula.h": [
+      "damage-shadow"
+    ],
+    "unit/AetheriusShadowTest.cpp": [
+      "damage-shadow",
+      "weapon-poison",
+      "fix-1010",
+      "dev-attributes",
+      "attribute-bonus"
+    ],
+    "unit/DevAttributesTest.h": [
+      "dev-attributes",
+      "attribute-bonus"
+    ],
+    "unit/WeaponPoisonTest.h": [
+      "weapon-poison"
+    ],
+    "unit/WeaponPoisonIntentTest.h": [
+      "weapon-poison"
+    ],
+    "unit/WeaponPoisonNpcTest.h": [
+      "weapon-poison",
+      "fix-1010"
+    ],
+    "server/cpp/addon/property_bindings/AttributeBonusesBinding.cpp": [
+      "attribute-bonus"
+    ],
+    "server/cpp/addon/property_bindings/AttributeBonusesBinding.h": [
+      "attribute-bonus"
+    ]
+  }
+}

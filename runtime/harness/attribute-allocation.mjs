@@ -63,7 +63,7 @@ try{
   const saved=(await pool.query('SELECT * FROM gc_attribute_allocation WHERE character_key=$1',[key])).rows[0];
   assert.equal((await core.setCharacterClass({binding,classId:'viper',requestId:randomUUID()})).status,'SUPPORTED');assert.deepEqual(native().maximum,expected);
   console.log('PASS native allocate/replay/same class: '+JSON.stringify({base:baseline.base,maximum:native().maximum}));
-  const old=binding,oldUser=bot.getUserId();authority.clear(oldUser);server.kick(oldUser);tick(); // bot.destroy() never disconnects the mock user on the compiled addon
+  const old=binding,oldUser=bot.getUserId();authority.clear(oldUser);server.kick(oldUser);tick(); // bot.destroy() only drops the Bot's own reference; the client stays alive (and connected) while CreateBot's getUserId callback retains the pair, so disconnect through the host
 core.identity.poll();
   await until(()=>!server.isConnected(oldUser));assert.equal(core.identity.lookup({actorId:actor}).status,'UNSUPPORTED');assert.deepEqual(native().maximum,baseline.base);
   bot=server.createBot();tick();server.setUserActor(bot.getUserId(),actor);tick();authenticate();core.identity.poll();

@@ -14,6 +14,24 @@ do Core `85b7066` foi preservado byte a byte em
 como histórico e fonte dos testes de veneno; não instalar junto com este patch.
 As seções D-P1 abaixo estão supersedidas por esta nota quanto à instalação.
 
+**Guia de instalação completo** (servidor, banco, catálogo, configuração,
+cliente e ordem de ativação): [`../INSTALL.md`](../INSTALL.md). Este arquivo
+trata só do pacote do cliente. Conferido em 12/10/2026 (ordem DOC-1): o patch
+`B5b-aa864cb.patch` (SHA-256 `938db4ae01b1…a33f2`) corresponde à árvore do
+`aetherius-client` de desenvolvimento, por `git apply --check -R` e por
+comparação de hash dos cinco arquivos depois de aplicá-lo sobre a base;
+saídas em `_work/evidence/DOC-1/02-cliente-apply-check-R.txt` e
+`03-cliente-prova-por-hash.txt`.
+
+A ordem C3d (Core `c50c735`) não alterou este cliente nem o protocolo. Ela
+alterou o lado do servidor da entrega de perks (fila única por personagem,
+C3d-fix3) depois da validação em jogo das 18:33. A combinação deste cliente
+(`D538B93B2FA6`) com o servidor novo foi **revalidada em jogo em 12/10/2026
+às 23:02**: 162 de 162 passos `OK`, restauração `OK` e
+`delivery=CONFIRMED` (`_work/evidence/H/sessao-revalidacao-entrega-2026-10-12-2302.md`).
+A revalidação é da entrega; não certifica efeitos de perks nem os pontos de
+atributo.
+
 ## Aplicação e build
 
 Na raiz de um clone limpo da base identificada:
@@ -28,6 +46,12 @@ Não reaplicar o cumulativo sobre uma árvore já modificada. Se ainda houver
 B5b + veneno, conferir a árvore contra o snapshot aprovado, conferir
 `git apply --check -R` do patch suspenso, revertê-lo e aplicar este.
 Não usar checkout, restore, reset, clean ou stash.
+
+As dependências são as de `client/package.json`, com o `client/yarn.lock` do
+mantenedor; este patch não acrescenta nenhuma. Instale-as pelo procedimento
+do mantenedor (no ambiente local foi `yarn install` na pasta `client`,
+registro em `_work/evidence/A8/08-client-yarn-install.log`, sobre uma base
+anterior do cliente).
 
 Na pasta `client`, com dependências já instaladas:
 
@@ -67,6 +91,15 @@ interna. Referências e limites: `_work/evidence/B5b-fix1/PARTE-2.md`.
 ACK continua sendo evidência de entrega, sem certificação de efeitos de perks.
 
 ## Teste e reversão
+
+**Atualização de 12/10/2026 (ordem DOC-1):** o número abaixo é da varredura
+da ordem C3b (18 passos, um por classe), substituída pela varredura por marcos
+da C3c. Com o Core em `c7192d7` a linha final é `done: ok=162 fail=0;
+classes=18; milestones=162; restored=<original>; delivery=CONFIRMED`, e foi
+assim que este cliente foi validado em jogo em 12/10/2026 às 18:33 e, com o Core `c50c735`, de novo às 23:02 (bundle
+`D538B93B2FA6`; registro em
+`_work/evidence/H/sessao-marcos-C3c-2026-10-12-1833.md`). A varredura é só de
+desenvolvimento e não roda no servidor oficial.
 
 A varredura automatizada deve registrar `ok=18 fail=0`, remoções exclusivas
 confirmadas, `failed=0`, `unresolved=0`, restauração da classe original e
@@ -136,7 +169,13 @@ servidor local**. O roteiro completo e os limites estão em
 `_work/evidence/D-P1-fix2/PARTE-1.md` e na seção 5 de
 `docs/operations/ATIVACAO_DOS_SISTEMAS.md`.
 
-## D-P1-fix3 — veneno na arma existente
+## D-P1-fix3 — veneno na arma existente (histórico; veneno suspenso)
+
+**Supersedido quanto à instalação (nota de 12/10/2026, ordem DOC-1):** o
+`B5b-aa864cb.patch` atual **não** contém veneno. O patch de que esta seção
+fala é o que está em `suspenso/B5b-mais-veneno-fix3-aa864cb.patch`. O mesmo
+vale para a frase "o mesmo `B5b-aa864cb.patch` foi regenerado" da seção
+D-P1-fix2 acima.
 
 O mesmo `B5b-aa864cb.patch` foi regenerado contra aa864cb; inclui B5b e as
 correções de veneno. Não reaplicar cumulativamente sobre a fix2. Nesta ordem,

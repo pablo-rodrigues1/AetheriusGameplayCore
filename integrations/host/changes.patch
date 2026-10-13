@@ -1,0 +1,3042 @@
+diff --git a/server/cpp/CMakeLists.txt b/server/cpp/CMakeLists.txt
+index 28b7ad7f3b6580813d2c14499caae555a8f78576..e510ad67199465d200b559b23a9083ff27901a34 100644
+--- a/server/cpp/CMakeLists.txt
++++ b/server/cpp/CMakeLists.txt
+@@ -1,4 +1,5 @@
+ enable_testing()
++# AETHERIUS C3d: reconfigure existing source globs for AttributeBonusesBinding.
+ 
+ include(${CMAKE_SOURCE_DIR}/cmake/apply_default_settings.cmake)
+ 
+@@ -163,3 +164,12 @@ foreach(target ${VCPKG_DEPENDENT})
+     target_link_libraries(${target} PUBLIC pthread resolv rt m)
+   endif()
+ endforeach()
++
++# Isolated A6-S3 acceptance runner: no Papyrus fixture generation or full unit build.
++option(AETHERIUS_SHADOW_TESTS "Build the A6-S3 shadow acceptance runner" OFF)
++if(AETHERIUS_SHADOW_TESTS)
++  add_executable(aetherius-shadow-test "${CMAKE_SOURCE_DIR}/unit/AetheriusShadowTest.cpp")
++  target_compile_definitions(aetherius-shadow-test PRIVATE AETHERIUS_SHADOW_STANDALONE=1)
++  target_link_libraries(aetherius-shadow-test PRIVATE server_guest_lib)
++  apply_default_settings(TARGETS aetherius-shadow-test)
++endif()
+diff --git a/server/cpp/addon/ScampServer.cpp b/server/cpp/addon/ScampServer.cpp
+index 90bfd68048b3c5a399312803e5f4b6fcebdb78ca..1bb862eb16eecf568379b6d4bc25e2b110faa0f1 100644
+--- a/server/cpp/addon/ScampServer.cpp
++++ b/server/cpp/addon/ScampServer.cpp
+@@ -17,6 +17,8 @@
+ #include "formulas/SweetPieDamageFormula.h"
+ #include "formulas/SweetPieSpellDamageFormula.h"
+ #include "formulas/TES5DamageFormula.h"
++#include "formulas/ShadowDamageFormula.h"
++#include "aetherius_combat/AetheriusDamageFormula.h"
+ #include "gamemode_events/DeathEvent.h"
+ #include "libespm/IterateFields.h"
+ #include "libespm/espm.h"
+@@ -388,6 +390,28 @@ ScampServer::ScampServer(const Napi::CallbackInfo& info)
+       std::move(formula), damageMultConditionalFormulaSettings,
+       conditionsEvaluatorSettings,
+       std::make_shared<ConditionFunctionMap>(conditionFunctionMap));
++    const auto combat = serverSettings.find("aetheriusCombat");
++    // AETHERIUS D-P1: explicit opt-in, independent of the damage shadow spike.
++    partOne->worldState.aetheriusWeaponPoison = combat != serverSettings.end() && combat->value("weaponPoison", false);
++    if (combat != serverSettings.end() && combat->value("shadow", false)) {
++      auto buffer = std::make_shared<ShadowDamageFormula::Buffer>();
++      const auto& configuredRecords = combat->at("physicalRecords");
++      if (!configuredRecords.is_array() || configuredRecords.size() > 4096)
++        throw std::invalid_argument("shadow physicalRecords must be an array of at most 4096 StableFormKeys");
++      std::vector<aetherius::combat::StableFormKey> physicalRecords;
++      for (const auto& key : configuredRecords)
++        physicalRecords.push_back(aetherius::combat::StableFormKey::Parse(key.get<std::string>()));
++      formula = std::make_unique<ShadowDamageFormula>(std::move(formula),
++        std::make_unique<aetherius::combat::AetheriusDamageFormula>(espm->GetBrowser(), physicalRecords),
++        buffer);
++      // Read only on request, outside the hit. Capturing the buffer owns no actors.
++      Value().Set("getAetheriusCombatShadow", Napi::Function::New(Env(),
++        [buffer](const Napi::CallbackInfo& call) -> Napi::Value {
++          return Napi::String::New(call.Env(), buffer->Read().dump());
++        }));
++      logger->info("Aetherius damage shadow enabled: neutral profile, capacity={}",
++        ShadowDamageFormula::kCapacity);
++    }
+     partOne->SetDamageFormula(std::move(formula));
+ 
+     partOne->worldState.AttachScriptStorage(
+diff --git a/server/cpp/addon/property_bindings/PropertyBindingFactory.cpp b/server/cpp/addon/property_bindings/PropertyBindingFactory.cpp
+index 9d2765ba758b7ee7bc6a76bd0e790d37a19ba9fa..f9c53ddcb6f3496e06f395565c59b9b70f04a5f8 100644
+--- a/server/cpp/addon/property_bindings/PropertyBindingFactory.cpp
++++ b/server/cpp/addon/property_bindings/PropertyBindingFactory.cpp
+@@ -20,6 +20,9 @@
+ #include "PercentagesBinding.h"
+ #include "PosBinding.h"
+ #include "ProfileIdBinding.h"
++#include "PoisonDoseBinding.h" // AETHERIUS D-P1
++#include "AttributeBonusesBinding.h" // AETHERIUS C3d
++#include "DevAttributesBinding.h" // AETHERIUS DEV-A1
+ #include "RespawnPercentagesBinding.h"
+ #include "SpawnDelayBinding.h"
+ #include "SpawnPointBinding.h"
+@@ -47,6 +50,11 @@ PropertyBindingFactory::CreateStandardPropertyBindings()
+   result["percentages"] = std::make_shared<PercentagesBinding>();
+   result["pos"] = std::make_shared<PosBinding>();
+   result["profileId"] = std::make_shared<ProfileIdBinding>();
++  result["aetheriusPoisonDoseBonus"] = std::make_shared<PoisonDoseBinding>(); // AETHERIUS D-P1
++  result["aetheriusAttributeBonuses"] = std::make_shared<AttributeBonusesBinding>(); // AETHERIUS C3d
++  result["aetheriusDevAttributes"] = std::make_shared<DevAttributesBinding>(); // AETHERIUS DEV-A1
++  result["aetheriusPoisonStatus"] = std::make_shared<PoisonStatusBinding>(); // AETHERIUS D-P1
++  result["aetheriusWeaponPoisonIntent"] = std::make_shared<WeaponPoisonIntentBinding>(); // AETHERIUS D-P1-fix2
+   result["spawnPoint"] = std::make_shared<SpawnPointBinding>();
+   result["type"] = std::make_shared<TypeBinding>();
+   result["worldOrCellDesc"] = std::make_shared<WorldOrCellDescBinding>();
+diff --git a/server/cpp/server_guest_lib/ActionListener.cpp b/server/cpp/server_guest_lib/ActionListener.cpp
+index 72632c05bba53a8e4dfbc0d2d4b60fb9bfafc9b1..5c03dd601fc0880549c349bca8cd55da3b65ac03 100644
+--- a/server/cpp/server_guest_lib/ActionListener.cpp
++++ b/server/cpp/server_guest_lib/ActionListener.cpp
+@@ -371,8 +371,11 @@ void ActionListener::OnUpdateEquipment(const RawMessageData& rawMsgData,
+   }
+ 
+   if (isAllowed) {
+-    SendToNeighbours(msg.idx, rawMsgData, true);
+-    actor->SetEquipment(data);
++    // AETHERIUS D-P1: reconcile host poison; client feedback never triggers repeated owner projection.
++    if (msg.idx != actor->GetIdx() || !actor->ReconcileWeaponPoisonEquipment(data)) {
++      SendToNeighbours(msg.idx, rawMsgData, true);
++      actor->SetEquipment(data);
++    }
+   } else {
+     actor->SendInventoryUpdate();
+ 
+@@ -688,6 +691,12 @@ void ActionListener::OnHostAttempt(const RawMessageData& rawMsgData,
+     remote.UpdateHoster(hoster);
+ 
+     // Prevents too fast host switch
++    // AETHERIUS FIX-1010: the vector only grows on movement updates (see
++    // OnUpdateMovement); hosting a form with no movement yet wrote past its end.
++    if (partOne.worldState.lastMovUpdateByIdx.size() <= remoteIdx) {
++      partOne.worldState.lastMovUpdateByIdx.resize(
++        static_cast<size_t>(remoteIdx) + 1);
++    }
+     partOne.worldState.lastMovUpdateByIdx[remoteIdx] =
+       std::chrono::system_clock::now();
+ 
+@@ -797,11 +806,17 @@ void ActionListener::OnChangeValues(const RawMessageData& rawMsgData,
+     }
+ 
+     float newVal = *inputVal;
++    // AETHERIUS DEV-A1: reject nonfinite evidence only on the development path.
++    if (actor->HasDevAttributes() && !std::isfinite(newVal)) {
++      outVal = currentVal; sendOutMsg = true; return;
++    }
+ 
+     if (av == espm::ActorValue::Health) {
+       newVal = CropHealthRegeneration(newVal, timeAfterRegeneration, actor);
+     } else if (av == espm::ActorValue::Magicka) {
+       newVal = CropMagickaRegeneration(newVal, timeAfterRegeneration, actor);
++    } else if (actor->HasDevAttributes() && av == espm::ActorValue::Stamina) {
++      newVal = CropStaminaRegeneration(newVal, timeAfterRegeneration, actor); // AETHERIUS DEV-A1
+     }
+ 
+     if (!MathUtils::IsNearlyEqual(newVal, *inputVal)) {
+@@ -835,13 +850,7 @@ float CalculateCurrentHealthPercentage(const MpActor& actor, float damage,
+                                        float healthPercentage,
+                                        float* outBaseHealth)
+ {
+-  const uint32_t baseId = actor.GetBaseId();
+-  const uint32_t raceId = actor.GetRaceId();
+-  WorldState* espmProvider = actor.GetParent();
+-
+-  const float baseHealth =
+-    GetBaseActorValues(espmProvider, baseId, raceId, actor.GetTemplateChain())
+-      .health;
++  const float baseHealth = actor.GetMaximumValues().health; // AETHERIUS DEV-A1
+ 
+   if (outBaseHealth) {
+     *outBaseHealth = baseHealth;
+@@ -1400,6 +1409,11 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
+     currentActorValues, aggressor,
+     std::vector<espm::ActorValue>{ espm::ActorValue::Health });
+   aggressor->SetLastHitTime(targetActor.GetFormId(), currentHitTime);
++  // AETHERIUS D-P1: accepted physical hit; damage calculation above is untouched.
++  if (partOne.worldState.aetheriusWeaponPoison) {
++    aggressor->ApplyWeaponPoisonHit(targetActor, hitData.source, hitData.isHitBlocked,
++      hitData.isBashAttack, currentActorValues.healthPercentage <= 0.f);
++  }
+ 
+   spdlog::debug(
+     "OnWeaponHit - Target {0:x} is hit by {1} damage. Percentage was: {3}, "
+diff --git a/server/cpp/server_guest_lib/ActiveMagicEffectsMap.cpp b/server/cpp/server_guest_lib/ActiveMagicEffectsMap.cpp
+index 7b341d60d396490b6692af7d3c42dabe2295a14e..3e80e219f82b5832b84becba4465dec21a4e1c77 100644
+--- a/server/cpp/server_guest_lib/ActiveMagicEffectsMap.cpp
++++ b/server/cpp/server_guest_lib/ActiveMagicEffectsMap.cpp
+@@ -62,6 +62,7 @@ nlohmann::json::array_t ActiveMagicEffectsMap::ToJson() const
+ {
+   auto res = nlohmann::json::array();
+   for (const auto& [actorValue, effectEntry] : effects) {
++    if (effectEntry.weaponPoison) continue; // AETHERIUS D-P1: no runtime identity persisted
+     auto obj = nlohmann::json::object();
+     obj["effectId"] = effectEntry.data.effectId;
+     obj["endTime"] = Viet::TimeUtils::ToString(effectEntry.endTime);
+@@ -81,7 +82,7 @@ std::vector<espm::Effects::Effect> ActiveMagicEffectsMap::GetAllEffects()
+   std::vector<espm::Effects::Effect> activeEffects;
+   activeEffects.reserve(effects.size());
+   for (const auto [_, effectEntry] : effects) {
+-    activeEffects.push_back(effectEntry.data);
++    if (!effectEntry.weaponPoison) activeEffects.push_back(effectEntry.data); // AETHERIUS D-P1
+   }
+   return activeEffects;
+ }
+diff --git a/server/cpp/server_guest_lib/ActiveMagicEffectsMap.h b/server/cpp/server_guest_lib/ActiveMagicEffectsMap.h
+index 0565491ffa088690396d315d3060eed12839aa4e..f9600bf248e05793280b3491db3dcff3cdeb5f44 100644
+--- a/server/cpp/server_guest_lib/ActiveMagicEffectsMap.h
++++ b/server/cpp/server_guest_lib/ActiveMagicEffectsMap.h
+@@ -14,6 +14,8 @@ public:
+     uint32_t timerId = -1;
+     espm::Effects::Effect data;
+     std::chrono::system_clock::time_point endTime;
++    bool weaponPoison = false; // AETHERIUS D-P1: transient, never serialized
++    uint32_t weaponPoisonTicks = 0;
+   };
+ 
+ public:
+diff --git a/server/cpp/server_guest_lib/CropRegeneration.cpp b/server/cpp/server_guest_lib/CropRegeneration.cpp
+index 775596500451293fbe8dc5c03c5a376a1d51d06c..c016c76e5189191980d6a5cb48d3a8f4ea48f95f 100644
+--- a/server/cpp/server_guest_lib/CropRegeneration.cpp
++++ b/server/cpp/server_guest_lib/CropRegeneration.cpp
+@@ -8,12 +8,7 @@ namespace {
+ 
+ BaseActorValues GetValues(MpActor* actor)
+ {
+-  uint32_t baseId = actor->GetBaseId();
+-  auto appearance = actor->GetAppearance();
+-  uint32_t raceId = appearance ? appearance->raceId : 0;
+-  auto worldState = actor->GetParent();
+-  return GetBaseActorValues(worldState, baseId, raceId,
+-                            actor->GetTemplateChain());
++  return actor->GetMaximumValues(); // AETHERIUS DEV-A1: rates unchanged.
+ }
+ 
+ }
+diff --git a/server/cpp/server_guest_lib/MpActor.cpp b/server/cpp/server_guest_lib/MpActor.cpp
+index eb86a36d3bf2d1c119ac4069695c6427c4024abc..64950c99b486c4d5e763115ced0f4e6229db70cb 100644
+--- a/server/cpp/server_guest_lib/MpActor.cpp
++++ b/server/cpp/server_guest_lib/MpActor.cpp
+@@ -36,6 +36,7 @@
+ #include "ChangeValuesMessage.h"
+ #include "TeleportMessage.h"
+ #include "UpdateEquipmentMessage.h"
++#include "aetherius_combat/WeaponPoisonHost.h" // AETHERIUS D-P1
+ 
+ // for PlaceAtMe used in MpActor::DropItem
+ #include "script_classes/PapyrusObjectReference.h"
+@@ -234,6 +235,7 @@ void MpActor::SetAppearance(const Appearance* newAppearance)
+ 
+ void MpActor::SetEquipment(const Equipment& newEquipment)
+ {
++  if (ReconcileWeaponPoisonEquipment(newEquipment)) return; // AETHERIUS D-P1
+   EditChangeForm(
+     [&](MpChangeForm& changeForm) { changeForm.equipment = newEquipment; });
+ }
+@@ -350,16 +352,12 @@ void MpActor::RemoveFromFaction(FormDesc factionForm, bool lazyLoad)
+ void MpActor::VisitProperties(CreateActorMessage& message,
+                               VisitPropertiesMode mode)
+ {
+-  const auto baseId = GetBaseId();
+-  const uint32_t raceId = GetAppearance() ? GetAppearance()->raceId : 0;
+-
+   BaseActorValues baseActorValues;
+   WorldState* worldState = GetParent();
+   // this "if" is needed for unit testing: tests can call VisitProperties
+   // without espm attached, which will cause tests to fail
+   if (worldState && worldState->HasEspm()) {
+-    baseActorValues = GetBaseActorValues(worldState, baseId, raceId,
+-                                         ChangeForm().templateChain);
++    baseActorValues = GetMaximumValues(); // AETHERIUS DEV-A1: same maximum in spawn and damage.
+   }
+ 
+   MpChangeForm changeForm = GetChangeForm();
+@@ -505,6 +503,7 @@ bool MpActor::OnEquip(uint32_t baseId)
+     return false;
+   }
+ 
++  if (isPotion && TryUseWeaponPoison(baseId)) return true; // AETHERIUS D-P1: log absent-dose refusals too
+   const bool hasItem = isSpell
+     ? ChangeForm().learnedSpells.IsSpellLearned(baseId)
+     : GetInventory().GetItemCount(baseId) > 0;
+@@ -1574,15 +1573,18 @@ void MpActor::DamageActorValue(espm::ActorValue av, float value)
+     av, -std::abs(value) / GetMaximumValues().GetValue(av));
+ }
+ 
+-BaseActorValues MpActor::GetBaseValues()
++BaseActorValues MpActor::GetBaseValues() const // AETHERIUS DEV-A1
+ {
+   return GetBaseActorValues(GetParent(), GetBaseId(), GetRaceId(),
+                             ChangeForm().templateChain);
+ }
+ 
+-BaseActorValues MpActor::GetMaximumValues()
++BaseActorValues MpActor::GetMaximumValues() const // AETHERIUS DEV-A1
+ {
+-  return GetBaseValues();
++  auto values = GetBaseValues();
++  if (HasDevAttributes()) ApplyDevAttributes(values); // AETHERIUS DEV-A1 unchanged
++  else if (HasAttributeBonuses()) aetheriusAttributeBonuses->Apply(values); // AETHERIUS C3d
++  return values;
+ }
+ 
+ void MpActor::DropItem(const uint32_t baseId, const Inventory::Entry& entry)
+diff --git a/server/cpp/server_guest_lib/MpActor.h b/server/cpp/server_guest_lib/MpActor.h
+index 6b8465d18831c40c4adc5b7d1d27ec14ee620330..025c479143e0a8572a1a34f9ba9bf1dfa5c77ef6 100644
+--- a/server/cpp/server_guest_lib/MpActor.h
++++ b/server/cpp/server_guest_lib/MpActor.h
+@@ -3,6 +3,7 @@
+ #include "Appearance.h"
+ #include "Equipment.h"
+ #include "GetBaseActorValues.h"
++#include "aetherius_combat/DevAttributes.h" // AETHERIUS DEV-A1
+ #include "MpObjectReference.h"
+ #include "libespm/espm.h"
+ #include <map>
+@@ -165,8 +166,14 @@ public:
+   // rewritten
+   void SetActorValues(const ActorValues& actorValues);
+ 
+-  BaseActorValues GetBaseValues();
+-  BaseActorValues GetMaximumValues();
++  BaseActorValues GetBaseValues() const; // AETHERIUS DEV-A1
++  BaseActorValues GetMaximumValues() const; // AETHERIUS DEV-A1
++  void SetDevAttributes(const std::optional<aetherius::development::Attributes>& attributes); // AETHERIUS DEV-A1
++  void SetAttributeBonuses(const std::optional<aetherius::attributes::Bonuses>& bonuses); // AETHERIUS C3d
++  bool HasAttributeBonuses() const; // AETHERIUS C3d
++  void SendAttributeMaximumValues(); // AETHERIUS C3d
++  bool HasDevAttributes() const; // AETHERIUS DEV-A1
++  void ApplyDevAttributes(BaseActorValues& values) const; // AETHERIUS DEV-A1
+ 
+   void DropItem(const uint32_t baseId, const Inventory::Entry& entry);
+   void SetIsBlockActive(bool isBlockActive);
+@@ -198,6 +205,30 @@ public:
+ 
+ private:
+   struct Impl;
++public:
++  // AETHERIUS D-P1: transient host state; Core is the single bonus writer.
++  bool TryUseWeaponPoison(uint32_t baseId);
++  void RequestWeaponPoison(uint32_t poisonId, uint32_t weaponId, bool leftHand); // AETHERIUS D-P1-fix2
++  bool ReconcileWeaponPoisonEquipment(const Equipment& incoming);
++  void ApplyWeaponPoisonHit(MpActor& target, uint32_t source, bool blocked, bool bash, bool fatal);
++  uint32_t ApplyWeaponPoisonEffect(const espm::Effects::Effect& effect, const espm::MGEF::DATA& data, bool conditions, MpActor* poisoner = nullptr);
++  void PublishWeaponPoisonEquipment(bool toOwner = true); // AETHERIUS D-P1
++  void ScheduleWeaponPoisonTick(espm::ActorValue av, std::weak_ptr<MpForm> poisoner, Networking::UserId user); // AETHERIUS D-P1
++  uint32_t GetPoisonDoseBonus() const { return aetheriusPoisonDoseBonus; }
++  void SetPoisonDoseBonus(uint32_t bonus) { aetheriusPoisonDoseBonus = bonus; }
++  uint32_t GetPoisonResult() const { return aetheriusPoisonResult; }
++  uint32_t GetPoisonUnsupported() const { return aetheriusPoisonUnsupported; }
++private:
++  uint32_t aetheriusPoisonDoseBonus = 0;
++  std::optional<aetherius::development::Attributes> aetheriusDevAttributes; // AETHERIUS DEV-A1
++  Networking::UserId aetheriusDevAttributesUser = Networking::InvalidUserId; // AETHERIUS DEV-A1
++  std::optional<aetherius::attributes::Bonuses> aetheriusAttributeBonuses; // AETHERIUS C3d
++  Networking::UserId aetheriusAttributeBonusesUser = Networking::InvalidUserId; // AETHERIUS C3d
++  int32_t aetheriusAttributeBonusesProfile = 0; // AETHERIUS C3d
++  uint64_t aetheriusDevAttributesRevision = 0; // AETHERIUS DEV-A1
++  uint32_t aetheriusPoisonResult = 0;
++  uint32_t aetheriusPoisonUnsupported = 0;
++  bool aetheriusPoisonOwnerPublished = false; // AETHERIUS D-P1: one correction until host poison changes
+   std::shared_ptr<Impl> pImpl;
+   bool factionsLoaded = false;
+ 
+diff --git a/server/cpp/server_guest_lib/WorldState.h b/server/cpp/server_guest_lib/WorldState.h
+index cc390a46e2c30bbd898677ccfe5466604c53f7b5..ca8e42690e5c8af2e2fb25c8084d266448d00e34 100644
+--- a/server/cpp/server_guest_lib/WorldState.h
++++ b/server/cpp/server_guest_lib/WorldState.h
+@@ -249,6 +249,11 @@ public:
+   bool isPapyrusHotReloadEnabled = false;
+ 
+   bool npcEnabled = false;
++  std::weak_ptr<MpForm> FindLoadedForm(uint32_t id) const { // AETHERIUS D-P1: never loads/I/O
++    const auto it = forms.find(id);
++    return it == forms.end() ? std::weak_ptr<MpForm>{} : it->second;
++  }
++  bool aetheriusWeaponPoison = false; // AETHERIUS D-P1: opt in, default preserves upstream.
+   std::unordered_map<std::string, NpcSettingsEntry> npcSettings;
+   NpcSettingsEntry defaultSetting;
+   bool enableConsoleCommandsForAll = false;
+diff --git a/server/gamemode/.env.example b/server/gamemode/.env.example
+index ff77771fce491bfd4d8fdd05607577f375da50ad..b80b1e9646148d72c5bf537881f59ca9a68db926 100644
+--- a/server/gamemode/.env.example
++++ b/server/gamemode/.env.example
+@@ -22,6 +22,9 @@ ALLOW_LOCAL_AUTOWHITELIST=false
+ # pra quais ligar durante o teste in-game.
+ # ─────────────────────────────────────────────────────────────────────────────
+ ENABLE_NPC_CLEANER=false
++ENABLE_GAMEPLAY_CORE=false
++# Caminho absoluto ou relativo ao diretorio de execucao do servidor.
++GAMEPLAY_CORE_BUNDLE=
+ ENABLE_DEATH_SERVICE=false
+ ENABLE_GOVERNANCE_SERVICE=false
+ ENABLE_MARKET_STALLS_SERVICE=false
+diff --git a/server/gamemode/phase0-basic.js b/server/gamemode/phase0-basic.js
+index 7bf038e31e1a2dc3b51abcf09970a5e51604ff4d..e29d5873fffe673cb5a2caf092cc1a746a37f0f7 100644
+--- a/server/gamemode/phase0-basic.js
++++ b/server/gamemode/phase0-basic.js
+@@ -39,6 +39,51 @@ try {
+ // Registro de módulos
+ // ─────────────────────────────────────────────────────────────────────────────
+ 
++moduleRegistry.register((() => {
++  let gameplayCore = null;
++  return {
++    id: 'gameplay-core',
++    enabledBy: 'ENABLE_GAMEPLAY_CORE',
++    phase: 'lab',
++    dependencies: [],
++    commands: [],
++    initialize: async () => {
++      if (gameplayCore) return;
++      if (!process.env.GAMEPLAY_CORE_BUNDLE) {
++        throw new Error('Defina GAMEPLAY_CORE_BUNDLE para carregar o Core');
++      }
++      const bundle = require(path.resolve(process.cwd(), process.env.GAMEPLAY_CORE_BUNDLE));
++      if (typeof bundle.createGameplayCore !== 'function') {
++        throw new Error('Bundle sem createGameplayCore');
++      }
++      const core = bundle.createGameplayCore({
++        mp: typeof mp === 'undefined' ? undefined : mp,
++        pg: require(path.join(gamemodeDir, 'core', 'pg')),
++        env: process.env,
++        log: console
++      });
++      for (const method of ['initialize', 'shutdown', 'healthCheck', 'info']) {
++        if (!core || typeof core[method] !== 'function') {
++          throw new Error(`GameplayCore sem ${method}`);
++        }
++      }
++      try {
++        await core.initialize();
++        gameplayCore = core;
++      } catch (err) {
++        await core.shutdown();
++        throw err;
++      }
++    },
++    shutdown: async () => {
++      if (!gameplayCore) return;
++      await gameplayCore.shutdown();
++      gameplayCore = null;
++    },
++    healthCheck: () => gameplayCore !== null && gameplayCore.healthCheck() === true
++  };
++})());
++
+ moduleRegistry.register({
+   id: 'npc-cleaner',
+   enabledBy: 'ENABLE_NPC_CLEANER',
+@@ -385,4 +430,4 @@ setInterval(() => {
+       }
+     }
+   }
+-}, 2000);
+\ No newline at end of file
++}, 2000);
+diff --git a/server/cpp/addon/property_bindings/AttributeBonusesBinding.cpp b/server/cpp/addon/property_bindings/AttributeBonusesBinding.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..53f054393d520b84e5f958e3708502a14b21be47
+--- /dev/null
++++ b/server/cpp/addon/property_bindings/AttributeBonusesBinding.cpp
+@@ -0,0 +1,43 @@
++#include "AttributeBonusesBinding.h"
++#include "MpActor.h"
++#include "ScampServer.h"
++#include "PartOne.h"
++#include <cmath>
++
++Napi::Value AttributeBonusesBinding::Get(Napi::Env env, ScampServer& server, uint32_t id)
++{
++  auto& actor = server.GetPartOne()->worldState.GetFormAt<MpActor>(id);
++  auto encode = [&](const BaseActorValues& values) {
++    auto result = Napi::Object::New(env);
++    result.Set("health", values.health);
++    result.Set("magicka", values.magicka);
++    result.Set("stamina", values.stamina);
++    return result;
++  };
++  auto result = Napi::Object::New(env);
++  result.Set("base", encode(actor.GetBaseValues()));
++  result.Set("maximum", encode(actor.GetMaximumValues()));
++  result.Set("origin", actor.HasDevAttributes() ? "DEV" : actor.HasAttributeBonuses() ? "CLASS_ADDITIVE" : "RECORDS");
++  return result;
++}
++void AttributeBonusesBinding::Set(Napi::Env env, ScampServer& server, uint32_t id, Napi::Value value)
++{
++  auto& actor = server.GetPartOne()->worldState.GetFormAt<MpActor>(id);
++  if (value.IsNull()) { actor.SetAttributeBonuses(std::nullopt); return; }
++  if (!value.IsObject() || value.IsArray())
++    throw Napi::TypeError::New(env, "Expected health, magicka, stamina deltas or null");
++  const auto object = value.As<Napi::Object>();
++  if (object.GetPropertyNames().Length() != 3)
++    throw Napi::TypeError::New(env, "Expected exactly health, magicka, stamina");
++  auto integer = [&](const char* key) {
++    const auto field = object.Get(key);
++    if (!field.IsNumber()) throw Napi::TypeError::New(env, "Expected integer allocation");
++    const auto number = field.As<Napi::Number>().DoubleValue();
++    if (!std::isfinite(number) || std::floor(number) != number
++        || number < 0 || number > 585 || std::fmod(number, 5) != 0)
++      throw Napi::RangeError::New(env, "ATTRIBUTE_POINTS_INVALID");
++    return static_cast<int>(number);
++  };
++  actor.SetAttributeBonuses(aetherius::attributes::Bonuses{
++    integer("health"), integer("magicka"), integer("stamina") });
++}
+diff --git a/server/cpp/addon/property_bindings/AttributeBonusesBinding.h b/server/cpp/addon/property_bindings/AttributeBonusesBinding.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..c9d117941ca10a318f8d78ac7e0b7f78e5778b81
+--- /dev/null
++++ b/server/cpp/addon/property_bindings/AttributeBonusesBinding.h
+@@ -0,0 +1,9 @@
++#pragma once
++#include "PropertyBinding.h"
++// AETHERIUS C3d: transient native state, never a persisted custom property.
++class AttributeBonusesBinding : public PropertyBinding {
++public:
++  std::string GetPropertyName() const override { return "aetheriusAttributeBonuses"; }
++  Napi::Value Get(Napi::Env env, ScampServer& server, uint32_t id) override;
++  void Set(Napi::Env env, ScampServer& server, uint32_t id, Napi::Value value) override;
++};
+diff --git a/server/cpp/addon/property_bindings/DevAttributesBinding.cpp b/server/cpp/addon/property_bindings/DevAttributesBinding.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..b63078367e3ba5b5c5de1135c4a62d5ad667a587
+--- /dev/null
++++ b/server/cpp/addon/property_bindings/DevAttributesBinding.cpp
+@@ -0,0 +1,38 @@
++#include "DevAttributesBinding.h"
++#include "MpActor.h"
++#include "ScampServer.h"
++#include "PartOne.h"
++#include <cmath>
++
++Napi::Value DevAttributesBinding::Get(Napi::Env env, ScampServer& server, uint32_t id)
++{
++  auto& actor = server.GetPartOne()->worldState.GetFormAt<MpActor>(id);
++  if (!actor.HasDevAttributes()) return env.Null();
++  const auto values = actor.GetMaximumValues();
++  auto result = Napi::Object::New(env);
++  result.Set("health", values.health);
++  result.Set("magicka", values.magicka);
++  result.Set("stamina", values.stamina);
++  return result;
++}
++
++void DevAttributesBinding::Set(Napi::Env env, ScampServer& server, uint32_t id, Napi::Value value)
++{
++  auto& actor = server.GetPartOne()->worldState.GetFormAt<MpActor>(id);
++  if (value.IsNull()) { actor.SetDevAttributes(std::nullopt); return; }
++  if (!value.IsObject() || value.IsArray())
++    throw Napi::TypeError::New(env, "Expected DEV health, magicka, stamina or null");
++  const auto object = value.As<Napi::Object>();
++  if (object.GetPropertyNames().Length() != 3)
++    throw Napi::TypeError::New(env, "Expected exactly health, magicka, stamina");
++  auto integer = [&](const char* key) {
++    const auto field = object.Get(key);
++    if (!field.IsNumber()) throw Napi::TypeError::New(env, "Expected DEV integer");
++    const auto number = field.As<Napi::Number>().DoubleValue();
++    if (!std::isfinite(number) || std::floor(number) != number || number < 1 || number > 100000)
++      throw Napi::RangeError::New(env, "DEV attributes outside 1..100000");
++    return static_cast<int>(number);
++  };
++  actor.SetDevAttributes(aetherius::development::Attributes{
++    integer("health"), integer("magicka"), integer("stamina") });
++}
+diff --git a/server/cpp/addon/property_bindings/DevAttributesBinding.h b/server/cpp/addon/property_bindings/DevAttributesBinding.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..bc510f678d6c1e45ae3277aedc90f64fe9a4be82
+--- /dev/null
++++ b/server/cpp/addon/property_bindings/DevAttributesBinding.h
+@@ -0,0 +1,9 @@
++#pragma once
++#include "PropertyBinding.h"
++// AETHERIUS DEV-A1: native entry, not visible as a custom/persisted property.
++class DevAttributesBinding : public PropertyBinding {
++public:
++  std::string GetPropertyName() const override { return "aetheriusDevAttributes"; }
++  Napi::Value Get(Napi::Env env, ScampServer& server, uint32_t id) override;
++  void Set(Napi::Env env, ScampServer& server, uint32_t id, Napi::Value value) override;
++};
+diff --git a/server/cpp/addon/property_bindings/PoisonDoseBinding.cpp b/server/cpp/addon/property_bindings/PoisonDoseBinding.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..fc54c284826c224b4dab9af78d10efa5ea77af71
+--- /dev/null
++++ b/server/cpp/addon/property_bindings/PoisonDoseBinding.cpp
+@@ -0,0 +1,39 @@
++#include "PoisonDoseBinding.h"
++#include "MpActor.h"
++#include "ScampServer.h"
++#include "PartOne.h"
++#include <cmath>
++Napi::Value PoisonDoseBinding::Get(Napi::Env env, ScampServer& server, uint32_t id) {
++  return Napi::Number::New(env, server.GetPartOne()->worldState.GetFormAt<MpActor>(id).GetPoisonDoseBonus());
++}
++void PoisonDoseBinding::Set(Napi::Env env, ScampServer& server, uint32_t id, Napi::Value value) {
++  if (!value.IsNumber()) throw Napi::TypeError::New(env, "Poison bonus must be an integer");
++  const auto bonus = value.As<Napi::Number>().DoubleValue();
++  if (!std::isfinite(bonus) || std::floor(bonus) != bonus || bonus < 0 || bonus > 65534)
++    throw Napi::RangeError::New(env, "Poison bonus outside 0..65534");
++  server.GetPartOne()->worldState.GetFormAt<MpActor>(id).SetPoisonDoseBonus(static_cast<uint32_t>(bonus));
++}
++Napi::Value PoisonStatusBinding::Get(Napi::Env env, ScampServer& server, uint32_t id) {
++  const auto& actor = server.GetPartOne()->worldState.GetFormAt<MpActor>(id);
++  auto result = Napi::Object::New(env);
++  result.Set("result", actor.GetPoisonResult());
++  result.Set("unsupportedFamilies", actor.GetPoisonUnsupported());
++  return result;
++}
++void WeaponPoisonIntentBinding::Set(Napi::Env env, ScampServer& server, uint32_t id, Napi::Value value) {
++  if (!value.IsObject() || value.IsArray()) throw Napi::TypeError::New(env, "Expected weapon poison intent");
++  const auto object = value.As<Napi::Object>();
++  if (object.GetPropertyNames().Length() != 3 || !object.Get("hand").IsString())
++    throw Napi::TypeError::New(env, "Expected weaponId, poisonId and hand");
++  const auto hand = object.Get("hand").As<Napi::String>().Utf8Value();
++  if (hand != "left" && hand != "right") throw Napi::TypeError::New(env, "Invalid hand");
++  auto formId = [&](const char* key) {
++    const auto field = object.Get(key);
++    if (!field.IsNumber()) throw Napi::TypeError::New(env, "Invalid record evidence");
++    const auto number = field.As<Napi::Number>().DoubleValue();
++    if (!std::isfinite(number) || std::floor(number) != number || number < 1 || number > UINT32_MAX)
++      throw Napi::RangeError::New(env, "Invalid record evidence");
++    return static_cast<uint32_t>(number);
++  };
++  server.GetPartOne()->worldState.GetFormAt<MpActor>(id).RequestWeaponPoison(formId("poisonId"), formId("weaponId"), hand == "left");
++}
+diff --git a/server/cpp/addon/property_bindings/PoisonDoseBinding.h b/server/cpp/addon/property_bindings/PoisonDoseBinding.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..9b83427af0206b5a6765bf6751b2240f5bd36d7c
+--- /dev/null
++++ b/server/cpp/addon/property_bindings/PoisonDoseBinding.h
+@@ -0,0 +1,20 @@
++#pragma once
++#include "PropertyBinding.h"
++// AETHERIUS D-P1: native, transient properties; never a custom/save property.
++class PoisonDoseBinding : public PropertyBinding {
++public:
++  std::string GetPropertyName() const override { return "aetheriusPoisonDoseBonus"; }
++  Napi::Value Get(Napi::Env env, ScampServer& server, uint32_t id) override;
++  void Set(Napi::Env env, ScampServer& server, uint32_t id, Napi::Value value) override;
++};
++class PoisonStatusBinding : public PropertyBinding {
++public:
++  std::string GetPropertyName() const override { return "aetheriusPoisonStatus"; }
++  Napi::Value Get(Napi::Env env, ScampServer& server, uint32_t id) override;
++};
++// AETHERIUS D-P1-fix2: command entry, not persisted/custom property.
++class WeaponPoisonIntentBinding : public PropertyBinding {
++public:
++  std::string GetPropertyName() const override { return "aetheriusWeaponPoisonIntent"; }
++  void Set(Napi::Env env, ScampServer& server, uint32_t id, Napi::Value value) override;
++};
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/AetheriusDamageFormula.cpp b/server/cpp/server_guest_lib/aetherius_combat/AetheriusDamageFormula.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..7d662a289d82eba3a3b18173b0a9d7fb1d9f19f8
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/AetheriusDamageFormula.cpp
+@@ -0,0 +1,101 @@
++#include "AetheriusDamageFormula.h"
++#include "MpActor.h"
++#include "libespm/espm.h"
++#include <limits>
++
++namespace aetherius::combat {
++AetheriusDamageFormula::AetheriusDamageFormula(const espm::CombineBrowser& browser,
++  const std::vector<StableFormKey>& physicalRecords)
++{
++  if (physicalRecords.size() > 4096)
++    throw std::invalid_argument("shadow record capacity exceeded");
++  auto& cache = browser.GetCache();
++  for (const auto& key : physicalRecords) {
++    const auto source = browser.FindSourceByFilename(key.plugin.c_str());
++    if (!source) throw std::invalid_argument("missing shadow plugin: " + key.plugin);
++    const auto id = browser.ToRuntimeFormId(*source, key.localId);
++    const auto row = browser.LookupById(id);
++    if (!row.rec) throw std::invalid_argument("missing shadow record: " + key.ToString());
++    if (records.count(id)) throw std::invalid_argument("duplicate shadow record");
++    if (const auto weapon = espm::Convert<espm::WEAP>(row.rec)) {
++    const auto data = weapon->GetData(cache);
++    const char* skill = nullptr;
++    if (data.weapDNAM) {
++      switch (data.weapDNAM->animType) {
++        case espm::WEAP::AnimType::OneHandSword:
++        case espm::WEAP::AnimType::OneHandDagger:
++        case espm::WEAP::AnimType::OneHandAxe:
++        case espm::WEAP::AnimType::OneHandMace: skill = "OneHanded"; break;
++        case espm::WEAP::AnimType::TwoHandSword:
++        case espm::WEAP::AnimType::TwoHandAxe: skill = "TwoHanded"; break;
++        case espm::WEAP::AnimType::Bow:
++        case espm::WEAP::AnimType::Crossbow: skill = "Marksman"; break;
++        default: break;
++      }
++    }
++    records.emplace(id, Record{Kind::Weapon,
++      data.weapData ? static_cast<double>(data.weapData->damage) : 0,
++      skill, data.weapData && skill});
++    } else if (const auto armor = espm::Convert<espm::ARMO>(row.rec)) {
++    const auto data = armor->GetData(cache);
++    const auto skill = data.bod2.present ? data.bod2.skill : data.bodt.skill;
++    records.emplace(id, Record{Kind::Armor,
++      data.baseRatingX100 / 100.0,
++      skill == 0 ? "LightArmor" : skill == 1 ? "HeavyArmor" : "",
++      data.enchantmentFormId == 0});
++    } else throw std::invalid_argument("shadow record must be WEAP or ARMO");
++  }
++}
++
++float AetheriusDamageFormula::CalculateDamage(const MpActor& attacker,
++  const MpActor& defender, const HitData& hit) const
++{
++  if (hit.source == 0x1f4)
++    throw ShadowUnsupported(UnsupportedReason::UnarmedRaceSnapshot);
++  const auto& offense = attacker.GetEquipment().inv.entries;
++  const auto& defense = defender.GetEquipment().inv.entries;
++  if (offense.size() > kMaxEquipmentEntries || defense.size() > kMaxEquipmentEntries)
++    throw ShadowUnsupported(UnsupportedReason::EquipmentCapacity);
++  unsigned equipped = 0;
++  for (const auto& entry : offense)
++    if (entry.baseId == hit.source && entry.count && entry.GetWorn() != Inventory::Worn::None)
++      ++equipped;
++  if (!equipped) throw ShadowUnsupported(UnsupportedReason::SourceNotEquipped);
++  if (equipped > 1) throw ShadowUnsupported(UnsupportedReason::DuplicateWeapon);
++  const auto weapon = records.find(hit.source);
++  if (weapon == records.end()) throw ShadowUnsupported(UnsupportedReason::MissingRecord);
++  if (weapon->second.kind != Kind::Weapon || !weapon->second.supported)
++    throw ShadowUnsupported(UnsupportedReason::WeaponData);
++
++  CombatTrace trace(false); // Never enables the unbounded trace vector in shadow.
++  double armor = 0;
++  for (const auto& entry : defense) {
++    if (!entry.count || entry.GetWorn() == Inventory::Worn::None) continue;
++    const auto row = records.find(entry.baseId);
++    if (row == records.end()) throw ShadowUnsupported(UnsupportedReason::MissingRecord);
++    if (row->second.kind != Kind::Armor) continue;
++    if (!row->second.supported || entry.enchantmentId.value_or(0))
++      throw ShadowUnsupported(UnsupportedReason::EnchantedArmor);
++    armor += ArmorPiece(row->second.base, row->second.skill, neutralProfile, {},
++      0, 1, noPerks, settings, trace);
++  }
++  DamageContext context{neutralProfile, neutralProfile, weapon->second.skill,
++    {}, weapon->second.base, 0, 1, armor};
++  // Preserve the original candidate rule. Block geometry remains a host
++  // limitation; packet power/sneak/bash cannot grant candidate multipliers.
++  context.blocked = hit.isHitBlocked && defender.IsBlockActive();
++  class NoCriticalRng final : public CombatRng {
++    double Unit() override { throw std::logic_error("shadow has no critical context"); }
++  } rng;
++  const auto damage = PhysicalDamage(context, settings, noPerks, rng, trace).health;
++  if (!std::isfinite(damage) || damage > std::numeric_limits<float>::max())
++    throw std::overflow_error("shadow physical damage overflow");
++  return static_cast<float>(damage);
++}
++
++float AetheriusDamageFormula::CalculateDamage(const MpActor&, const MpActor&,
++  const SpellCastData&) const
++{
++  throw ShadowUnsupported(UnsupportedReason::Magic);
++}
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/AetheriusDamageFormula.h b/server/cpp/server_guest_lib/aetherius_combat/AetheriusDamageFormula.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..8d7e622f94d3bc59576e7850491efad224589164
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/AetheriusDamageFormula.h
+@@ -0,0 +1,32 @@
++#pragma once
++#include "formulas/IDamageFormula.h"
++#include "physical/PhysicalDamagePipeline.h"
++#include "ShadowStatus.h"
++#include <map>
++
++namespace espm { class CombineBrowser; }
++namespace aetherius::combat {
++// A6-S3 only. No actor state is installed or persisted. The zero profile is
++// explicit experimental input; its result is never applied by the host.
++class AetheriusDamageFormula final : public IDamageFormula {
++public:
++  static constexpr size_t kMaxEquipmentEntries = 64;
++  AetheriusDamageFormula(const espm::CombineBrowser& browser,
++    const std::vector<StableFormKey>& physicalRecords);
++  float CalculateDamage(const MpActor&, const MpActor&, const HitData&) const override;
++  float CalculateDamage(const MpActor&, const MpActor&, const SpellCastData&) const override;
++private:
++  enum class Kind { Weapon, Armor };
++  struct Record {
++    Kind kind;
++    double base;
++    const char* skill;
++    bool supported;
++  };
++  // Filled from winning host records at startup, then immutable on hits.
++  std::map<uint32_t, Record> records;
++  const CombatProfile neutralProfile{0, {}, {}, 0, 0, 0};
++  const CombatSettings settings{};
++  const PerkRegistry noPerks{};
++};
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/DevAttributes.cpp b/server/cpp/server_guest_lib/aetherius_combat/DevAttributes.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..570243e2ae853858208ef5243bd1015ce1a21032
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/DevAttributes.cpp
+@@ -0,0 +1,95 @@
++#include "DevAttributes.h"
++#include "MpActor.h"
++#include "SpSnippet.h"
++#include "WorldState.h"
++
++bool MpActor::HasDevAttributes() const
++{
++  return aetheriusDevAttributes.has_value() && IsCreatedAsPlayer()
++    && GetUserId() != Networking::InvalidUserId
++    && GetUserId() == aetheriusDevAttributesUser;
++}
++
++void MpActor::ApplyDevAttributes(BaseActorValues& values) const
++{
++  if (HasDevAttributes()) aetheriusDevAttributes->Apply(values);
++}
++
++void MpActor::SetDevAttributes(
++  const std::optional<aetherius::development::Attributes>& attributes)
++{
++  if (attributes) {
++    attributes->Validate();
++    if (!IsCreatedAsPlayer() || GetUserId() == Networking::InvalidUserId
++        || GetProfileId() < 1)
++      throw std::invalid_argument("DEV attributes require an online player profile");
++  }
++  const bool hadValue = aetheriusDevAttributes.has_value();
++  aetheriusDevAttributes = attributes;
++  aetheriusDevAttributesUser = GetUserId();
++  ++aetheriusDevAttributesRevision;
++  if (!attributes && !hadValue) return;
++  if (!IsCreatedAsPlayer() || GetUserId() == Networking::InvalidUserId) return;
++
++  SendAttributeMaximumValues();
++}
++
++// AETHERIUS C3d: same delivery and ACK guards for the single effective maximum.
++void MpActor::SendAttributeMaximumValues()
++{
++  // Reuse the existing client Actor.SetActorValue bridge. Its ACK certifies
++  // completion of the calls only. Send percentages after all three ACKs so an
++  // old maximum cannot be used by the client's ChangeValues handler.
++  const auto values = GetMaximumValues();
++  const auto revision = aetheriusDevAttributesRevision;
++  const auto user = GetUserId();
++  const std::weak_ptr<MpForm> weak = GetParent()->LookupFormById(GetFormId());
++  const auto remaining = std::make_shared<int>(3);
++  const std::pair<const char*, float> resources[] = {
++    { "Health", values.health }, { "Magicka", values.magicka },
++    { "Stamina", values.stamina }
++  };
++  for (const auto& [name, value] : resources) {
++    const std::vector<std::optional<std::variant<bool, double, std::string,
++      SpSnippetObjectArgument>>> args = { std::string(name), double(value) };
++    SpSnippet("Actor", "SetActorValue", args, GetFormId())
++      .Execute(this, SpSnippetMode::kReturnResult)
++      .Then([weak, revision, user, remaining](VarValue) {
++        auto form = weak.lock();
++        auto actor = form ? form->AsActor() : nullptr;
++        if (!actor || actor->aetheriusDevAttributesRevision != revision
++            || actor->GetUserId() != user || actor->IsDisabled()) return;
++        if (--*remaining == 0)
++          actor->NetSendChangeValues(actor->GetActorValues(), std::nullopt);
++      });
++  }
++}
++
++bool MpActor::HasAttributeBonuses() const
++{
++  return aetheriusAttributeBonuses.has_value() && IsCreatedAsPlayer()
++    && GetUserId() != Networking::InvalidUserId
++    && GetUserId() == aetheriusAttributeBonusesUser
++    && GetProfileId() == aetheriusAttributeBonusesProfile;
++}
++
++void MpActor::SetAttributeBonuses(
++  const std::optional<aetherius::attributes::Bonuses>& bonuses)
++{
++  if (bonuses) {
++    bonuses->Validate();
++    if (!IsCreatedAsPlayer() || GetUserId() == Networking::InvalidUserId
++        || GetProfileId() < 1)
++      throw std::invalid_argument("ATTRIBUTE_OFFICIAL_PLAYER_REQUIRED");
++    if (HasDevAttributes())
++      throw std::invalid_argument("ATTRIBUTE_DEV_WRITER_ACTIVE");
++  }
++  const bool hadValue = aetheriusAttributeBonuses.has_value();
++  aetheriusAttributeBonuses = bonuses;
++  aetheriusAttributeBonusesUser = GetUserId();
++  aetheriusAttributeBonusesProfile = GetProfileId();
++  ++aetheriusDevAttributesRevision; // Shared maximum delivery invalidates old ACKs.
++  if (!bonuses && !hadValue) return;
++  if (!IsCreatedAsPlayer() || GetUserId() == Networking::InvalidUserId) return;
++  SendAttributeMaximumValues();
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/DevAttributes.h b/server/cpp/server_guest_lib/aetherius_combat/DevAttributes.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..4da5040960c02045c2596baf570060b64609698e
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/DevAttributes.h
+@@ -0,0 +1,44 @@
++#pragma once
++#include "GetBaseActorValues.h"
++#include <optional>
++#include <stdexcept>
++
++// AETHERIUS DEV-A1: transient resource maxima, never a change form or gameplay rule.
++namespace aetherius::development {
++struct Attributes {
++  int health;
++  int magicka;
++  int stamina;
++  void Validate() const {
++    for (const auto value : { health, magicka, stamina })
++      if (value < 1 || value > 100000)
++        throw std::invalid_argument("DEV attributes outside 1..100000");
++  }
++  void Apply(BaseActorValues& values) const {
++    values.health = static_cast<float>(health);
++    values.magicka = static_cast<float>(magicka);
++    values.stamina = static_cast<float>(stamina);
++  }
++};
++}
++
++// AETHERIUS C3d: normal server-authoritative additive allocation.
++namespace aetherius::attributes {
++struct Bonuses {
++  int health;
++  int magicka;
++  int stamina;
++  void Validate() const {
++    for (const auto value : { health, magicka, stamina })
++      if (value < 0 || value > 585 || value % 5 != 0)
++        throw std::invalid_argument("ATTRIBUTE_POINTS_INVALID");
++    if (health + magicka + stamina > 585)
++      throw std::invalid_argument("ATTRIBUTE_POINTS_INVALID");
++  }
++  void Apply(BaseActorValues& values) const {
++    values.health += static_cast<float>(health);
++    values.magicka += static_cast<float>(magicka);
++    values.stamina += static_cast<float>(stamina);
++  }
++};
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/README.md b/server/cpp/server_guest_lib/aetherius_combat/README.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..9821b6ad995368acff23d0630177d3c648110eca
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/README.md
+@@ -0,0 +1,120 @@
++# A6-S3: physical damage shadow spike
++
++This disposable spike wraps the existing TES5 -> DamageMult -> SweetPieDamage ->
++SweetPieSpell -> DamageMultConditional chain. It always returns that chain's
++result. Candidate exceptions, unsupported contexts and invalid numbers affect
++only shadow diagnostics. Spell calculations call only the existing chain.
++
++Enable in the local `build/dist/server/server-settings.json`, then restart:
++
++```json
++{
++  "aetheriusCombat": {
++    "shadow": true,
++    "physicalRecords": ["Skyrim.esm:01397E", "Skyrim.esm:012E46"]
++  }
++}
++```
++
++These two keys select the laboratory equipment; their values come from the
++host's load-order winners. The list is explicit because the current libespm
++type enumeration does not support WEAP/ARMO. Configure every weapon and armor
++used in a shadow session. A missing prepared record yields `UNSUPPORTED`, never
++a substituted damage. Startup rejects missing plugins/records, duplicate keys,
++nonphysical records and lists larger than 4096. The immutable prepared table is
++runtime-local; no runtime FormID is persisted as record identity.
++
++Disable with `shadow: false` or remove `aetheriusCombat`, then restart. This
++constructs exactly the previous chain and adds no candidate or diagnostic API.
++Rebuilding can overwrite local settings: run `server/tools/sync-client-plugins.js`
++against the correct MO2 instance again, then restore this local setting.
++
++## Reading diagnostics
++
++When enabled, `mp.getAetheriusCombatShadow()` returns a JSON **string**. Call it
++on request outside the hit path, on the same server thread:
++
++```js
++const snapshot = JSON.parse(mp.getAetheriusCombatShadow());
++```
++
++The non-destructive snapshot contains the latest 1024 physical hits in sequence
++order, overwrite count, cumulative failure counters and `neutralProfile: true`
++on every sample. Status is `CALCULATED`, `UNSUPPORTED`, `EXCEPTION` or `INVALID`.
++Failed candidates serialize as `null`. `failures` counts exceptions and invalid
++numbers; `unsupported` is a separate counter. Reasons: 0 none, 1 unarmed race
++snapshot, 2 source not equipped, 3 missing prepared record, 4 weapon data/type,
++5 enchanted armor, 6 equipment capacity, 7 duplicate weapon, 8 magic.
++
++JSON allocation happens only in the requested read. Recording uses one fixed
++`std::array`, no per-hit logging, no callback and no retained actor pointers.
++There is no concurrent reader support; the host calls the formula and JS on its
++server thread. Output consumers must cap their own retention. Existing host
++logging and network/resource application are preserved by the spike.
++
++## Candidate limits
++
++The copied physical pipeline uses an explicit empty profile: no skills or perks,
++revision zero, no effective resource attributes, no item or actor providers,
++critical chance zero, tracing disabled. It installs no ActorCombatState and no
++effect store. A neutral candidate is an experimental comparison, not a complete
++or certified result. Skills, grants and revision must eventually come from
++ActorState via CombatProfileProjection. Runtime resources stay with the host.
++
++Equipment is read by const reference from the host, with at most 64 entries per
++actor. Weapon must be worn exactly once. Enchanted armor and unknown prepared
++records are unsupported. Unarmed is unsupported until a bounded native race
++snapshot is available; the current GetRaceId accessor can parse appearance on a
++hit. Magical weapon contributions, ammo, critical data, refinement and other
++providers are not evaluated by this physical-only experiment.
++
++Power/sneak/bash packet flags grant no candidate bonus. Blocking requires both
++the hit flag and native Block state; this retains the original candidate rule
++but does not certify block geometry or client combat DLL semantics.
++
++## Reproduction and source provenance
++
++### FIX-1010 safety audit (10 October 2026)
++
++`--npc <manifest>` in the existing standalone runner exercises the actual
++`0422B4:Skyrim.esm` NPC, hosted by a player, without opening a socket. Its raw
++race is `109C7C:Skyrim.esm`; native UseTraits template resolution selects
++`0131FA:Skyrim.esm`, matching the session warning. The pre-fix reproduction did
++not produce an access violation. The crash remains unconfirmed; keep both
++weaponPoison and shadow disabled pending independent review and game evidence.
++
++D-P1 now requires a native player actor with an associated user, a world with
++records and resolvable hit/effect sources. NPC attackers never enter poison.
++Effect timers retain weak source and target references, validate the user again
++and stop after disconnect/destruction. Resource publication refuses an absent
++connected recipient before changing resources. Equipment publications deduplicate
++recipients after hoster resolution; an NPC listener cannot echo to the owner.
++NPC equipment packets retain the maintainer forwarding path.
++
++The shadow adapter retains values from records at construction; on hits it reads
++equipment by const reference and uses bounded maps/buffers. It does not use
++GetParent, GetActorToSendTo, GetIdx, inventory, user callbacks or effect timers
++in its candidate calculation. Candidate exceptions are ordinary C++ exceptions;
++the wrapper does not intercept Windows access violations. NPC and detached-actor
++candidate cases are covered without enabling shadow in the local server. Nothing
++in this audit establishes a common cause with the 7 October crash, destroyActor
++or Papyrus Activate. Full findings and command output: `_work/evidence/FIX-1010/`.
++
++Configure the existing build with `-DAETHERIUS_SHADOW_TESTS=ON` and build Release
++targets `skymp5-server` and `aetherius-shadow-test`. Execute
++`build/server/cpp/Release/aetherius-shadow-test.exe` with the absolute path to
++`build/dist/server/data/aetherius-loadorder.json`. The isolated runner avoids
++generating Papyrus fixtures outside the order's allowed paths. It also registers
++as a Catch test if the full unit suite is built separately.
++
++Eight headers are byte-for-byte copies from GameplayCore's damage-system:
++CombatSettings, DamageContext, CombatTrace, StableFormKey, ActorCombatState,
++PerkRegistry, ArmorCurve and PhysicalDamagePipeline. The AetheriusDamageFormula
++host adapter is rewritten for this neutral, bounded spike. Providers, equipment
++cache, ActiveEffectStore, magic pipeline, metrics, audited perk catalogue and the
++old integration patches are not installed. Historical damage-system integration
++instructions do not describe this host spike; this file and the A6-S3 report do.
++
++Evidence and delivery report live in the workspace's `_work/evidence/A6-S3/`
++and `_work/orders/A6-S3-formula-dano-shadow.result.md`. No game session or
++production cutover is certified by automated acceptance.
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/ShadowStatus.h b/server/cpp/server_guest_lib/aetherius_combat/ShadowStatus.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..0757c21f8e85a4826ed59cbc0b6d84031ed93926
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/ShadowStatus.h
+@@ -0,0 +1,15 @@
++#pragma once
++#include <exception>
++
++namespace aetherius::combat {
++enum class UnsupportedReason {
++  None, UnarmedRaceSnapshot, SourceNotEquipped, MissingRecord,
++  WeaponData, EnchantedArmor, EquipmentCapacity, DuplicateWeapon, Magic
++};
++class ShadowUnsupported final : public std::exception {
++public:
++  explicit ShadowUnsupported(UnsupportedReason reason) : reason(reason) {}
++  const char* what() const noexcept override { return "UNSUPPORTED shadow context"; }
++  const UnsupportedReason reason;
++};
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/WeaponPoison.h b/server/cpp/server_guest_lib/aetherius_combat/WeaponPoison.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..28138f32546ce9881c28ff6419b39750bf06a4fa
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/WeaponPoison.h
+@@ -0,0 +1,119 @@
++#pragma once
++#include "Equipment.h"
++#include "libespm/WEAP.h"
++#include "libespm/MGEF.h"
++#include "libespm/Effects.h"
++#include <cmath>
++#include <algorithm>
++#include <limits>
++
++namespace aetherius::poison {
++enum class Result : uint32_t {
++  Disabled, Applied, NoWeapon, AmbiguousWeapon, ItemAbsent, AlreadyPoisoned,
++  NoPoison, RejectedHit, RangedUnsupported, EffectsUnsupported, PartialEffects,
++  WrongWeapon, InvalidPoison
++};
++enum class Family : uint32_t {
++  DirectResource = 0, Duration = 1, Archetype = 2, ActorValue = 4,
++  InvalidMagnitude = 8, Area = 16, Conditions = 32, Overlap = 64, ResourceContext = 128, Lethal = 256
++};
++inline Family Classify(const espm::Effects::Effect& effect,
++                       const espm::MGEF::DATA& data, bool conditions = false) {
++  if (conditions) return Family::Conditions;
++  if (data.effectType != espm::MGEF::EffectType::ValueMod ||
++      !data.IsFlagSet(espm::MGEF::Flags::Detrimental)) return Family::Archetype;
++  if (data.primaryAV != espm::ActorValue::Health &&
++      data.primaryAV != espm::ActorValue::Magicka &&
++      data.primaryAV != espm::ActorValue::Stamina) return Family::ActorValue;
++  if (effect.duration > 86400 && !data.IsFlagSet(espm::MGEF::Flags::NoDuration)) return Family::Duration;
++  if (!std::isfinite(effect.magnitude) || effect.magnitude <= 0) return Family::InvalidMagnitude;
++  if (effect.areaOfEffect) return Family::Area;
++  return Family::DirectResource;
++}
++inline bool SameInstance(const Inventory::Entry& owned, const Inventory::Entry& reported) {
++  // Asymmetric: only extras actually stored by the host identify an instance.
++  // Charge is mutable client state; poison and hand are host state/selection,
++  // not identity. Never import client-only extras into the owned inventory.
++  return owned.baseId == reported.baseId &&
++    (!owned.health || owned.health == reported.health) &&
++    (!owned.enchantmentId || owned.enchantmentId == reported.enchantmentId) &&
++    (!owned.maxCharge || owned.maxCharge == reported.maxCharge) &&
++    (!owned.removeEnchantmentOnUnequip ||
++      *owned.removeEnchantmentOnUnequip == reported.removeEnchantmentOnUnequip.value_or(false)) &&
++    (!owned.name || owned.name == reported.name) &&
++    (!owned.soul || owned.soul == reported.soul);
++}
++inline std::optional<size_t> FindOwned(const Inventory& inv, const Inventory::Entry& worn) {
++  // Preserve the host's already equipped instance on a delayed client update.
++  for (int pass = 0; pass < 2; ++pass) {
++    std::optional<size_t> found;
++    for (size_t i = 0; i < inv.entries.size(); ++i) {
++      const auto& e = inv.entries[i];
++      if (!e.count || !SameInstance(e, worn)) continue;
++      if (pass == 0 && e.GetWorn() != worn.GetWorn()) continue;
++      if (found) return std::nullopt;
++      found = i;
++    }
++    if (found) return found;
++  }
++  return std::nullopt;
++}
++inline bool CanCoat(espm::WEAP::AnimType type) {
++  return type >= espm::WEAP::AnimType::OneHandSword && type <= espm::WEAP::AnimType::Crossbow
++    && type != espm::WEAP::AnimType::Staff;
++}
++inline bool IsRanged(espm::WEAP::AnimType type) {
++  return type == espm::WEAP::AnimType::Bow || type == espm::WEAP::AnimType::Crossbow;
++}
++// Pure inventory transition. The host supplies record-validated candidates.
++inline Result Coat(Inventory& inv, Equipment& eq, uint32_t poisonId, uint32_t bonus,
++                   const std::vector<size_t>& candidates) {
++  if (candidates.empty()) return Result::NoWeapon;
++  if (candidates.size() != 1) return Result::AmbiguousWeapon;
++  auto& worn = eq.inv.entries.at(candidates.front());
++  const auto owned = FindOwned(inv, worn);
++  if (!owned) return Result::AmbiguousWeapon;
++  if (inv.entries[*owned].poisonId.value_or(0) && inv.entries[*owned].poisonCount.value_or(0))
++    return Result::AlreadyPoisoned; // replacement is unverified: preserve the old dose
++  auto dose = std::find_if(inv.entries.begin(), inv.entries.end(), [poisonId](const auto& e) {
++    return e.baseId == poisonId && e.count;
++  });
++  if (dose == inv.entries.end()) return Result::ItemAbsent;
++  if (bonus > 65534) return Result::EffectsUnsupported;
++  --dose->count;
++  auto& weapon = inv.entries[*owned];
++  // ExtraPoison belongs to one physical item, never the entire stack.
++  auto remainder = weapon; remainder.count = weapon.count - 1; remainder.SetWorn(Inventory::Worn::None);
++  weapon.count = 1; weapon.SetWorn(worn.GetWorn());
++  weapon.poisonId = poisonId; weapon.poisonCount = 1 + bonus;
++  worn.poisonId = weapon.poisonId; worn.poisonCount = weapon.poisonCount; worn.count = 1;
++  if (remainder.count) inv.entries.push_back(remainder);
++  inv.entries.erase(std::remove_if(inv.entries.begin(), inv.entries.end(), [](const auto& e) { return !e.count; }), inv.entries.end());
++  return Result::Applied;
++}
++inline void Spend(Inventory::Entry& entry) {
++  if (entry.poisonCount.value_or(0) > 1) --*entry.poisonCount;
++  else { entry.poisonId.reset(); entry.poisonCount.reset(); }
++}
++// Ignore client-supplied poison state. It is intent/evidence, never a writer.
++template<class IsWeapon>
++Equipment ReconcileEquipment(Inventory& inv, Equipment eq, IsWeapon isWeapon) {
++  std::vector<std::pair<size_t, Inventory::Worn>> assignments;
++  for (auto& item : eq.inv.entries) {
++    if (!isWeapon(item.baseId)) continue;
++    const auto owned = FindOwned(inv, item);
++    item.poisonId.reset(); item.poisonCount.reset();
++    if (owned) {
++      auto& authoritative = inv.entries[*owned];
++      item.poisonId = authoritative.poisonId; item.poisonCount = authoritative.poisonCount;
++      // Equipment contains the whole client inventory, including spare copies.
++      // A spare must never undo an earlier assignment of the equipped copy.
++      if (item.GetWorn() != Inventory::Worn::None)
++        assignments.emplace_back(*owned, item.GetWorn());
++    }
++  }
++  for (auto& item : inv.entries) if (isWeapon(item.baseId)) item.SetWorn(Inventory::Worn::None);
++  for (const auto& [index, hand] : assignments) inv.entries[index].SetWorn(hand);
++  return eq;
++}
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/WeaponPoisonHost.h b/server/cpp/server_guest_lib/aetherius_combat/WeaponPoisonHost.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..68bbce8776b154fe90f90eec10028d3abbb47ffb
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/WeaponPoisonHost.h
+@@ -0,0 +1,301 @@
++// Included once by MpActor.cpp. Keep D-P1 implementation out of maintainer files.
++#include "aetherius_combat/WeaponPoison.h"
++#include "libespm/RecordHeaderAccess.h"
++#include <cstring>
++
++namespace aetherius::poison {
++inline bool PlayerSource(const MpActor& actor) {
++  const auto* world = actor.GetParent();
++  return world && world->HasEspm() && actor.IsCreatedAsPlayer() && actor.GetCallbacks().getUserId && actor.GetCallbacks().sendToUserDeferred &&
++    actor.GetUserId() != Networking::InvalidUserId;
++}
++inline const char* Reason(Result result) {
++  switch (result) {
++    case Result::Applied: return "Applied";
++    case Result::NoWeapon: return "NoWeapon";
++    case Result::AmbiguousWeapon: return "AmbiguousWeapon";
++    case Result::ItemAbsent: return "ItemAbsent";
++    case Result::AlreadyPoisoned: return "AlreadyPoisoned";
++    case Result::EffectsUnsupported: return "UNSUPPORTED";
++    case Result::WrongWeapon: return "WrongWeapon";
++    case Result::InvalidPoison: return "InvalidPoison";
++    default: return "Rejected";
++  }
++}
++inline std::string StableRecord(WorldState* world, uint32_t id) {
++  return world && id ? FormDesc::FromFormId(id, world->pluginIndexMapping).ToString() : "none";
++}
++inline std::optional<espm::WEAP::AnimType> WeaponType(WorldState* world, uint32_t id) {
++  if (!world || !world->HasEspm()) return std::nullopt;
++  const auto found = world->GetEspm().GetBrowser().LookupById(id);
++  const auto* weapon = espm::Convert<espm::WEAP>(found.rec);
++  if (!weapon) return std::nullopt;
++  const auto data = weapon->GetData(world->GetEspmCache());
++  return data.weapDNAM ? std::optional(data.weapDNAM->animType) : std::nullopt;
++}
++inline bool HasConditions(const espm::RecordHeader* record, espm::CompressedFieldsCache& cache) {
++  bool present = false;
++  espm::RecordHeaderAccess::IterateFields(record, [&](const char* type, uint32_t, const char*) {
++    if (!std::memcmp(type, "CTDA", 4)) present = true;
++  }, cache);
++  return present;
++}
++inline bool HasScript(const espm::RecordHeader* record, espm::CompressedFieldsCache& cache) {
++  bool present = false;
++  espm::RecordHeaderAccess::IterateFields(record, [&](const char* type, uint32_t, const char*) {
++    if (!std::memcmp(type, "VMAD", 4)) present = true;
++  }, cache);
++  return present;
++}
++// Use the host's resource writer, enqueue publication separately. The ordinary
++// DamageActorValue API calls NetSetPercentages (immediate transport).
++inline uint32_t ResourceDamage(MpActor& actor, espm::ActorValue av, float magnitude) {
++  auto* world = actor.GetParent();
++  if (!world || !world->HasEspm() || !actor.GetCallbacks().getUserId)
++    return static_cast<uint32_t>(Family::ResourceContext);
++  auto& recipient = actor.GetActorToSendTo();
++  if (!PlayerSource(recipient)) return static_cast<uint32_t>(Family::ResourceContext);
++  const float maximum = actor.GetMaximumValues().GetValue(av);
++  if (!std::isfinite(maximum) || maximum <= 0 || actor.IsDead()) return static_cast<uint32_t>(Family::ResourceContext);
++  auto values = actor.GetChangeForm().actorValues;
++  float* percentage = av == espm::ActorValue::Health ? &values.healthPercentage :
++    av == espm::ActorValue::Magicka ? &values.magickaPercentage : &values.staminaPercentage;
++  const float next = std::clamp(*percentage - magnitude / maximum, 0.f, 1.f);
++  // Death calls gamemode callbacks in the existing host. Without a certified
++  // poison kill owner, refuse this parcel instead of doing I/O in the hit/tick.
++  if (av == espm::ActorValue::Health && next == 0.f) return static_cast<uint32_t>(Family::Lethal);
++  *percentage = next;
++  actor.SetPercentages(values);
++  ChangeValuesMessage message; message.idx = actor.GetIdx();
++  if (av == espm::ActorValue::Health) message.data.health = next;
++  if (av == espm::ActorValue::Magicka) message.data.magicka = next;
++  if (av == espm::ActorValue::Stamina) message.data.stamina = next;
++  recipient.SendToUserDeferred(message, true, 3, false);
++  return 0;
++}
++}
++
++// AETHERIUS D-P1-fix2: invoked only by the server-side authenticated intent.
++// Validate the supplied hand against equipment already held by the host; never
++// import equipment, counts, charges, grants or identity from the packet.
++void MpActor::RequestWeaponPoison(uint32_t poisonId, uint32_t weaponId, bool leftHand) {
++  using namespace aetherius::poison;
++  auto* world = GetParent();
++  aetheriusPoisonResult = static_cast<uint32_t>(Result::Disabled);
++  if (!world || !world->aetheriusWeaponPoison || !PlayerSource(*this)) return;
++  const auto eq = GetEquipment();
++  const auto hand = leftHand ? Inventory::Worn::Left : Inventory::Worn::Right;
++  const auto held = std::count_if(eq.inv.entries.begin(), eq.inv.entries.end(), [&](const auto& item) {
++    return item.count && item.baseId == weaponId && item.GetWorn() == hand;
++  });
++  if (held != 1 || !WeaponType(world, weaponId)) {
++    aetheriusPoisonResult = static_cast<uint32_t>(Result::WrongWeapon);
++    spdlog::info("AETHERIUS D-P1-fix2 actor={:x} reason=WrongWeapon", GetFormId()); return;
++  }
++  if (!TryUseWeaponPoison(poisonId)) {
++    aetheriusPoisonResult = static_cast<uint32_t>(Result::InvalidPoison);
++    spdlog::info("AETHERIUS D-P1-fix2 actor={:x} reason=InvalidPoison", GetFormId());
++  }
++}
++
++bool MpActor::TryUseWeaponPoison(uint32_t baseId) {
++  auto* world = GetParent();
++  if (!world || !world->aetheriusWeaponPoison || !aetherius::poison::PlayerSource(*this)) return false;
++  const auto record = world->GetEspm().GetBrowser().LookupById(baseId);
++  const auto* alch = espm::Convert<espm::ALCH>(record.rec);
++  if (!alch || !alch->GetData(world->GetEspmCache()).isPoison) return false;
++  aetheriusPoisonUnsupported = 0;
++  auto inv = GetInventory(); auto eq = GetEquipment();
++  std::vector<size_t> candidates;
++  for (size_t i = 0; i < eq.inv.entries.size(); ++i) {
++    const auto& e = eq.inv.entries[i];
++    const auto type = aetherius::poison::WeaponType(world, e.baseId);
++    if (e.count && e.GetWorn() != Inventory::Worn::None && type && aetherius::poison::CanCoat(*type)) candidates.push_back(i);
++  }
++  const auto result = aetherius::poison::Coat(inv, eq, baseId, aetheriusPoisonDoseBonus, candidates);
++  aetheriusPoisonResult = static_cast<uint32_t>(result);
++  std::string weapons = "none";
++  for (const auto index : candidates) {
++    if (weapons == "none") weapons.clear(); else weapons += ",";
++    weapons += aetherius::poison::StableRecord(world, eq.inv.entries[index].baseId);
++  }
++  // Item use is outside hit/tick. Keep synchronous host logging here only;
++  // hit/tick outcomes remain in the existing in-memory diagnostic property.
++  spdlog::info("AETHERIUS D-P1 actor={:x} weapon={} poison={} reason={}",
++    GetFormId(), weapons, aetherius::poison::StableRecord(world, baseId),
++    aetherius::poison::Reason(result));
++  if (result == aetherius::poison::Result::Applied) {
++    EditChangeForm([&](MpChangeForm& form) { form.inv = inv; form.equipment = eq; form.baseContainerAdded = true; });
++    SendInventoryUpdate(); // existing deferred inventory publication
++    PublishWeaponPoisonEquipment();
++  } else if (!aetheriusPoisonOwnerPublished) {
++    // One clean correction, even if the engine already poisoned locally.
++    // Repeating either the refusal or UpdateEquipment cannot feed it back.
++    SendInventoryUpdate();
++    PublishWeaponPoisonEquipment();
++  }
++  return true; // handled even on refusal: poison is NEVER eaten when enabled
++}
++
++bool MpActor::ReconcileWeaponPoisonEquipment(const Equipment& incoming) {
++  auto* world = GetParent();
++  if (!world || !world->aetheriusWeaponPoison || !aetherius::poison::PlayerSource(*this)) return false;
++  for (const auto& item : incoming.inv.entries)
++    if (!world->GetEspm().GetBrowser().LookupById(item.baseId).rec) return false;
++  auto inv = GetInventory();
++  const auto eq = aetherius::poison::ReconcileEquipment(inv, incoming, [world](uint32_t id) {
++    return aetherius::poison::WeaponType(world, id).has_value();
++  });
++  auto previous = GetEquipment(); previous.numChanges = eq.numChanges;
++  const bool changed = previous != eq;
++  const bool correction = !aetheriusPoisonOwnerPublished && incoming.inv != eq.inv;
++  EditChangeForm([&](MpChangeForm& form) { form.inv = inv; form.equipment = eq; });
++  if (correction) {
++    SendInventoryUpdate();
++    PublishWeaponPoisonEquipment();
++  } else if (changed) PublishWeaponPoisonEquipment(false); // observers only; no owner echo
++  return true;
++}
++
++void MpActor::ApplyWeaponPoisonHit(MpActor& target, uint32_t source, bool blocked, bool bash, bool fatal) {
++  using namespace aetherius::poison;
++  auto* world = GetParent();
++  if (!world || !world->aetheriusWeaponPoison || !PlayerSource(*this) || target.GetParent() != world ||
++      !world->GetEspm().GetBrowser().LookupById(source).rec) return;
++  aetheriusPoisonUnsupported = 0;
++  aetheriusPoisonResult = static_cast<uint32_t>(Result::RejectedHit);
++  if (blocked || bash || fatal || target.IsDead() || &target == this) return;
++  const auto type = WeaponType(world, source);
++  if (!type || !CanCoat(*type)) return;
++  if (IsRanged(*type)) { aetheriusPoisonResult = static_cast<uint32_t>(Result::RangedUnsupported); return; }
++  auto inv = GetInventory(); auto eq = GetEquipment();
++  std::optional<size_t> wornIndex;
++  for (size_t i = 0; i < eq.inv.entries.size(); ++i) {
++    const auto& e = eq.inv.entries[i];
++    if (e.count && e.baseId == source && e.GetWorn() != Inventory::Worn::None) {
++      if (wornIndex) { aetheriusPoisonResult = static_cast<uint32_t>(Result::AmbiguousWeapon); return; }
++      wornIndex = i;
++    }
++  }
++  if (!wornIndex) return;
++  auto& worn = eq.inv.entries[*wornIndex];
++  const auto index = FindOwned(inv, worn);
++  if (!index) { aetheriusPoisonResult = static_cast<uint32_t>(Result::AmbiguousWeapon); return; }
++  auto& weapon = inv.entries[*index];
++  aetheriusPoisonResult = static_cast<uint32_t>(Result::NoPoison);
++  if (!weapon.poisonId.value_or(0) || !weapon.poisonCount.value_or(0)) return;
++  const auto record = world->GetEspm().GetBrowser().LookupById(*weapon.poisonId);
++  const auto* poison = espm::Convert<espm::ALCH>(record.rec);
++  if (!poison) { aetheriusPoisonResult = static_cast<uint32_t>(Result::EffectsUnsupported); return; }
++  const auto data = poison->GetData(world->GetEspmCache());
++  if (!data.isPoison) return;
++  size_t applied = 0;
++  const bool conditions = HasConditions(record.rec, world->GetEspmCache());
++  if (aetherius::poison::HasScript(record.rec, world->GetEspmCache())) aetheriusPoisonUnsupported |= static_cast<uint32_t>(Family::Conditions);
++  for (const auto& raw : data.effects) {
++    auto effect = raw; effect.effectId = record.ToGlobalId(raw.effectId);
++    const auto lookup = world->GetEspm().GetBrowser().LookupById(effect.effectId);
++    const auto* mgef = espm::Convert<espm::MGEF>(lookup.rec);
++    if (!mgef) { aetheriusPoisonUnsupported |= static_cast<uint32_t>(Family::Archetype); continue; }
++    const auto info = mgef->GetData(world->GetEspmCache()).data;
++    if (aetherius::poison::HasScript(lookup.rec, world->GetEspmCache())) aetheriusPoisonUnsupported |= static_cast<uint32_t>(Family::Conditions);
++    const auto family = target.ApplyWeaponPoisonEffect(effect, info, conditions || HasConditions(lookup.rec, world->GetEspmCache()), this);
++    if (family) { aetheriusPoisonUnsupported |= family; continue; }
++    ++applied;
++  }
++  if (!applied) { aetheriusPoisonResult = static_cast<uint32_t>(Result::EffectsUnsupported); return; }
++  Spend(weapon); worn.poisonId = weapon.poisonId; worn.poisonCount = weapon.poisonCount;
++  EditChangeForm([&](MpChangeForm& form) { form.inv = inv; form.equipment = eq; });
++  SendInventoryUpdate();
++  PublishWeaponPoisonEquipment();
++  aetheriusPoisonResult = static_cast<uint32_t>(aetheriusPoisonUnsupported ? Result::PartialEffects : Result::Applied);
++}
++
++uint32_t MpActor::ApplyWeaponPoisonEffect(const espm::Effects::Effect& effect,
++                                        const espm::MGEF::DATA& data, bool conditions, MpActor* poisoner) {
++  if (!poisoner) poisoner = this;
++  auto* world = GetParent();
++  if (!aetherius::poison::PlayerSource(*poisoner) || !world || world != poisoner->GetParent() ||
++      !world->aetheriusWeaponPoison) return static_cast<uint32_t>(aetherius::poison::Family::ResourceContext);
++  if (!espm::Convert<espm::MGEF>(world->GetEspm().GetBrowser().LookupById(effect.effectId).rec))
++    return static_cast<uint32_t>(aetherius::poison::Family::ResourceContext);
++  const auto family = aetherius::poison::Classify(effect, data, conditions);
++  if (family != aetherius::poison::Family::DirectResource) return static_cast<uint32_t>(family);
++  const bool timed = effect.duration && !data.IsFlagSet(espm::MGEF::Flags::NoDuration);
++  if (timed && GetActiveMagicEffects().Has(data.primaryAV)) return static_cast<uint32_t>(aetherius::poison::Family::Overlap);
++  // Host resource authority. Magnitude is damage per second for a timed ValueMod.
++  const auto damage = aetherius::poison::ResourceDamage(*this, data.primaryAV, effect.magnitude);
++  if (damage) return damage;
++  if (timed && effect.duration > 1) {
++    ActiveMagicEffectsMap::Entry entry;
++    entry.data = effect; entry.weaponPoison = true; entry.weaponPoisonTicks = effect.duration - 1;
++    entry.endTime = std::chrono::system_clock::now() + std::chrono::seconds(effect.duration);
++    EditChangeForm([&](MpChangeForm& form) { form.activeMagicEffects.Add(data.primaryAV, entry); });
++    ScheduleWeaponPoisonTick(data.primaryAV, world->FindLoadedForm(poisoner->GetFormId()), poisoner->GetUserId());
++  }
++  return 0;
++}
++
++// Same host effect store/timer. Transient entries neither reapply as restoration
++// nor survive restart. Overlapping effects on the same AV are explicitly refused.
++void MpActor::ScheduleWeaponPoisonTick(espm::ActorValue av, std::weak_ptr<MpForm> poisoner, Networking::UserId user) {
++  auto* world = GetParent();
++  const auto source = poisoner.lock();
++  auto* sourceActor = source ? source->AsActor() : nullptr;
++  if (!world || !sourceActor || sourceActor->GetParent() != world ||
++      !aetherius::poison::PlayerSource(*sourceActor) || sourceActor->GetUserId() != user || !world->aetheriusWeaponPoison) return;
++  const auto active = GetActiveMagicEffects().Get(av);
++  if (!active || !active->get().weaponPoison) return;
++  auto entry = active->get();
++  const auto weak = world->FindLoadedForm(GetFormId());
++  uint32_t timerId;
++  auto timer = world->SetEffectTimer(std::chrono::seconds(1), &timerId);
++  entry.timerId = timerId;
++  EditChangeForm([&](MpChangeForm& form) { form.activeMagicEffects.Add(av, entry); });
++  timer.Then([weak, poisoner, user, av, timerId](Viet::Void) {
++    const auto form = weak.lock(); auto* actor = form ? form->AsActor() : nullptr;
++    if (!actor || !actor->GetParent()) return;
++    const auto active = actor->GetActiveMagicEffects().Get(av);
++    if (!active || !active->get().weaponPoison || active->get().timerId != timerId) return;
++    auto entry = active->get();
++    const auto source = poisoner.lock(); auto* sourceActor = source ? source->AsActor() : nullptr;
++    if (!sourceActor || sourceActor->GetParent() != actor->GetParent() ||
++        !aetherius::poison::PlayerSource(*sourceActor) || sourceActor->GetUserId() != user ||
++        !actor->GetParent()->GetEspm().GetBrowser().LookupById(entry.data.effectId).rec ||
++        !actor->GetParent()->aetheriusWeaponPoison || actor->IsDead()) {
++      actor->EditChangeForm([&](MpChangeForm& form) { form.activeMagicEffects.Remove(av); }); return;
++    }
++    const auto refused = aetherius::poison::ResourceDamage(*actor, av, entry.data.magnitude);
++    if (refused) {
++      actor->aetheriusPoisonUnsupported |= refused;
++      actor->aetheriusPoisonResult = static_cast<uint32_t>(aetherius::poison::Result::EffectsUnsupported);
++      actor->EditChangeForm([&](MpChangeForm& form) { form.activeMagicEffects.Remove(av); }); return;
++    }
++    --entry.weaponPoisonTicks;
++    actor->EditChangeForm([&](MpChangeForm& form) {
++      if (entry.weaponPoisonTicks) form.activeMagicEffects.Add(av, entry);
++      else form.activeMagicEffects.Remove(av);
++    });
++    if (entry.weaponPoisonTicks) actor->ScheduleWeaponPoisonTick(av, poisoner, user);
++  });
++}
++
++void MpActor::PublishWeaponPoisonEquipment(bool toOwner) {
++  if (!aetherius::poison::PlayerSource(*this) || !GetParent()->aetheriusWeaponPoison) return;
++  UpdateEquipmentMessage msg; msg.data = GetEquipment(); msg.idx = GetIdx();
++  // Enqueue native projection; no socket, gamemode, database or file call here.
++  if (toOwner) {
++    aetheriusPoisonOwnerPublished = true;
++    SendToUserDeferred(msg, true, 2, false);
++  }
++  // Several nearby NPC listeners can route back to one hoster. Exclude the
++  // owner after routing too, and send once per actual connected recipient.
++  std::set<MpActor*> recipients{this};
++  for (auto* listener : GetActorListeners()) {
++    if (listener && listener != this && listener->GetParent() == GetParent() && listener->GetCallbacks().getUserId) {
++      auto& recipient = listener->GetActorToSendTo();
++      if (aetherius::poison::PlayerSource(recipient) && recipients.insert(&recipient).second)
++        recipient.SendToUserDeferred(msg, true, 2, false);
++    }
++  }
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/config/CombatSettings.h b/server/cpp/server_guest_lib/aetherius_combat/config/CombatSettings.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..bb875a117d88c02dbff34f84f8003948dc14aaad
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/config/CombatSettings.h
+@@ -0,0 +1,63 @@
++#pragma once
++#include <nlohmann/json.hpp>
++#include <cmath>
++#include <stdexcept>
++#include <string>
++
++namespace aetherius::combat {
++inline double Number(const nlohmann::json& j, const char* key, double min, double max) {
++  const auto& v = j.at(key);
++  if (!v.is_number()) throw std::invalid_argument(std::string(key) + " must be numeric");
++  const double n = v.get<double>();
++  if (!std::isfinite(n) || n < min || n > max) throw std::invalid_argument(std::string(key) + " out of range");
++  return n;
++}
++inline void ExactKeys(const nlohmann::json& j, std::initializer_list<const char*> keys) {
++  if (!j.is_object()) throw std::invalid_argument("expected object");
++  for (const auto& it : j.items()) {
++    bool found = false;
++    for (const auto* key : keys) if (it.key() == key) found = true;
++    if (!found) throw std::invalid_argument("unknown field: " + it.key());
++  }
++}
++struct CombatSettings {
++  std::string mode = "legacy";
++  bool enabled = false;
++  double physicalMultiplier = 1, magicMultiplier = 1;
++  double softRating = 500, softReduction = .8, hardRating = 1000, hardReduction = .9;
++  double hiddenArmorPerPiece = 0, blockCap = .85, magicCap = .85, elementalCap = .85;
++  double blockBase = .2, blockPerSkill = .003;
++  int tickMilliseconds = 250;
++  bool trace = false;
++  static CombatSettings FromJson(const nlohmann::json& j) {
++    CombatSettings s;
++    if (j.is_null()) return s;
++    ExactKeys(j, {"mode","enabled","global","armor","block","resistances","effects","trace"});
++    s.mode = j.at("mode").get<std::string>();
++    s.enabled = j.at("enabled").get<bool>();
++    if (s.mode != "legacy" && s.mode != "aetherius") throw std::invalid_argument("invalid combat mode");
++    const auto& g = j.at("global"); ExactKeys(g, {"physicalDamageMultiplier","magicDamageMultiplier"});
++    s.physicalMultiplier = Number(g,"physicalDamageMultiplier",0,100);
++    s.magicMultiplier = Number(g,"magicDamageMultiplier",0,100);
++    const auto& a = j.at("armor"); ExactKeys(a, {"softCapRating","softCapReduction","hardCapRating","hardCapReduction","hiddenArmorPerPiece"});
++    s.softRating = Number(a,"softCapRating",1,100000);
++    s.hardRating = Number(a,"hardCapRating",1,100000);
++    s.softReduction = Number(a,"softCapReduction",0,.99);
++    s.hardReduction = Number(a,"hardCapReduction",0,.99);
++    s.hiddenArmorPerPiece = Number(a,"hiddenArmorPerPiece",0,1000);
++    if (s.hardRating <= s.softRating || s.hardReduction < s.softReduction)
++      throw std::invalid_argument("armor curve must be monotonic");
++    const auto& b = j.at("block"); ExactKeys(b, {"maximumReduction","baseReduction","reductionPerSkill"});
++    s.blockCap = Number(b,"maximumReduction",0,.99);
++    s.blockBase = Number(b,"baseReduction",0,.99);
++    s.blockPerSkill = Number(b,"reductionPerSkill",0,.1);
++    const auto& r = j.at("resistances"); ExactKeys(r, {"magicCap","elementalCap"});
++    s.magicCap = Number(r,"magicCap",0,.99); s.elementalCap = Number(r,"elementalCap",0,.99);
++    const auto& e = j.at("effects"); ExactKeys(e, {"tickMilliseconds"});
++    if (!e.at("tickMilliseconds").is_number_integer()) throw std::invalid_argument("tick must be integer");
++    s.tickMilliseconds = static_cast<int>(Number(e,"tickMilliseconds",10,10000));
++    if (j.contains("trace")) s.trace = j.at("trace").get<bool>();
++    return s;
++  }
++};
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/context/DamageContext.h b/server/cpp/server_guest_lib/aetherius_combat/context/DamageContext.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..e6c25cac4626eb2ff7b214609015df8b29ba7f46
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/context/DamageContext.h
+@@ -0,0 +1,37 @@
++#pragma once
++#include "../state/ActorCombatState.h"
++#include "../debug/CombatTrace.h"
++namespace aetherius::combat {
++enum class Resource { Health, Magicka, Stamina };
++enum class Element { None, Fire, Frost, Shock, Poison };
++struct CombatSnapshot {
++  CombatProfile profile;
++  double effectiveArmor = 0, magicResistance = 0;
++  double fireResistance = 0, frostResistance = 0, shockResistance = 0, poisonResistance = 0;
++  double absorptionChance = 0;
++};
++struct DamageContext {
++  const CombatProfile& attacker;
++  const CombatProfile& defender;
++  std::string weaponSkill;
++  std::vector<StableFormKey> weaponKeywords;
++  double weaponBase = 0, flatItemDamage = 0, itemMultiplier = 1, armor = 0;
++  double attackMultiplier = 1, criticalBase = 0, criticalChance = 0;
++  bool blocked = false;
++  // Only server-validated attack state belongs here. Raw packet flags are excluded.
++};
++struct DamageResult { double health = 0, magicka = 0, stamina = 0; bool absorbed = false; };
++class CombatRng {
++public:
++  virtual ~CombatRng() = default;
++  virtual double Unit() = 0;
++  bool Roll(double chance) {
++    if (!std::isfinite(chance) || chance < 0 || chance > 1) throw std::invalid_argument("invalid chance");
++    if (chance == 0) return false;
++    if (chance == 1) return true;
++    const auto v = Unit();
++    if (!std::isfinite(v) || v < 0 || v >= 1) throw std::invalid_argument("invalid RNG sample");
++    return v < chance;
++  }
++};
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/debug/CombatTrace.h b/server/cpp/server_guest_lib/aetherius_combat/debug/CombatTrace.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..895a04d0dd9b37e6c19869ab24d9ff845159d768
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/debug/CombatTrace.h
+@@ -0,0 +1,17 @@
++#pragma once
++#include <string>
++#include <vector>
++namespace aetherius::combat {
++struct TraceStep { std::string stage, source; double value; };
++class CombatTrace {
++public:
++  explicit CombatTrace(bool enabled = false) : enabled(enabled) {}
++  void Add(const std::string& stage, double value, const std::string& source = "SERVER") {
++    if (enabled) steps.push_back({stage,source,value});
++  }
++  const std::vector<TraceStep>& Steps() const { return steps; }
++private:
++  bool enabled;
++  std::vector<TraceStep> steps;
++};
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/forms/StableFormKey.h b/server/cpp/server_guest_lib/aetherius_combat/forms/StableFormKey.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..4671fc45414d28da94959e45b464b9fd224daa3b
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/forms/StableFormKey.h
+@@ -0,0 +1,41 @@
++#pragma once
++#include <algorithm>
++#include <cctype>
++#include <cstdint>
++#include <iomanip>
++#include <sstream>
++#include <stdexcept>
++#include <string>
++
++namespace aetherius::combat {
++struct StableFormKey {
++  std::string plugin;
++  uint32_t localId = 0;
++  static StableFormKey Parse(const std::string& text) {
++    const auto colon = text.rfind(':');
++    if (colon == std::string::npos || text.size() - colon - 1 != 6)
++      throw std::invalid_argument("StableFormKey requires plugin:XXXXXX");
++    auto file = text.substr(0, colon);
++    std::transform(file.begin(), file.end(), file.begin(),
++      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
++    const auto dot = file.rfind('.');
++    if (dot == std::string::npos ||
++        (file.substr(dot) != ".esp" && file.substr(dot) != ".esm" && file.substr(dot) != ".esl") ||
++        file.find_first_of("/\\:") != std::string::npos)
++      throw std::invalid_argument("invalid plugin filename");
++    const auto hex = text.substr(colon + 1);
++    if (!std::all_of(hex.begin(), hex.end(), [](unsigned char c) { return std::isxdigit(c); }))
++      throw std::invalid_argument("invalid local FormID");
++    const auto id = static_cast<uint32_t>(std::stoul(hex, nullptr, 16));
++    if (!id) throw std::invalid_argument("null local FormID");
++    return {file, id};
++  }
++  std::string ToString() const {
++    std::ostringstream out;
++    out << plugin << ':' << std::uppercase << std::hex << std::setw(6) << std::setfill('0') << localId;
++    return out.str();
++  }
++  bool operator==(const StableFormKey& r) const { return plugin == r.plugin && localId == r.localId; }
++  bool operator<(const StableFormKey& r) const { return plugin < r.plugin || (plugin == r.plugin && localId < r.localId); }
++};
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/perks/PerkRegistry.h b/server/cpp/server_guest_lib/aetherius_combat/perks/PerkRegistry.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..ec915b30d4a560b08abaf83b961b968d2b42e16e
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/perks/PerkRegistry.h
+@@ -0,0 +1,79 @@
++#pragma once
++#include "../context/DamageContext.h"
++#include <functional>
++namespace aetherius::combat {
++struct PerkCondition { std::string function; StableFormKey key; bool expected = true; bool orNext = false; };
++struct PerkHandler {
++  StableFormKey key;
++  std::string editorId, winner, entryPoint, skill;
++  double coefficient = 0;
++  std::vector<std::vector<PerkCondition>> conditions;
++  bool Matches(const CombatProfile& profile, const std::vector<StableFormKey>& keywords) const {
++    for (const auto& group : conditions) {
++      bool disjunction = false;
++      for (const auto& c : group) {
++        bool actual = false;
++        if (c.function == "HasPerk") actual = profile.Has(c.key);
++        else if (c.function == "HasKeyword") actual = std::find(keywords.begin(),keywords.end(),c.key) != keywords.end();
++        else return false;
++        disjunction = disjunction || (actual == c.expected);
++        if (!c.orNext) { if (!disjunction) return false; disjunction = false; }
++      }
++      // Bethesda permits a terminal OR flag; it still terminates this group.
++      if (!group.empty() && group.back().orNext && !disjunction) return false;
++    }
++    return true;
++  }
++};
++class PerkRegistry {
++public:
++  void Load(const nlohmann::json& catalog) {
++    if (catalog.at("schemaVersion") != 1) throw std::invalid_argument("invalid perk catalog");
++    std::map<StableFormKey,std::vector<PerkHandler>> next;
++    for (const auto& row : catalog.at("perks")) {
++      auto key = StableFormKey::Parse(row.at("key").get<std::string>());
++      if (next.count(key)) throw std::invalid_argument("duplicate catalog key");
++      for (const auto& effect : row.at("effects")) {
++        PerkHandler h; h.key = key; h.editorId = row.at("editorId"); h.winner = row.at("winner");
++        h.entryPoint = effect.at("entryPoint"); h.skill = effect.at("skill");
++        if (!Skills().count(h.skill)) throw std::invalid_argument("unknown handler skill");
++        if (h.entryPoint != "CalculateWeaponDamage" && h.entryPoint != "ModAttackDamage" &&
++            h.entryPoint != "CalculateMyCriticalHitDamage" && h.entryPoint != "ModArmorRating" && h.entryPoint != "ModPercentBlocked")
++          throw std::invalid_argument("unsupported entry point");
++        h.coefficient = Number(effect,"coefficient",0,1);
++        for (const auto& group : effect.at("conditions")) {
++          std::vector<PerkCondition> conditions;
++          for (const auto& c : group) {
++            auto f = c.at("function").get<std::string>();
++            if (f != "HasKeyword" && f != "HasPerk") throw std::invalid_argument("unsupported condition");
++            conditions.push_back({f,StableFormKey::Parse(c.at("key")),c.at("expected").get<bool>(),c.at("orNext").get<bool>()});
++          }
++          h.conditions.push_back(std::move(conditions));
++        }
++        next[key].push_back(std::move(h));
++      }
++    }
++    handlers = std::move(next);
++  }
++  bool Supports(const StableFormKey& key) const { return handlers.count(key) != 0; }
++  void Validate(const CombatProfile& p) const {
++    for (const auto& grant : p.perks)
++      if (!Supports(grant.key) || grant.rank != 1) throw std::invalid_argument("unsupported perk/rank " + grant.key.ToString());
++  }
++  double Multiplier(const std::string& point, const CombatProfile& p,
++                    const std::vector<StableFormKey>& keywords, CombatTrace& trace) const {
++    double multiplier = 1;
++    for (const auto& grant : p.perks) {
++      const auto found = handlers.find(grant.key);
++      if (found == handlers.end()) continue;
++      for (const auto& h : found->second) if (h.entryPoint == point && h.Matches(p,keywords)) {
++        const auto m = 1 + h.coefficient * p.Skill(h.skill);
++        multiplier *= m; trace.Add("perk."+point,m,h.key.ToString());
++      }
++    }
++    return multiplier;
++  }
++private:
++  std::map<StableFormKey,std::vector<PerkHandler>> handlers;
++};
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/physical/ArmorCurve.h b/server/cpp/server_guest_lib/aetherius_combat/physical/ArmorCurve.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..9cdcb3c51c0ef2534185b43732674cedbc5b0a15
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/physical/ArmorCurve.h
+@@ -0,0 +1,11 @@
++#pragma once
++#include "../config/CombatSettings.h"
++namespace aetherius::combat {
++inline double ArmorReduction(double armor, const CombatSettings& s = {}) {
++  if (!std::isfinite(armor)) throw std::invalid_argument("nonfinite armor");
++  if (armor <= 0) return 0;
++  if (armor <= s.softRating) return armor * s.softReduction / s.softRating;
++  if (armor >= s.hardRating) return s.hardReduction;
++  return s.softReduction + (armor-s.softRating) * (s.hardReduction-s.softReduction) / (s.hardRating-s.softRating);
++}
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/physical/PhysicalDamagePipeline.h b/server/cpp/server_guest_lib/aetherius_combat/physical/PhysicalDamagePipeline.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..1d52d73e4b6c093bd6a977d98e7ae8c7828b8edc
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/physical/PhysicalDamagePipeline.h
+@@ -0,0 +1,43 @@
++#pragma once
++#include "ArmorCurve.h"
++#include "../perks/PerkRegistry.h"
++namespace aetherius::combat {
++inline double Nonnegative(double v) {
++  if (!std::isfinite(v)) throw std::invalid_argument("nonfinite damage component");
++  return std::max(0.0,v);
++}
++inline double BlockReduction(const CombatProfile& defender, const PerkRegistry& perks,
++                             const CombatSettings& settings, CombatTrace& trace) {
++  const double base = settings.blockBase + settings.blockPerSkill * defender.Skill("Block");
++  const double multiplier = perks.Multiplier("ModPercentBlocked",defender,{},trace);
++  return std::clamp(base*multiplier,0.0,settings.blockCap);
++}
++inline double ArmorPiece(double base, const std::string& skill, const CombatProfile& profile,
++                         const std::vector<StableFormKey>& keywords, double flat, double itemMultiplier,
++                         const PerkRegistry& perks, const CombatSettings& settings, CombatTrace& trace) {
++  const double rating = Nonnegative(base+flat) * Nonnegative(itemMultiplier) *
++    (1 + .005 * profile.Skill(skill)) * perks.Multiplier("ModArmorRating",profile,keywords,trace);
++  trace.Add("armor.piece",rating);
++  return rating + settings.hiddenArmorPerPiece;
++}
++inline DamageResult PhysicalDamage(const DamageContext& c, const CombatSettings& s,
++                                   const PerkRegistry& perks, CombatRng& rng, CombatTrace& trace) {
++  const double skill = c.attacker.Skill(c.weaponSkill);
++  trace.Add("weapon.base",c.weaponBase); trace.Add("skill."+c.weaponSkill,skill);
++  double damage = Nonnegative(c.weaponBase+c.flatItemDamage) * Nonnegative(c.itemMultiplier) * (1+.005*skill);
++  damage *= perks.Multiplier("CalculateWeaponDamage",c.attacker,c.weaponKeywords,trace);
++  damage *= perks.Multiplier("ModAttackDamage",c.attacker,c.weaponKeywords,trace);
++  damage *= Nonnegative(c.attackMultiplier);
++  // Critical base comes from the authorized weapon resolver, not the packet.
++  if (rng.Roll(c.criticalChance)) {
++    const auto critical = Nonnegative(c.criticalBase) * perks.Multiplier("CalculateMyCriticalHitDamage",c.attacker,c.weaponKeywords,trace);
++    damage += critical; trace.Add("critical.component",critical);
++  }
++  damage *= s.physicalMultiplier; trace.Add("physical.preDefense",damage);
++  const auto block = c.blocked ? BlockReduction(c.defender,perks,s,trace) : 0;
++  const auto armor = ArmorReduction(c.armor,s);
++  trace.Add("block.reduction",block); trace.Add("armor.effective",c.armor); trace.Add("armor.reduction",armor);
++  damage = Nonnegative(damage*(1-block)*(1-armor)); trace.Add("physical.final",damage);
++  return {damage,0,0,false};
++}
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/state/ActorCombatState.h b/server/cpp/server_guest_lib/aetherius_combat/state/ActorCombatState.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..43a3234868991bb1e4a7004d9a5a7ff34efaecd8
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/state/ActorCombatState.h
+@@ -0,0 +1,67 @@
++#pragma once
++#include "../forms/StableFormKey.h"
++#include "../config/CombatSettings.h"
++#include <map>
++#include <set>
++#include <vector>
++
++namespace aetherius::combat {
++inline const std::set<std::string>& Skills() {
++  static const std::set<std::string> names = {"OneHanded","TwoHanded","Marksman","Block","HeavyArmor","LightArmor","Sneak","Destruction","Alteration","Restoration","Conjuration","Illusion","Alchemy","Enchanting","Smithing","Lockpicking","Speechcraft","Pickpocket"};
++  return names;
++}
++struct PerkGrant { StableFormKey key; unsigned rank = 1; };
++struct CombatProfile {
++  uint64_t revision = 0;
++  std::map<std::string,double> skills;
++  std::vector<PerkGrant> perks;
++  double health = 100, magicka = 100, stamina = 100;
++  double Skill(const std::string& name) const {
++    const auto it = skills.find(name); return it == skills.end() ? 0 : it->second;
++  }
++  bool Has(const StableFormKey& key) const {
++    for (const auto& p : perks) if (p.key == key) return true;
++    return false;
++  }
++  static CombatProfile FromJson(const nlohmann::json& j) {
++    ExactKeys(j,{"schemaVersion","revision","skills","perks","baseAttributes"});
++    if (!j.at("schemaVersion").is_number_integer() || j.at("schemaVersion") != 1)
++      throw std::invalid_argument("unsupported CombatProfile schema");
++    if (!j.at("revision").is_number_integer()) throw std::invalid_argument("revision must be integer");
++    CombatProfile p;
++    p.revision = static_cast<uint64_t>(Number(j,"revision",1,9007199254740991.0));
++    if (!j.at("skills").is_object()) throw std::invalid_argument("skills must be object");
++    for (const auto& item : j.at("skills").items()) {
++      if (!Skills().count(item.key())) throw std::invalid_argument("unknown skill " + item.key());
++      p.skills[item.key()] = Number(j.at("skills"),item.key().c_str(),0,100);
++    }
++    if (!j.at("perks").is_array() || j.at("perks").size() > 512) throw std::invalid_argument("invalid perks");
++    std::set<StableFormKey> seen;
++    for (const auto& perk : j.at("perks")) {
++      ExactKeys(perk,{"key","rank","source"});
++      if (perk.at("source") != "CLASS" || !perk.at("rank").is_number_integer()) throw std::invalid_argument("invalid perk grant");
++      auto key = StableFormKey::Parse(perk.at("key").get<std::string>());
++      if (!seen.insert(key).second) throw std::invalid_argument("duplicate perk");
++      p.perks.push_back({key,static_cast<unsigned>(Number(perk,"rank",1,255))});
++    }
++    const auto& a = j.at("baseAttributes"); ExactKeys(a,{"health","magicka","stamina"});
++    p.health = Number(a,"health",1,1000000); p.magicka = Number(a,"magicka",1,1000000); p.stamina = Number(a,"stamina",1,1000000);
++    return p;
++  }
++  nlohmann::json ToJson() const {
++    nlohmann::json grants = nlohmann::json::array();
++    for (const auto& p : perks) grants.push_back({{"key",p.key.ToString()},{"rank",p.rank},{"source","CLASS"}});
++    return {{"schemaVersion",1},{"revision",revision},{"skills",skills},{"perks",grants},{"baseAttributes",{{"health",health},{"magicka",magicka},{"stamina",stamina}}}};
++  }
++};
++struct CombatRevision { uint64_t profile = 0, equipment = 0, effects = 0, providers = 0; };
++struct ActorCombatState {
++  CombatProfile profile;
++  CombatRevision revision;
++  // Validated on the server thread before publication. All absent skills become zero.
++  bool Apply(CombatProfile incoming) {
++    if (incoming.revision <= profile.revision) return false;
++    profile = std::move(incoming); revision.profile = profile.revision; return true;
++  }
++};
++}
+diff --git a/server/cpp/server_guest_lib/formulas/ShadowDamageFormula.h b/server/cpp/server_guest_lib/formulas/ShadowDamageFormula.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..4922778a6aaa0d972294c53bb620cdfa352bee9d
+--- /dev/null
++++ b/server/cpp/server_guest_lib/formulas/ShadowDamageFormula.h
+@@ -0,0 +1,88 @@
++#pragma once
++#include "IDamageFormula.h"
++#include "aetherius_combat/ShadowStatus.h"
++#include <array>
++#include <cmath>
++#include <memory>
++#include <nlohmann/json.hpp>
++
++// All methods run on the host's server thread. Read outside CalculateDamage;
++// concurrent readers would require synchronization before using this API.
++class ShadowDamageFormula final : public IDamageFormula {
++public:
++  static constexpr size_t kCapacity = 1024;
++  enum class Status { Calculated, Unsupported, Exception, Invalid };
++  struct Sample {
++    uint64_t sequence = 0;
++    HitData hit{};
++    float current = 0, candidate = 0;
++    bool neutralProfile = true;
++    Status status = Status::Calculated;
++    aetherius::combat::UnsupportedReason reason = aetherius::combat::UnsupportedReason::None;
++  };
++  struct Buffer {
++    std::array<Sample, kCapacity> samples{};
++    uint64_t hits = 0, failures = 0, exceptions = 0, invalid = 0, unsupported = 0;
++    size_t size = 0, next = 0;
++    // JSON/string allocation is confined to this explicitly requested read.
++    nlohmann::json Read() const {
++      auto rows = nlohmann::json::array();
++      for (size_t i = 0; i < size; ++i) {
++        const auto& s = samples[(next + kCapacity - size + i) % kCapacity];
++        rows.push_back({{"sequence", s.sequence}, {"aggressor", s.hit.aggressor},
++          {"target", s.hit.target}, {"source", s.hit.source}, {"projectile", s.hit.projectile},
++          {"power", s.hit.isPowerAttack}, {"blocked", s.hit.isHitBlocked},
++          {"sneak", s.hit.isSneakAttack}, {"bash", s.hit.isBashAttack},
++          {"current", s.current}, {"candidate", s.status == Status::Calculated
++            ? nlohmann::json(s.candidate) : nlohmann::json(nullptr)},
++          {"neutralProfile", s.neutralProfile},
++          {"status", s.status == Status::Calculated ? "CALCULATED" :
++            s.status == Status::Unsupported ? "UNSUPPORTED" :
++            s.status == Status::Exception ? "EXCEPTION" : "INVALID"},
++          {"unsupportedReason", static_cast<int>(s.reason)}});
++      }
++      return {{"capacity", kCapacity}, {"hits", hits}, {"failures", failures},
++        {"exceptions", exceptions}, {"invalid", invalid}, {"unsupported", unsupported},
++        {"overwritten", hits - size}, {"profile", "NEUTRAL_SHADOW_ONLY"},
++        {"samples", std::move(rows)}};
++    }
++  };
++  ShadowDamageFormula(std::unique_ptr<IDamageFormula> current,
++    std::unique_ptr<IDamageFormula> candidate, std::shared_ptr<Buffer> buffer)
++    : current(std::move(current)), candidate(std::move(candidate)), buffer(std::move(buffer)) {
++    if (!this->current || !this->candidate || !this->buffer)
++      throw std::invalid_argument("shadow requires both formulas and buffer");
++  }
++  float CalculateDamage(const MpActor& attacker, const MpActor& defender,
++    const HitData& hit) const override {
++    const float applied = current->CalculateDamage(attacker, defender, hit);
++    Sample sample{};
++    sample.sequence = ++buffer->hits;
++    sample.hit = hit;
++    sample.current = applied;
++    try {
++      sample.candidate = candidate->CalculateDamage(attacker, defender, hit);
++      if (!std::isfinite(sample.candidate) || sample.candidate < 0) {
++        sample.status = Status::Invalid;
++        ++buffer->failures; ++buffer->invalid;
++      }
++    } catch (const aetherius::combat::ShadowUnsupported& e) {
++      sample.status = Status::Unsupported; sample.reason = e.reason;
++      ++buffer->unsupported;
++    } catch (...) {
++      sample.status = Status::Exception;
++      ++buffer->failures; ++buffer->exceptions;
++    }
++    buffer->samples[buffer->next] = sample;
++    buffer->next = (buffer->next + 1) % kCapacity;
++    if (buffer->size < kCapacity) ++buffer->size;
++    return applied;
++  }
++  float CalculateDamage(const MpActor& attacker, const MpActor& defender,
++    const SpellCastData& spell) const override {
++    return current->CalculateDamage(attacker, defender, spell);
++  }
++private:
++  std::unique_ptr<IDamageFormula> current, candidate;
++  std::shared_ptr<Buffer> buffer;
++};
+diff --git a/unit/AetheriusShadowTest.cpp b/unit/AetheriusShadowTest.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..4b62bc1c67c86761105917762aa19308f92d56e3
+--- /dev/null
++++ b/unit/AetheriusShadowTest.cpp
+@@ -0,0 +1,274 @@
++#include "PartOne.h"
++#include "MpActor.h"
++#include "aetherius_combat/AetheriusDamageFormula.h"
++#include "formulas/ShadowDamageFormula.h"
++#include "formulas/TES5DamageFormula.h"
++#include "formulas/DamageMultFormula.h"
++#include "formulas/SweetPieDamageFormula.h"
++#include "formulas/SweetPieSpellDamageFormula.h"
++#include "formulas/DamageMultConditionalFormula.h"
++#include "condition_functions/ConditionFunctionFactory.h"
++#include <chrono>
++#include <fstream>
++#include <iostream>
++#include <limits>
++
++namespace {
++int checks = 0;
++void Check(bool ok, const char* why) {
++  ++checks;
++  if (!ok) throw std::runtime_error(why);
++}
++void Near(float actual, float expected, const char* why) {
++  Check(std::abs(actual - expected) < 0.00001f, why);
++}
++std::unique_ptr<IDamageFormula> Legacy() {
++  std::unique_ptr<IDamageFormula> formula = std::make_unique<TES5DamageFormula>();
++  formula = std::make_unique<DamageMultFormula>(std::move(formula),
++    nlohmann::json{{"multiplier", 1}});
++  formula = std::make_unique<SweetPieDamageFormula>(std::move(formula), nullptr);
++  formula = std::make_unique<SweetPieSpellDamageFormula>(std::move(formula), nullptr);
++  formula = std::make_unique<DamageMultConditionalFormula>(std::move(formula),
++    nullptr, nullptr, std::make_shared<ConditionFunctionMap>(
++      ConditionFunctionFactory::CreateConditionFunctions()));
++  return formula;
++}
++class FaultFormula final : public IDamageFormula {
++public:
++  explicit FaultFormula(int fault) : fault(fault) {}
++  float CalculateDamage(const MpActor&, const MpActor&, const HitData&) const override {
++    if (fault == 0) throw std::runtime_error("injected candidate exception");
++    if (fault == 1) return std::numeric_limits<float>::quiet_NaN();
++    if (fault == 2) return std::numeric_limits<float>::infinity();
++    if (fault == 3) return -1;
++    if (fault == 4) throw 7; // A non-std exception must also stay isolated.
++    return 12;
++  }
++  float CalculateDamage(const MpActor&, const MpActor&, const SpellCastData&) const override {
++    if (fault == 5) return 17;
++    throw std::runtime_error("magic candidate must not run");
++  }
++private:
++  int fault;
++};
++Inventory::Entry Worn(uint32_t id) {
++  Inventory::Entry entry(id, 1);
++  entry.SetWorn(Inventory::Worn::Right);
++  return entry;
++}
++
++void Run(const std::filesystem::path& manifestPath) {
++  std::cout << std::unitbuf;
++  std::ifstream in(manifestPath);
++  nlohmann::json manifest;
++  in >> manifest;
++  std::vector<std::filesystem::path> paths;
++  for (const auto& row : manifest.at("plugins"))
++    paths.push_back(manifestPath.parent_path() / row.at("filename").get<std::string>());
++  espm::Loader loader(paths);
++  std::cout << "Host load order: " << paths.size() << " plugins\n";
++  PartOne host;
++  host.AttachEspm(&loader);
++  host.CreateActor(0xff000001, {0, 0, 0}, 0, 0x3c);
++  host.CreateActor(0xff000002, {0, 0, 0}, 0, 0x3c);
++  auto& attacker = host.worldState.GetFormAt<MpActor>(0xff000001);
++  auto& defender = host.worldState.GetFormAt<MpActor>(0xff000002);
++  Equipment equipment;
++  equipment.inv.entries.push_back(Worn(0x1397e));
++  attacker.SetEquipment(equipment);
++  Equipment armor;
++  armor.inv.entries.push_back(Worn(0x12e46));
++  defender.SetEquipment(armor);
++  const auto& browser = loader.GetBrowser();
++  auto& cache = browser.GetCache();
++  const auto weaponData = espm::Convert<espm::WEAP>(browser.LookupById(0x1397e).rec)->GetData(cache);
++  const auto armorData = espm::Convert<espm::ARMO>(browser.LookupById(0x12e46).rec)->GetData(cache);
++  const auto rating = armorData.baseRatingX100 / 100.0;
++  const float weaponBase = static_cast<float>(weaponData.weapData->damage);
++  std::cout << "Winner facts: dagger=" << weaponBase << " gauntlets=" << rating << '\n';
++  Check(!armorData.enchantmentFormId, "fixture must be unenchanted winning armor");
++  auto before = Legacy();
++  auto off = Legacy();
++  auto buffer = std::make_shared<ShadowDamageFormula::Buffer>();
++  ShadowDamageFormula on(Legacy(),
++    std::make_unique<aetherius::combat::AetheriusDamageFormula>(browser,
++      std::vector<aetherius::combat::StableFormKey>{
++        aetherius::combat::StableFormKey::Parse("Skyrim.esm:01397E"),
++        aetherius::combat::StableFormKey::Parse("Skyrim.esm:012E46")}), buffer);
++  const auto scaling = espm::GetData<espm::GMST>(espm::GMST::kFArmorScalingFactor, &host.worldState).value;
++  const auto maxArmor = espm::GetData<espm::GMST>(espm::GMST::kFMaxArmorRating, &host.worldState).value;
++  HitData hit{};
++  hit.aggressor = attacker.GetFormId(); hit.target = defender.GetFormId();
++  hit.source = 0x1397e;
++  // All eight power/block/sneak combinations, with native Block off and on.
++  for (bool nativeBlock : {false, true}) {
++    defender.SetIsBlockActive(nativeBlock);
++    for (int flags = 0; flags < 8; ++flags) {
++      hit.isPowerAttack = (flags & 1) != 0;
++      hit.isHitBlocked = (flags & 2) != 0;
++      hit.isSneakAttack = (flags & 4) != 0;
++      float golden = weaponBase * .01f * (100.f - std::min(
++        static_cast<float>(rating) * scaling, maxArmor));
++      if (hit.isPowerAttack) golden *= 2.f;
++      if (hit.isHitBlocked) golden *= .1f;
++      if (hit.isSneakAttack) golden *= 1.3f;
++      const auto original = before->CalculateDamage(attacker, defender, hit);
++      Near(original, golden, "legacy flag golden changed");
++      Check(off->CalculateDamage(attacker, defender, hit) == original, "off differs from original chain");
++      Check(on.CalculateDamage(attacker, defender, hit) == original, "shadow changed applied damage");
++      const auto& sample = buffer->samples[buffer->next - 1];
++      Check(sample.status == ShadowDamageFormula::Status::Calculated, "candidate not calculated");
++      const float candidate = static_cast<float>(weaponBase * (1 - rating * .8 / 500) *
++        (hit.isHitBlocked && nativeBlock ? .8 : 1));
++      Near(sample.candidate, candidate, "candidate physical golden changed");
++      Check(sample.neutralProfile && sample.hit.isPowerAttack == hit.isPowerAttack &&
++        sample.hit.isHitBlocked == hit.isHitBlocked && sample.hit.isSneakAttack == hit.isSneakAttack,
++        "sample context missing");
++      std::cout << "flags=" << flags << " nativeBlock=" << nativeBlock
++        << " off=" << original << " returned=" << sample.current
++        << " candidate=" << sample.candidate << " neutral=true\n";
++    }
++  }
++  std::cout << "BEGIN outside-hit snapshot; size=" << buffer->size << " next=" << buffer->next << '\n';
++  const auto initialSnapshot = buffer->Read();
++  std::cout << "Outside-hit snapshot: " << initialSnapshot.dump() << '\n';
++  hit.isPowerAttack = hit.isHitBlocked = hit.isSneakAttack = false;
++  const auto baseline = before->CalculateDamage(attacker, defender, hit);
++  for (int fault = 0; fault < 5; ++fault) {
++    auto failures = std::make_shared<ShadowDamageFormula::Buffer>();
++    ShadowDamageFormula shadow(Legacy(), std::make_unique<FaultFormula>(fault), failures);
++    Check(shadow.CalculateDamage(attacker, defender, hit) == baseline, "fault changed applied result");
++    Check(failures->failures == 1 && failures->hits == 1, "failure counter missing");
++    Check(failures->invalid == (fault >= 1 && fault <= 3 ? 1u : 0u), "invalid counter");
++    Check(failures->exceptions == (fault == 0 || fault == 4 ? 1u : 0u), "exception counter");
++    Check(failures->Read()["samples"][0]["candidate"].is_null(), "failed candidate must be null");
++    std::cout << "Fault " << fault << ": " << failures->Read().dump() << '\n';
++  }
++  auto currentFailures = std::make_shared<ShadowDamageFormula::Buffer>();
++  ShadowDamageFormula failedCurrent(std::make_unique<FaultFormula>(0),
++    std::make_unique<FaultFormula>(5), currentFailures);
++  bool threw = false;
++  try { (void)failedCurrent.CalculateDamage(attacker, defender, hit); } catch (...) { threw = true; }
++  Check(threw && currentFailures->hits == 0, "current exception must retain original behavior");
++
++  // Real candidate rejects incomplete input without applying an invented value.
++  equipment.inv.entries.clear(); attacker.SetEquipment(equipment);
++  Check(on.CalculateDamage(attacker, defender, hit) == baseline, "unsupported source changed current");
++  Check(buffer->samples[buffer->next - 1].reason == aetherius::combat::UnsupportedReason::SourceNotEquipped,
++    "source not equipped reason");
++  equipment.inv.entries.push_back(Worn(0x1397e)); attacker.SetEquipment(equipment);
++  armor.inv.entries[0].enchantmentId = 1; defender.SetEquipment(armor);
++  Check(on.CalculateDamage(attacker, defender, hit) == baseline, "unsupported enchanted armor changed current");
++  Check(buffer->samples[buffer->next - 1].reason == aetherius::combat::UnsupportedReason::EnchantedArmor,
++    "enchanted armor reason");
++  armor.inv.entries[0].enchantmentId.reset(); defender.SetEquipment(armor);
++  equipment.inv.entries.resize(65); attacker.SetEquipment(equipment);
++  Check(on.CalculateDamage(attacker, defender, hit) == baseline, "equipment limit changed current");
++  Check(buffer->samples[buffer->next - 1].reason == aetherius::combat::UnsupportedReason::EquipmentCapacity,
++    "equipment capacity reason");
++  equipment.inv.entries.resize(1); attacker.SetEquipment(equipment);
++  equipment.inv.entries.push_back(Worn(0x1397e)); attacker.SetEquipment(equipment);
++  Check(on.CalculateDamage(attacker, defender, hit) == baseline, "duplicate weapon changed current");
++  Check(buffer->samples[buffer->next - 1].reason == aetherius::combat::UnsupportedReason::DuplicateWeapon,
++    "duplicate equipped weapon reason");
++  equipment.inv.entries.resize(1);
++  equipment.inv.entries[0] = Worn(0x12eb7); attacker.SetEquipment(equipment);
++  hit.source = 0x12eb7;
++  const auto unprepared = before->CalculateDamage(attacker, defender, hit);
++  Check(on.CalculateDamage(attacker, defender, hit) == unprepared, "missing prepared record changed current");
++  Check(buffer->samples[buffer->next - 1].reason == aetherius::combat::UnsupportedReason::MissingRecord,
++    "missing prepared record reason");
++  equipment.inv.entries[0] = Worn(0x1397e); attacker.SetEquipment(equipment);
++  hit.source = 0x1f4;
++  const auto unarmed = before->CalculateDamage(attacker, defender, hit);
++  Check(on.CalculateDamage(attacker, defender, hit) == unarmed, "unarmed changed current");
++  Check(buffer->samples[buffer->next - 1].reason == aetherius::combat::UnsupportedReason::UnarmedRaceSnapshot,
++    "unarmed needs bounded race context");
++  hit.source = 0x1397e;
++  auto ring = std::make_shared<ShadowDamageFormula::Buffer>();
++  ShadowDamageFormula bounded(Legacy(), std::make_unique<FaultFormula>(5), ring);
++  for (size_t i = 0; i < ShadowDamageFormula::kCapacity + 17; ++i)
++    (void)bounded.CalculateDamage(attacker, defender, hit);
++  const auto ringJson = ring->Read();
++  Check(ring->size == ShadowDamageFormula::kCapacity && ring->hits == ShadowDamageFormula::kCapacity + 17,
++    "ring grew beyond fixed capacity");
++  Check(ringJson["overwritten"] == 17 && ringJson["samples"][0]["sequence"] == 18 &&
++    ringJson["samples"].back()["sequence"] == ring->hits, "ring order/overwrite incorrect");
++  std::cout << "Fixed buffer bytes=" << sizeof(ShadowDamageFormula::Buffer)
++    << " capacity=" << ring->size << " overwritten=" << ringJson["overwritten"] << '\n';
++  ShadowDamageFormula magic(std::make_unique<FaultFormula>(5), std::make_unique<FaultFormula>(0), ring);
++  Check(magic.CalculateDamage(attacker, defender, SpellCastData{}) == 17, "spell pass through changed");
++  Check(ring->hits == ShadowDamageFormula::kCapacity + 17, "magic must not enter physical buffer");
++
++  // Warm legacy record caches before timing. No JSON/log/output in timed loops.
++  for (int i = 0; i < 1000; ++i) { (void)off->CalculateDamage(attacker, defender, hit); (void)on.CalculateDamage(attacker, defender, hit); }
++  constexpr int iterations = 20000;
++  volatile double sink = 0;
++  auto bench = [&](const IDamageFormula& formula) {
++    const auto start = std::chrono::steady_clock::now();
++    for (int i = 0; i < iterations; ++i) sink = sink + formula.CalculateDamage(attacker, defender, hit);
++    return std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - start).count() / iterations;
++  };
++  double offSum = 0, onSum = 0;
++  for (int round = 0; round < 5; ++round) {
++    const auto offNs = round % 2 ? bench(*off) : 0;
++    const auto onNs = bench(on);
++    const auto finalOffNs = round % 2 ? offNs : bench(*off);
++    offSum += finalOffNs; onSum += onNs;
++    std::cout << "BENCH round=" << round << " iterations=" << iterations
++      << " off_ns=" << finalOffNs << " shadow_ns=" << onNs << " added_ns=" << onNs - finalOffNs << '\n';
++  }
++  Check(buffer->size == ShadowDamageFormula::kCapacity && sink > 0, "benchmark/capacity check");
++  std::cout << "BENCH mean off_ns=" << offSum / 5 << " shadow_ns=" << onSum / 5
++    << " added_ns=" << (onSum - offSum) / 5 << '\n';
++  // Isolate the added work from the much slower legacy lookup path: short
++  // full-chain runs can otherwise hide sub-microsecond cost under timing noise.
++  FaultFormula fixedCurrent(5);
++  auto isolatedBuffer = std::make_shared<ShadowDamageFormula::Buffer>();
++  ShadowDamageFormula isolated(std::make_unique<FaultFormula>(5),
++    std::make_unique<aetherius::combat::AetheriusDamageFormula>(browser,
++      std::vector<aetherius::combat::StableFormKey>{
++        aetherius::combat::StableFormKey::Parse("Skyrim.esm:01397E"),
++        aetherius::combat::StableFormKey::Parse("Skyrim.esm:012E46")}), isolatedBuffer);
++  constexpr int isolatedIterations = 500000;
++  auto isolatedBench = [&](const IDamageFormula& formula) {
++    const auto start = std::chrono::steady_clock::now();
++    for (int i = 0; i < isolatedIterations; ++i)
++      sink = sink + formula.CalculateDamage(attacker, defender, hit);
++    return std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - start).count() / isolatedIterations;
++  };
++  for (int round = 0; round < 3; ++round) {
++    const auto fixedNs = isolatedBench(fixedCurrent);
++    const auto shadowNs = isolatedBench(isolated);
++    std::cout << "ISOLATED round=" << round << " iterations=" << isolatedIterations
++      << " fixed_ns=" << fixedNs << " shadow_ns=" << shadowNs
++      << " added_ns=" << shadowNs - fixedNs << '\n';
++  }
++  std::cout << "PASS " << checks << " checks\n";
++}
++}
++
++#include "WeaponPoisonTest.h" // AETHERIUS D-P1: reuse the approved standalone test target.
++#include "WeaponPoisonNpcTest.h" // FIX-1010 hosted NPC reproduction.
++#include "WeaponPoisonIntentTest.h" // D-P1-fix2 actual command, no OnEquip assumption.
++#include "DevAttributesTest.h" // AETHERIUS DEV-A1: native resource acceptance, no sockets.
++
++#ifdef AETHERIUS_SHADOW_STANDALONE
++int main(int argc, char** argv) {
++  try {
++    if (argc == 3 && std::string(argv[1]) == "--dev-attributes") { RunDevAttributesTests(argv[2]); return 0; } // AETHERIUS DEV-A1
++    if (argc == 4 && std::string(argv[1]) == "--poison-intent") { RunWeaponPoisonIntentTests(argv[2], argv[3]); return 0; }
++    if (argc == 3 && std::string(argv[1]) == "--npc") { RunWeaponPoisonNpcTests(argv[2]); return 0; }
++    if (argc == 4 && std::string(argv[1]) == "--poison") { RunWeaponPoisonTests(argv[2], argv[3]); return 0; } // AETHERIUS D-P1
++    if (argc != 2) throw std::runtime_error("usage: aetherius-shadow-test <loadorder-manifest>");
++    Run(argv[1]); return 0;
++  } catch (const std::exception& e) {
++    std::cerr << "FAIL after " << checks << " checks: " << e.what() << '\n'; return 1;
++  }
++}
++#else
++#include <catch2/catch_all.hpp>
++TEST_CASE("Aetherius shadow acceptance", "[aetherius-shadow][espm]") {
++  Run(std::filesystem::path(DIST_DIR) / "server/data/aetherius-loadorder.json");
++}
++#endif
+diff --git a/unit/DevAttributesTest.h b/unit/DevAttributesTest.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..0c20b432c64f72fec58589e78f8fb74522b955c5
+--- /dev/null
++++ b/unit/DevAttributesTest.h
+@@ -0,0 +1,171 @@
++#pragma once
++#include "aetherius_combat/DevAttributes.h"
++#include "CropRegeneration.h"
++#include "EvaluateTemplate.h"
++#include "CreateActorMessage.h"
++#include <limits>
++
++// Real PartOne/WorldState/ActionListener and installed winners. No listening socket.
++inline void RunDevAttributesTests(const std::filesystem::path& manifestPath) {
++  std::cout << std::unitbuf;
++  std::ifstream in(manifestPath); nlohmann::json manifest; in >> manifest;
++  std::vector<std::filesystem::path> paths;
++  for (const auto& row : manifest.at("plugins"))
++    paths.push_back(manifestPath.parent_path()/row.at("filename").get<std::string>());
++  espm::Loader loader(paths); PartOne host; host.AttachEspm(&loader);
++  auto resolve=[&](const char* key){return FormDesc::FromString(key).ToFormId(host.worldState.pluginIndexMapping);};
++  int count=0;
++  auto check=[&](bool ok,const char* why){++count;if(!ok)throw std::runtime_error(why);};
++  auto assertNear=[&](float a,float b,const char* why){check(std::abs(a-b)<0.0001f,why);};
++  PluginIndexMapping initialMap,shiftedMap;
++  initialMap.Build({"Skyrim.esm","AETHERIUS - BALANCE.esp"});
++  shiftedMap.Build({"AETHERIUS - BALANCE.esp","Skyrim.esm"});
++  const auto nordKey=FormDesc::FromString("13746:Skyrim.esm");
++  check(nordKey.ToFormId(initialMap)!=nordKey.ToFormId(shiftedMap),"race resolution fixed a plugin position");
++  check(FormDesc::FromFormId(nordKey.ToFormId(initialMap),initialMap)==nordKey,"original stable race resolution");
++  check(FormDesc::FromFormId(nordKey.ToFormId(shiftedMap),shiftedMap)==nordKey,"shifted stable race resolution");
++  struct KnownDamage final : IDamageFormula {
++    float CalculateDamage(const MpActor&,const MpActor&,const HitData&) const override {return 30.f;}
++    float CalculateDamage(const MpActor&,const MpActor&,const SpellCastData&) const override {return 30.f;}
++  };
++  host.SetDamageFormula(std::make_unique<KnownDamage>());
++  const auto cell=resolve("3c:Skyrim.esm");
++  const auto attackerId=host.CreateActor(0,{0,0,0},0,cell),targetId=host.CreateActor(0,{0,0,0},0,cell);
++  auto& attacker=host.worldState.GetFormAt<MpActor>(attackerId);
++  auto& target=host.worldState.GetFormAt<MpActor>(targetId);
++  host.serverState.Connect(0,"DEV-A1-attacker");host.SetUserActor(0,attackerId);
++  host.serverState.Connect(1,"DEV-A1-target");host.SetUserActor(1,targetId);
++  target.RegisterProfileId(2);
++
++  Appearance appearance;appearance.raceId=resolve("13746:Skyrim.esm");
++  target.SetAppearance(&appearance);
++  const auto base=target.GetBaseValues();
++  const auto race=espm::GetData<espm::RACE>(target.GetRaceId(),&host.worldState);
++  const auto npc=EvaluateTemplate<espm::NPC_::UseStats>(&host.worldState,target.GetBaseId(),target.GetTemplateChain(),
++    [](const auto& record,const auto& data){return std::make_pair(record.ToGlobalId(record.rec->GetId()),data);});
++  auto winner=[&](uint32_t id){auto record=loader.GetBrowser().LookupById(id);return paths.at(record.GetSourceId()).filename().string();};
++  std::cout << "NORD startingHealth=" << race.startingHealth << " healthOffset=" << npc.second.healthOffset
++    << " resultingHealth=" << base.health << " raceWinner=" << winner(target.GetRaceId())
++    << " base=" << FormDesc::FromFormId(target.GetBaseId(),host.worldState.pluginIndexMapping).ToString()
++    << " statsNPC=" << FormDesc::FromFormId(npc.first,host.worldState.pluginIndexMapping).ToString()
++    << " statsWinner=" << winner(npc.first) << " templateChain=";
++  for(const auto& key:target.GetTemplateChain())std::cout << key.ToString() << ';';
++  std::cout << '\n';
++  check(target.GetMaximumValues().ToTuple()==base.ToTuple(),"absent override changed records");
++  const auto persistentBefore=target.GetChangeForm().actorValues.ToTuple();
++  // AETHERIUS C3d: actual GetMaximumValues, transient delivery and resource path.
++  target.SetAttributeBonuses(aetherius::attributes::Bonuses{200,300,85});
++  const auto allocated=target.GetMaximumValues();
++  assertNear(allocated.health,base.health+200,"C3d additive health");
++  assertNear(allocated.magicka,base.magicka+300,"C3d additive magicka");
++  assertNear(allocated.stamina,base.stamina+85,"C3d additive stamina");
++  check(target.GetBaseValues().ToTuple()==base.ToTuple(),"C3d changed record base");
++  check(target.GetChangeForm().actorValues.ToTuple()==persistentBefore,"C3d persisted bonuses");
++  check(allocated.healRate==base.healRate&&allocated.magickaRate==base.magickaRate&&allocated.staminaRate==base.staminaRate,"C3d changed regen rates");
++  CreateActorMessage allocatedSpawn;target.VisitProperties(allocatedSpawn,VisitPropertiesMode::All);
++  check(allocatedSpawn.props.health==allocated.health&&allocatedSpawn.props.magicka==allocated.magicka&&allocatedSpawn.props.stamina==allocated.stamina,"C3d spawn maximum");
++  target.SetDevAttributes(aetherius::development::Attributes{300,300,300});
++  check(target.GetMaximumValues().health==300&&target.GetMaximumValues().magicka==300&&target.GetMaximumValues().stamina==300,"C3d stacked on DEV absolute override");
++  bool c3dRefused=false;
++  try{target.SetAttributeBonuses(aetherius::attributes::Bonuses{5,0,0});}catch(const std::invalid_argument&){c3dRefused=true;}
++  check(c3dRefused,"C3d accepted second writer during DEV override");
++  target.SetDevAttributes(std::nullopt);
++  check(target.GetMaximumValues().ToTuple()==allocated.ToTuple(),"C3d bonus lost behind DEV override");
++  for(const auto bad : {aetherius::attributes::Bonuses{-5,0,0},aetherius::attributes::Bonuses{1,0,0},
++    aetherius::attributes::Bonuses{590,0,0},aetherius::attributes::Bonuses{585,5,0}}){
++    c3dRefused=false;try{target.SetAttributeBonuses(bad);}catch(const std::invalid_argument&){c3dRefused=true;}
++    check(c3dRefused,"C3d invalid native allocation accepted");
++  }
++  target.SetAttributeBonuses(std::nullopt);
++  check(target.GetMaximumValues().ToTuple()==base.ToTuple(),"C3d removal did not restore records");
++  host.Tick();host.Messages().clear();
++  target.SetDevAttributes(aetherius::development::Attributes{300,300,300});
++  const auto maximum=target.GetMaximumValues();
++  assertNear(maximum.health,300,"health maximum");assertNear(maximum.magicka,300,"magicka maximum");assertNear(maximum.stamina,300,"stamina maximum");
++  check(target.GetChangeForm().actorValues.ToTuple()==persistentBefore,"override persisted into change form");
++  check(target.GetBaseValues().ToTuple()==base.ToTuple(),"override mutated records");
++  check(maximum.healRate==base.healRate&&maximum.magickaRate==base.magickaRate&&maximum.staminaRate==base.staminaRate,"regen rates altered");
++  CreateActorMessage spawn;target.VisitProperties(spawn,VisitPropertiesMode::All);
++  check(spawn.props.health==300&&spawn.props.magicka==300&&spawn.props.stamina==300,"spawn did not carry maxima");
++  host.Tick();
++  std::vector<uint32_t> snippets;
++  for(const auto& message:host.Messages())if(message.j.value("function","")=="SetActorValue"){
++    check(message.j.at("arguments").at(1).get<float>()==300,"snippet maximum mismatch");
++    snippets.push_back(message.j.at("snippetIdx").get<uint32_t>());
++  }
++  check(snippets.size()==3,"client maximum delivery not three native snippets");
++  host.Messages().clear();
++  target.ResolveSnippet(snippets[0],VarValue::None());target.ResolveSnippet(snippets[1],VarValue::None());
++  check(host.Messages().empty(),"percentages sent before all resource calls completed");
++  target.ResolveSnippet(snippets[2],VarValue::None());
++  check(host.Messages().size()==1&&host.Messages().front().j.at("data").at("health")==1,"percentages not sent after native ACKs");
++  host.Messages().clear();
++  target.SetDevAttributes(aetherius::development::Attributes{300,300,300});
++  target.SetDevAttributes(aetherius::development::Attributes{250,600,900});
++  host.Tick();snippets.clear();
++  for(const auto& message:host.Messages())if(message.j.value("function","")=="SetActorValue")
++    snippets.push_back(message.j.at("snippetIdx").get<uint32_t>());
++  check(snippets.size()==6,"replacement delivery snippets");host.Messages().clear();
++  for(size_t i=0;i<3;++i)target.ResolveSnippet(snippets[i],VarValue::None());
++  check(host.Messages().empty(),"stale ACK from old maxima published percentages");
++  for(size_t i=3;i<6;++i)target.ResolveSnippet(snippets[i],VarValue::None());
++  check(host.Messages().size()==1,"replacement ACK did not publish once");
++  assertNear(target.GetMaximumValues().health,250,"independent health");
++  assertNear(target.GetMaximumValues().magicka,600,"independent magicka");
++  assertNear(target.GetMaximumValues().stamina,900,"independent stamina");
++  target.SetDevAttributes(aetherius::development::Attributes{300,300,300});
++
++  auto full=target.GetActorValues();full.healthPercentage=1;full.magickaPercentage=1;full.staminaPercentage=1;
++  auto reset=[&](){if(target.IsDead())target.SetIsDead(false);target.SetPercentages(full);};
++  auto hit=[&](){reset();attacker.SetLastHitTime(targetId,std::chrono::steady_clock::now()-std::chrono::seconds(10));
++    HitMessage message;message.data.aggressor=0x14;message.data.target=targetId;message.data.source=resolve("1f4:Skyrim.esm");
++    RawMessageData raw;raw.userId=0;host.GetActionListener().OnHit(raw,message);return target.GetActorValues().healthPercentage;};
++  assertNear(hit(),0.9f,"30 damage must remove 30/300");
++  for(auto av:{espm::ActorValue::Health,espm::ActorValue::Magicka,espm::ActorValue::Stamina}){
++    reset();target.DamageActorValue(av,30);assertNear(target.GetActorValues().GetValue(av),base.GetValue(av),"damage modified stored base");
++    const auto values=target.GetActorValues();const auto percent=av==espm::ActorValue::Health?values.healthPercentage:av==espm::ActorValue::Magicka?values.magickaPercentage:values.staminaPercentage;
++    assertNear(percent,0.9f,"resource damage fraction");target.RestoreActorValue(av,15);
++    const auto restored=target.GetActorValues();assertNear(av==espm::ActorValue::Health?restored.healthPercentage:av==espm::ActorValue::Magicka?restored.magickaPercentage:restored.staminaPercentage,0.95f,"restoration fraction");
++  }
++  reset();auto half=full;half.healthPercentage=half.magickaPercentage=half.staminaPercentage=0.5f;target.SetPercentages(half);
++  assertNear(CropHealthRegeneration(1,1,&target),0.5f+maximum.healRate*maximum.healRateMult/10000,"health regen validation");
++  assertNear((CropHealthRegeneration(1,1,&target)-0.5f)*300,300*maximum.healRate*maximum.healRateMult/10000,"health regen absolute points");
++  assertNear(CropMagickaRegeneration(1,1,&target),0.5f+maximum.magickaRate*maximum.magickaRateMult/10000,"magicka regen validation");
++  assertNear(CropStaminaRegeneration(1,1,&target),0.5f+maximum.staminaRate*maximum.staminaRateMult/10000,"stamina regen validation");
++  RawMessageData raw;raw.userId=1;ChangeValuesMessage values;values.data.health=std::numeric_limits<float>::quiet_NaN();
++  host.GetActionListener().OnChangeValues(raw,values);assertNear(target.GetActorValues().healthPercentage,0.5f,"nonfinite client input accepted");
++  target.SetLastAttributesPercentagesUpdate(std::chrono::steady_clock::now());
++  values.data.health=2.f;values.data.magicka=2.f;values.data.stamina=2.f;host.GetActionListener().OnChangeValues(raw,values);
++  check(target.GetActorValues().healthPercentage<0.501f&&target.GetActorValues().magickaPercentage<0.501f&&target.GetActorValues().staminaPercentage<0.501f,"client regen bypassed validation");
++
++  // Certified ResourceDamage operation called by the real poison implementation.
++  const auto poison=resolve("3a5a4:Skyrim.esm");auto poisonRecord=loader.GetBrowser().LookupById(poison);
++  auto effect=espm::Convert<espm::ALCH>(poisonRecord.rec)->GetData(host.worldState.GetEspmCache()).effects.front();
++  effect.effectId=poisonRecord.ToGlobalId(effect.effectId);effect.magnitude=30;effect.duration=0;effect.areaOfEffect=0;
++  espm::MGEF::DATA info{};info.effectType=espm::MGEF::EffectType::ValueMod;info.flags=espm::MGEF::Flags::Detrimental;
++  // Enable only this no-socket fixture's in-memory operation gate. The local
++  // server settings file is never changed, and the fixture gate is restored.
++  host.worldState.aetheriusWeaponPoison=true;
++  for(auto av:{espm::ActorValue::Health,espm::ActorValue::Magicka,espm::ActorValue::Stamina}){
++    reset();info.primaryAV=av;check(target.ApplyWeaponPoisonEffect(effect,info,false,&attacker)==0,"poison family refused");
++    const auto value=target.GetActorValues();assertNear(av==espm::ActorValue::Health?value.healthPercentage:av==espm::ActorValue::Magicka?value.magickaPercentage:value.staminaPercentage,0.9f,"poison did not use 300");
++  }
++  host.worldState.aetheriusWeaponPoison=false;
++  check(!host.worldState.aetheriusWeaponPoison,"test must leave weaponPoison false");
++  target.SetIsDead(true);target.SetIsDead(false);assertNear(target.GetMaximumValues().health,300,"respawn lost transient maxima");
++  target.SetDevAttributes(std::nullopt);check(target.GetMaximumValues().ToTuple()==base.ToTuple(),"clear did not restore original maxima");
++  assertNear(hit(),1.f-30.f/base.health,"absent override changed original hit result");
++  reset();target.DamageActorValue(espm::ActorValue::Health,30);assertNear(target.GetActorValues().healthPercentage,1.f-30.f/base.health,"original actor value fraction changed");
++  const auto npcId=host.worldState.GenerateFormId();
++  host.worldState.AddForm(std::make_unique<MpActor>(LocationalData{{0,0,0},{0,0,0},FormDesc::FromFormId(cell,host.worldState.pluginIndexMapping)},host.CreateFormCallbacks(),resolve("422b4:Skyrim.esm")),npcId);
++  auto& creature=host.worldState.GetFormAt<MpActor>(npcId);creature.RegisterProfileId(3);
++  host.serverState.Connect(2,"DEV-A1-NPC");host.SetUserActor(2,npcId);
++  const auto npcBefore=creature.GetMaximumValues();bool refused=false;
++  try{creature.SetDevAttributes(aetherius::development::Attributes{300,300,300});}catch(const std::invalid_argument&){refused=true;}
++  check(refused&&!creature.HasDevAttributes()&&creature.GetMaximumValues().ToTuple()==npcBefore.ToTuple(),"NPC accepted override");
++  for(auto bad:{0,100001}){refused=false;try{target.SetDevAttributes(aetherius::development::Attributes{bad,300,300});}catch(const std::invalid_argument&){refused=true;}check(refused,"native range accepted");}
++  target.SetDevAttributes(aetherius::development::Attributes{300,300,300});host.SetUserActor(1,0);
++  check(!target.HasDevAttributes()&&target.GetMaximumValues().ToTuple()==base.ToTuple(),"offline player retained override");
++  target.SetAttributeBonuses(std::nullopt);
++  std::cout << "PASS C3d + DEV-A1 " << count << " native checks; no sockets; weaponPoison=false\n";
++}
+diff --git a/unit/WeaponPoisonIntentTest.h b/unit/WeaponPoisonIntentTest.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..5efd270bf7e7ec9f182f36621351e3538fcf27ff
+--- /dev/null
++++ b/unit/WeaponPoisonIntentTest.h
+@@ -0,0 +1,47 @@
++#pragma once
++
++// D-P1-fix2: native command reached by CustomPacket, no poison OnEquip input.
++// Real host, real load-order winners and actual session fixture, no socket.
++inline void RunWeaponPoisonIntentTests(const std::filesystem::path& manifestPath,
++                                      const std::filesystem::path& fixturePath) {
++  using namespace aetherius::poison;
++  std::ifstream in(manifestPath); nlohmann::json manifest; in >> manifest;
++  std::vector<std::filesystem::path> paths;
++  for (const auto& p : manifest.at("plugins")) paths.push_back(manifestPath.parent_path()/p.at("filename").get<std::string>());
++  espm::Loader loader(paths); PartOne host; host.AttachEspm(&loader);
++  auto resolve=[&](const std::string& key){return FormDesc::FromString(key).ToFormId(host.worldState.pluginIndexMapping);};
++  std::ifstream fixtureIn(fixturePath); nlohmann::json fixture; fixtureIn >> fixture;
++  auto remap=[&](nlohmann::json inv){for(auto& e:inv.at("entries")){e["baseId"]=resolve(e.at("baseKey"));e.erase("baseKey");}return inv;};
++  const auto inventory=Inventory::FromJson(remap(fixture.at("inventory")));
++  auto equipmentJson=fixture.at("equipment");equipmentJson["inv"]=remap(equipmentJson["inv"]);
++  const auto equipment=Equipment::FromJson(equipmentJson);
++  const auto weapon=resolve(fixture.at("weaponKey")),poison=resolve(fixture.at("poisonKey"));
++  const auto actorId=host.CreateActor(0,{0,0,0},0,resolve("3c:Skyrim.esm"));
++  auto& actor=host.worldState.GetFormAt<MpActor>(actorId);
++  host.serverState.Connect(0,"D-P1-fix2-native-intent");host.SetUserActor(0,actorId);
++  int checks=0;auto check=[&](bool ok,const char* why){++checks;if(!ok)throw std::runtime_error(why);};
++  auto setup=[&](bool left){host.worldState.aetheriusWeaponPoison=false;actor.SetInventory(inventory);auto eq=equipment;
++    for(auto& e:eq.inv.entries)if(e.baseId==weapon&&e.GetWorn()!=Inventory::Worn::None)e.SetWorn(left?Inventory::Worn::Left:Inventory::Worn::Right);
++    actor.SetEquipment(eq);actor.SetPoisonDoseBonus(6);host.worldState.aetheriusWeaponPoison=true;};
++  for(bool left:{false,true}) {
++    setup(left);auto before=actor.GetInventory();actor.RequestWeaponPoison(poison,weapon,!left);
++    check(actor.GetPoisonResult()==static_cast<uint32_t>(Result::WrongWeapon),"wrong hand accepted");check(actor.GetInventory()==before,"wrong hand consumed dose");
++    actor.RequestWeaponPoison(resolve("f:Skyrim.esm"),weapon,left);
++    check(actor.GetPoisonResult()==static_cast<uint32_t>(Result::InvalidPoison),"non-poison item accepted");check(actor.GetInventory()==before,"non-poison consumed");
++    actor.RequestWeaponPoison(poison,resolve("1397e:Skyrim.esm"),left);check(actor.GetInventory()==before,"unequipped weapon accepted");
++    actor.RequestWeaponPoison(poison,weapon,left);check(actor.GetPoisonResult()==static_cast<uint32_t>(Result::Applied),"session dagger refused");
++    check(actor.GetInventory().GetItemCount(poison)==19,"must consume one of 20 doses");check(actor.GetInventory().GetItemCount(weapon)==2,"lost a dagger");
++    auto coated=actor.GetInventory();int held=0;
++    for(const auto& e:coated.entries)if(e.baseId==weapon&&e.poisonId){++held;check(e.count==1&&e.poisonCount==7,"host did not own 7 charges on one copy");check(e.GetWorn()==(left?Inventory::Worn::Left:Inventory::Worn::Right),"lost hand");}
++    check(held==1,"poison spread to spare");
++    actor.RequestWeaponPoison(poison,weapon,left);check(actor.GetInventory()==coated,"replacement consumed second dose");
++    setup(left);auto eq=actor.GetEquipment();for(auto& e:eq.inv.entries)if(e.baseId==weapon&&e.GetWorn()==Inventory::Worn::None)e.SetWorn(left?Inventory::Worn::Right:Inventory::Worn::Left);
++    actor.SetEquipment(eq);before=actor.GetInventory();actor.RequestWeaponPoison(poison,weapon,left);
++    check(actor.GetPoisonResult()==static_cast<uint32_t>(Result::AmbiguousWeapon),"two hands accepted");check(actor.GetInventory()==before,"refusal consumed dose");
++    setup(left);auto absent=actor.GetInventory();absent.RemoveItems({{poison,20}});actor.SetInventory(absent);
++    actor.RequestWeaponPoison(poison,weapon,left);check(actor.GetPoisonResult()==static_cast<uint32_t>(Result::ItemAbsent),"absent poison accepted");check(actor.GetInventory()==absent,"absence changed inventory");
++    setup(left);host.worldState.aetheriusWeaponPoison=false;before=actor.GetInventory();actor.RequestWeaponPoison(poison,weapon,left);
++    check(actor.GetPoisonResult()==static_cast<uint32_t>(Result::Disabled)&&actor.GetInventory()==before,"disabled command mutated inventory");
++  }
++  std::cout<<"PASS D-P1-fix2 native intent: "<<checks<<" checks; two real enchanted copies, both hands, host 7 charges, one dose, refusals; no OnEquip input\n";
++}
+diff --git a/unit/WeaponPoisonNpcTest.h b/unit/WeaponPoisonNpcTest.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..22e0c8ca3f7d6442d71c4654ec4d38abfd5a94f8
+--- /dev/null
++++ b/unit/WeaponPoisonNpcTest.h
+@@ -0,0 +1,156 @@
++#pragma once
++#include "FormCallbacks.h"
++
++// FIX-1010 reproduction: actual winning NPC, PartOne transport, no sockets.
++inline void RunWeaponPoisonNpcTests(const std::filesystem::path& manifestPath) {
++  std::cout << std::unitbuf;
++  std::ifstream in(manifestPath); nlohmann::json manifest; in >> manifest;
++  std::vector<std::filesystem::path> paths;
++  for (const auto& p : manifest.at("plugins")) paths.push_back(manifestPath.parent_path()/p.at("filename").get<std::string>());
++  espm::Loader loader(paths); PartOne host; host.AttachEspm(&loader); host.SetDamageFormula(Legacy());
++  auto resolve=[&](const char* key){return FormDesc::FromString(key).ToFormId(host.worldState.pluginIndexMapping);};
++  auto cell=resolve("3c:Skyrim.esm"), base=resolve("422b4:Skyrim.esm"), dagger=resolve("1397e:Skyrim.esm");
++  auto record=loader.GetBrowser().LookupById(base); auto npc=espm::Convert<espm::NPC_>(record.rec);
++  if(!npc)throw std::runtime_error("FIX-1010 actual NPC absent");
++  auto data=npc->GetData(host.worldState.GetEspmCache());
++  std::cout << "NPC key=422b4:Skyrim.esm winner=" << paths.at(record.GetSourceId()).filename()
++    << " race=" << FormDesc::FromFormId(record.ToGlobalId(data.race),host.worldState.pluginIndexMapping).ToString() << '\n';
++  const auto playerId=host.CreateActor(0,{0,0,0},0,cell);
++  const auto npcId=host.worldState.GenerateFormId();
++  host.worldState.AddForm(std::make_unique<MpActor>(LocationalData{{0,0,0},{0,0,0},FormDesc::FromFormId(cell,host.worldState.pluginIndexMapping)},host.CreateFormCallbacks(),base),npcId);
++  auto& player=host.worldState.GetFormAt<MpActor>(playerId); auto& creature=host.worldState.GetFormAt<MpActor>(npcId);
++  const auto otherId=host.worldState.GenerateFormId();
++  host.worldState.AddForm(std::make_unique<MpActor>(LocationalData{{0,0,0},{0,0,0},FormDesc::FromFormId(cell,host.worldState.pluginIndexMapping)},host.CreateFormCallbacks(),base),otherId);
++  auto& other=host.worldState.GetFormAt<MpActor>(otherId);
++  std::cout << "NPC effective race=" << FormDesc::FromFormId(creature.GetRaceId(),host.worldState.pluginIndexMapping).ToString() << " (UseTraits template resolution)\n";
++  host.serverState.Connect(0,"FIX-1010"); host.SetUserActor(0,playerId); host.worldState.hosters[npcId]=playerId;
++  host.worldState.hosters[otherId]=playerId;
++  RawMessageData raw; raw.userId=0; int checks=0;
++  auto check=[&](bool ok,const char* why){++checks;if(!ok)throw std::runtime_error(why);};
++  const std::vector<uint32_t> sources={resolve("1f4:Skyrim.esm"),dagger,0,resolve("ffffff:Skyrim.esm"),0xfd123456,0xff123456};
++  std::map<std::tuple<int,int,uint32_t>,float> offHealth;
++  aetherius::combat::AetheriusDamageFormula candidate(loader.GetBrowser(),{
++    aetherius::combat::StableFormKey::Parse("Skyrim.esm:01397E")});
++  for(bool enabled:{false,true})for(int direction=0;direction<3;++direction)for(int state=0;state<3;++state)for(auto source:sources){
++    host.worldState.aetheriusWeaponPoison=false;
++    auto& aggressor=direction==2?player:creature;auto& target=direction==0?player:other;
++    if(aggressor.IsDead())aggressor.SetIsDead(false);
++    if(target.IsDead())target.SetIsDead(false);
++    target.SetInventory(Inventory{});target.SetEquipment(Equipment{});
++    Inventory inv; Equipment eq;
++    if(state!=2)inv.AddItem(dagger,1);
++    if(state==0) {auto e=Worn(dagger);eq.inv.entries.push_back(e);}
++    aggressor.SetInventory(inv);aggressor.SetEquipment(eq);target.RemoveAllMagicEffects();
++    auto values=target.GetChangeForm().actorValues;values.healthPercentage=1;target.SetPercentages(values);
++    for(auto id:{playerId,npcId,otherId})aggressor.SetLastHitTime(id,std::chrono::steady_clock::now()-std::chrono::seconds(10));
++    const auto before=aggressor.GetInventory();host.worldState.aetheriusWeaponPoison=enabled;
++    HitMessage msg;msg.data.aggressor=direction==2?0x14:npcId;msg.data.target=target.GetFormId();msg.data.source=source;
++    std::cout << "CASE poison=" << enabled << " direction=" << direction << " equipment=" << state << " source=" << std::hex << source << std::dec << " OnHit\n";
++    host.GetActionListener().OnHit(raw,msg);
++    check(aggressor.GetInventory()==before,"uncoated hit changed inventory");
++    const auto key=std::make_tuple(direction,state,source);
++    if(!enabled)offHealth[key]=target.GetChangeForm().actorValues.healthPercentage;
++    else {std::cout << "HEALTH off=" << offHealth.at(key) << " on=" << target.GetChangeForm().actorValues.healthPercentage << '\n';check(offHealth.at(key)==target.GetChangeForm().actorValues.healthPercentage,"NPC/uncoated physical outcome changed with poison enabled");}
++    std::cout << "CASE direct poison entry\n";
++    aggressor.ApplyWeaponPoisonHit(target,source,false,false,false);
++    check(aggressor.GetInventory()==before,"direct uncoated hit changed inventory");
++    const auto health=target.GetChangeForm().actorValues;
++    try {check(std::isfinite(candidate.CalculateDamage(aggressor,target,msg.data)),"NPC shadow candidate returned nonfinite value");}
++    catch(const aetherius::combat::ShadowUnsupported&) {check(true,"explicit unsupported shadow context");}
++    check(target.GetChangeForm().actorValues.ToTuple()==health.ToTuple() && aggressor.GetInventory()==before,"shadow candidate mutated NPC hit state");
++  }
++  host.worldState.aetheriusWeaponPoison=true;
++  const auto npcInv=creature.GetInventory(); const auto npcEq=creature.GetEquipment();
++  const auto status=creature.GetPoisonResult();
++  for(auto source:sources) {creature.ApplyWeaponPoisonHit(player,source,false,false,false);check(creature.GetPoisonResult()==status,"NPC entered poison logic");}
++  check(!creature.ReconcileWeaponPoisonEquipment(Equipment{}),"hosted NPC reconciled player poison equipment");
++  check(creature.GetInventory()==npcInv && creature.GetEquipment()==npcEq,"NPC guard mutated equipment/inventory");
++  creature.PublishWeaponPoisonEquipment(); check(creature.GetEquipment()==npcEq,"NPC published poison equipment");
++  host.serverState.Connect(1,"FIX-1010-NPC-associated");host.SetUserActor(1,npcId);
++  creature.ApplyWeaponPoisonHit(player,dagger,false,false,false);
++  check(creature.GetPoisonResult()==status && !creature.ReconcileWeaponPoisonEquipment(Equipment{}),"non-player base with associated user entered poison logic");
++  host.SetUserActor(1,0);host.worldState.hosters[npcId]=playerId;
++  MpActor detached(LocationalData{},FormCallbacks::DoNothing());
++  detached.ApplyWeaponPoisonHit(player,dagger,false,false,false);
++  check(!detached.TryUseWeaponPoison(resolve("3a5a4:Skyrim.esm")),"detached poison use accepted");
++  check(!detached.ReconcileWeaponPoisonEquipment(Equipment{}),"detached equipment accepted");
++  detached.PublishWeaponPoisonEquipment();detached.ScheduleWeaponPoisonTick(espm::ActorValue::Health,{},Networking::InvalidUserId);
++  HitData detachedHit{};detachedHit.source=dagger;
++  try {(void)candidate.CalculateDamage(detached,player,detachedHit);throw std::runtime_error("detached shadow context accepted");}
++  catch(const aetherius::combat::ShadowUnsupported&) {check(true,"detached shadow refused");}
++  auto poisonId=resolve("3a5a4:Skyrim.esm");auto poisonRecord=loader.GetBrowser().LookupById(poisonId);
++  auto effect=espm::Convert<espm::ALCH>(poisonRecord.rec)->GetData(host.worldState.GetEspmCache()).effects.front();
++  effect.effectId=poisonRecord.ToGlobalId(effect.effectId);effect.duration=3;effect.magnitude=1;effect.areaOfEffect=0;
++  espm::MGEF::DATA info{};info.effectType=espm::MGEF::EffectType::ValueMod;info.flags=espm::MGEF::Flags::Detrimental;info.primaryAV=espm::ActorValue::Health;
++  const auto prior=player.GetChangeForm().actorValues;
++  check(detached.ApplyWeaponPoisonEffect(effect,info,false,&player)!=0,"detached effect accepted");
++  check(player.ApplyWeaponPoisonEffect(effect,info,false,&creature)!=0,"NPC poison source accepted by effect entry");
++  check(player.GetChangeForm().actorValues.ToTuple()==prior.ToTuple(),"refused NPC source damaged player");
++  const auto validId=effect.effectId;
++  for(auto missing:{0u,0xfd123456u,0xff123456u}){effect.effectId=missing;check(player.ApplyWeaponPoisonEffect(effect,info,false,&player)!=0,"unresolved effect source accepted");}
++  effect.effectId=validId;
++  player.RemoveAllMagicEffects();
++  check(other.ApplyWeaponPoisonEffect(effect,info,false,&player)==0,"hosted NPC target not supported");
++  const auto afterFirst=other.GetChangeForm().actorValues;
++  host.SetUserActor(0,0);
++  check(!player.ReconcileWeaponPoisonEquipment(Equipment{}),"unbound player equipment entered poison");
++  player.ApplyWeaponPoisonHit(other,dagger,false,false,false);
++  check(other.GetChangeForm().actorValues.ToTuple()==afterFirst.ToTuple(),"unbound player applied poison");
++  std::this_thread::sleep_for(std::chrono::milliseconds(1050));host.Tick();
++  check(other.GetChangeForm().actorValues.ToTuple()==afterFirst.ToTuple(),"poison tick continued after source disconnect");
++  check(!other.GetActiveMagicEffects().Has(info.primaryAV),"disconnected poison source retained timed parcel");
++  host.SetUserActor(0,playerId);host.worldState.hosters[otherId]=playerId;
++  player.RemoveAllMagicEffects();
++  if(player.IsDead())player.SetIsDead(false);
++  check(player.ApplyWeaponPoisonEffect(effect,info,false,&player)==0,"connected temporal player parcel refused");
++  const auto targetHealth=player.GetChangeForm().actorValues;
++  host.SetUserActor(0,0);std::this_thread::sleep_for(std::chrono::milliseconds(1050));host.Tick();
++  check(player.GetChangeForm().actorValues.ToTuple()==targetHealth.ToTuple(),"disconnected target tick changed resources");
++  check(!player.GetActiveMagicEffects().Has(info.primaryAV),"disconnected target retained temporal parcel");
++  host.SetUserActor(0,playerId);
++  Inventory owned;owned.AddItem(dagger,1);
++  Equipment incoming;incoming.inv.entries.push_back(Worn(dagger));incoming.numChanges=1;
++  for(bool enabled:{false,true}) {
++    host.worldState.aetheriusWeaponPoison=false;
++    player.SetInventory(owned);player.SetEquipment(Equipment{});
++    creature.SetInventory(owned);host.worldState.hosters[npcId]=playerId;
++    host.worldState.aetheriusWeaponPoison=enabled;
++    auto npcEquipment=incoming;npcEquipment.inv.entries[0].poisonId=poisonId;npcEquipment.inv.entries[0].poisonCount=77;
++    const auto originalNpcInventory=creature.GetInventory();creature.SetEquipment(npcEquipment);
++    check(creature.GetEquipment()==npcEquipment && creature.GetInventory()==originalNpcInventory,"NPC equipment left maintainer path");
++    host.Tick();host.Messages().clear();
++    UpdateEquipmentMessage update;update.idx=creature.GetIdx();update.data=incoming;
++    SLNet::BitStream packet;PartOne::GetMessageSerializerInstance().Serialize(update,packet);
++    raw.unparsed=packet.GetData();raw.unparsedLength=packet.GetNumberOfBytesUsed();
++    host.GetActionListener().OnUpdateEquipment(raw,update);host.Tick();
++    bool forwarded=false;
++    for(const auto& message:host.Messages())if(message.userId==0 && message.j.value("t",0)==static_cast<int>(MsgType::UpdateEquipment)) {
++      check(message.j.at("idx")==creature.GetIdx(),"hosted NPC packet replaced with player equipment echo");
++      check(message.j.at("data")==incoming.ToJson(),"hosted NPC equipment packet content changed");forwarded=true;
++    }
++    check(forwarded,"hosted NPC original equipment packet not forwarded");
++    check(creature.GetEquipment()==npcEquipment,"OnUpdateEquipment changed NPC stored state outside maintainer semantics");
++    host.Messages().clear();player.PublishWeaponPoisonEquipment(false);host.Tick();
++    check(std::none_of(host.Messages().begin(),host.Messages().end(),[](const auto& message){return message.userId==0 && message.j.value("t",0)==static_cast<int>(MsgType::UpdateEquipment);}),"NPC listener routed observer update back to owner");
++  }
++  host.worldState.aetheriusWeaponPoison=true;
++  const auto currentInv=player.GetInventory();const auto currentEq=player.GetEquipment();
++  auto malformed=incoming;malformed.inv.entries[0].baseId=0xfd123456;
++  check(!player.ReconcileWeaponPoisonEquipment(malformed),"unresolved equipment record entered poison reconciliation");
++  check(player.GetInventory()==currentInv && player.GetEquipment()==currentEq,"unresolved equipment mutated poison state");
++  // Real destruction, not simulated callbacks: pending timers hold only weak
++  // source/target refs and use the same World's native effect scheduler.
++  const auto transientSourceId=host.CreateActor(0,{0,0,0},0,cell);
++  auto& transientSource=host.worldState.GetFormAt<MpActor>(transientSourceId);
++  host.SetUserActor(0,transientSourceId);host.worldState.hosters[otherId]=transientSourceId;
++  other.RemoveAllMagicEffects();if(other.IsDead())other.SetIsDead(false);
++  check(other.ApplyWeaponPoisonEffect(effect,info,false,&transientSource)==0,"destruction fixture failed to start poison");
++  const auto beforeDestroy=other.GetChangeForm().actorValues;host.DestroyActor(transientSourceId);
++  std::this_thread::sleep_for(std::chrono::milliseconds(1050));host.Tick();
++  check(other.GetChangeForm().actorValues.ToTuple()==beforeDestroy.ToTuple() && !other.GetActiveMagicEffects().Has(info.primaryAV),"destroyed poison source continued tick");
++  host.SetUserActor(0,playerId);host.worldState.hosters[otherId]=playerId;
++  check(other.ApplyWeaponPoisonEffect(effect,info,false,&player)==0,"destroyed target fixture failed to start poison");
++  host.DestroyActor(otherId);std::this_thread::sleep_for(std::chrono::milliseconds(1050));host.Tick();
++  check(true,"destroyed poison target tick survived");
++  std::cout << "PASS FIX-1010 NPC " << checks << " checks; no sockets\n";
++}
+diff --git a/unit/WeaponPoisonTest.h b/unit/WeaponPoisonTest.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..09d620bd30d0a6e8bbafd5b2d690a5ac947c0f74
+--- /dev/null
++++ b/unit/WeaponPoisonTest.h
+@@ -0,0 +1,355 @@
++#pragma once
++#include "aetherius_combat/WeaponPoison.h"
++#include "ActionListener.h"
++#include "FormDesc.h"
++#include "HitMessage.h"
++#include <iostream>
++#include <thread>
++#include "ActiveMagicEffectsMap.h"
++#include "UpdateEquipmentMessage.h"
++#include "MessageSerializerFactory.h"
++#include "libespm/RecordHeaderAccess.h"
++#include <cstring>
++#include <spdlog/sinks/ostream_sink.h>
++#include <sstream>
++
++// Standalone native tests run on PartOne/WorldState without any network listener.
++inline void RunWeaponPoisonTests(const std::filesystem::path& manifestPath,
++                                const std::filesystem::path& fixturePath) {
++  using namespace aetherius::poison;
++  int checks = 0;
++  auto check = [&](bool ok, const char* why) { ++checks; if (!ok) throw std::runtime_error(why); };
++  std::ifstream in(manifestPath); nlohmann::json manifest; in >> manifest;
++  std::vector<std::filesystem::path> paths;
++  for (const auto& plugin : manifest.at("plugins")) paths.push_back(manifestPath.parent_path() / plugin.at("filename").get<std::string>());
++  espm::Loader loader(paths); PartOne host; host.AttachEspm(&loader);
++  auto resolve = [&](const char* key) { return FormDesc::FromString(key).ToFormId(host.worldState.pluginIndexMapping); };
++  const auto cell = resolve("3c:Skyrim.esm"), dagger = resolve("1397e:Skyrim.esm"), bow = resolve("13985:Skyrim.esm");
++  const auto poison = resolve("3a5a4:Skyrim.esm");
++  // Native resolver itself must survive a changed plugin position.
++  PluginIndexMapping initialMap, shiftedMap;
++  initialMap.Build({"Skyrim.esm","Vokrii - Minimalistic Perks of Skyrim.esp"});
++  shiftedMap.Build({"Vokrii - Minimalistic Perks of Skyrim.esp","Skyrim.esm"});
++  const auto stablePoison=FormDesc::FromString("3a5a4:Skyrim.esm");
++  check(stablePoison.ToFormId(initialMap)!=stablePoison.ToFormId(shiftedMap),"native resolution fixed a runtime slot");
++  check(FormDesc::FromFormId(stablePoison.ToFormId(initialMap),initialMap)==stablePoison,"first native stable resolution mismatch");
++  check(FormDesc::FromFormId(stablePoison.ToFormId(shiftedMap),shiftedMap)==stablePoison,"shifted native stable resolution mismatch");
++  const auto alch = espm::GetData<espm::ALCH>(poison, &host.worldState);
++  check(alch.isPoison && !alch.effects.empty(), "official poison fixture missing");
++  std::cout << "FIXTURE poison=3a5a4:Skyrim.esm effects=" << alch.effects.size() << '\n';
++  for (const auto& raw : alch.effects) {
++    const auto record=loader.GetBrowser().LookupById(poison);
++    const auto effectId=record.ToGlobalId(raw.effectId);
++    const auto data=espm::GetData<espm::MGEF>(effectId,&host.worldState).data;
++    std::cout << "effect av=" << static_cast<int>(data.primaryAV) << " type=" << static_cast<int>(data.effectType)
++      << " magnitude=" << raw.magnitude << " duration=" << raw.duration << '\n';
++  }
++  const auto attackerId=host.CreateActor(0,{0,0,0},0,cell), targetId=host.CreateActor(0,{0,0,0},0,cell);
++  auto& attacker=host.worldState.GetFormAt<MpActor>(attackerId);
++  auto& target=host.worldState.GetFormAt<MpActor>(targetId);
++  host.serverState.Connect(0,"D-P1-unit"); host.SetUserActor(0,attackerId);
++  host.serverState.Connect(1,"D-P1-target"); host.SetUserActor(1,targetId);
++  auto entry = [&](uint32_t id, Inventory::Worn hand) { Inventory::Entry e(id,1); e.SetWorn(hand); return e; };
++  auto setup = [&](uint32_t weapon = 0, Inventory::Worn hand=Inventory::Worn::Right) {
++    Inventory inv; inv.AddItem(poison,2); Equipment eq;
++    if (weapon) { inv.AddItem(weapon,1); eq.inv.entries.push_back(entry(weapon,hand)); }
++    attacker.SetInventory(inv); attacker.SetEquipment(eq);
++  };
++  auto weaponEntry = [&]() -> const Inventory::Entry& {
++    for(const auto& e:attacker.GetInventory().entries) if(e.baseId==dagger && e.GetWorn()!=Inventory::Worn::None)return e;
++    throw std::runtime_error("worn owned dagger missing");
++  };
++  const auto normalValues=attacker.GetChangeForm().actorValues;
++  host.worldState.aetheriusWeaponPoison=true;
++  setup(); auto before=attacker.GetInventory().ToJson().dump();
++  check(attacker.OnEquip(poison),"poison refused before routed handler");
++  check(attacker.GetInventory().ToJson().dump()==before,"without weapon consumed dose");
++  check(attacker.GetPoisonResult()==static_cast<uint32_t>(Result::NoWeapon),"missing weapon reason");
++  for(uint32_t bonus:{0u,2u,4u,6u}) {
++    setup(dagger); attacker.SetPoisonDoseBonus(bonus); before=attacker.GetInventory().ToJson().dump();
++    check(attacker.OnEquip(poison),"poison use failed");
++    check(attacker.GetInventory().GetItemCount(poison)==1,"one dose not consumed exactly once");
++    check(weaponEntry().poisonId==poison && weaponEntry().poisonCount==1+bonus,"wrong poison/cargo");
++    check(weaponEntry().GetWorn()==Inventory::Worn::Right,"weapon unequipped in inventory");
++    check(attacker.GetEquipment().inv.entries[0].poisonCount==1+bonus,"equipment projection lacks doses");
++    check(attacker.GetChangeForm().actorValues.ToTuple()==normalValues.ToTuple(),"poison ingested or harmed user");
++    const auto coated=attacker.GetInventory().ToJson().dump();
++    (void)attacker.OnEquip(poison); check(attacker.GetInventory().ToJson().dump()==coated,"unverified replacement consumed second dose");
++    // A delayed/untrusted equipment input cannot strip poison or invent more charges.
++    auto stale=attacker.GetEquipment(); stale.inv.entries[0].poisonId=1; stale.inv.entries[0].poisonCount=500;
++    attacker.SetEquipment(stale); check(weaponEntry().poisonCount==1+bonus,"client became poison writer");
++    check(attacker.GetEquipment().inv.entries[0].poisonId==poison,"client poison record accepted");
++    for(uint32_t i=0;i<1+bonus;++i){target.RemoveAllMagicEffects();target.SetPercentages(normalValues);const auto health=target.GetChangeForm().actorValues.healthPercentage;
++      attacker.ApplyWeaponPoisonHit(target,dagger,false,false,false);
++      check(target.GetChangeForm().actorValues.healthPercentage<health,"target did not lose health from official poison");
++      check(attacker.GetPoisonResult()==static_cast<uint32_t>(Result::PartialEffects) &&
++        (attacker.GetPoisonUnsupported() & static_cast<uint32_t>(Family::Conditions)),"official VMAD script parcel not declared unsupported");
++      check(attacker.GetChangeForm().actorValues.ToTuple()==normalValues.ToTuple(),"attacker affected by poison hit");
++      check(weaponEntry().poisonCount.value_or(0)==bonus-i,"dose not decremented");
++    }
++    check(!weaponEntry().poisonId && !weaponEntry().poisonCount,"zero dose not cleared");
++  }
++  setup(dagger,Inventory::Worn::Left);attacker.SetPoisonDoseBonus(0);(void)attacker.OnEquip(poison);
++  check(weaponEntry().GetWorn()==Inventory::Worn::Left,"single left-hand weapon not preserved");
++  const auto coated=attacker.GetInventory().ToJson().dump();
++  for(int flags=0;flags<3;++flags){target.SetPercentages(normalValues);attacker.ApplyWeaponPoisonHit(target,dagger,flags==0,flags==1,flags==2);
++    check(attacker.GetInventory().ToJson().dump()==coated,"blocked/bash/fatal consumed poison");
++    check(target.GetChangeForm().actorValues.ToTuple()==normalValues.ToTuple(),"blocked/bash/fatal applied poison");}
++  attacker.ApplyWeaponPoisonHit(target,bow,false,false,false);check(attacker.GetInventory().ToJson().dump()==coated,"other source consumed dose");
++  auto dual=attacker.GetEquipment();dual.inv.entries.push_back(entry(dagger,Inventory::Worn::Right));attacker.SetEquipment(dual);
++  target.SetPercentages(normalValues);attacker.ApplyWeaponPoisonHit(target,dagger,false,false,false);
++  check(attacker.GetPoisonResult()==static_cast<uint32_t>(Result::AmbiguousWeapon),"same record dual hit not refused");
++  check(target.GetChangeForm().actorValues.ToTuple()==normalValues.ToTuple(),"ambiguous hand damaged target");
++  setup(dagger);dual=attacker.GetEquipment();dual.inv.entries.push_back(entry(dagger,Inventory::Worn::Left));attacker.SetEquipment(dual);
++  before=attacker.GetInventory().ToJson().dump();(void)attacker.OnEquip(poison);
++  check(before==attacker.GetInventory().ToJson().dump(),"ambiguous poison use consumed dose");
++  setup(bow);(void)attacker.OnEquip(poison);before=attacker.GetInventory().ToJson().dump();attacker.ApplyWeaponPoisonHit(target,bow,false,false,false);
++  check(before==attacker.GetInventory().ToJson().dump(),"ranged unverified rule consumed poison");
++  check(attacker.GetPoisonResult()==static_cast<uint32_t>(Result::RangedUnsupported),"ranged reason missing");
++  // Pure transition: stacked weapons poison exactly one physical item.
++  Inventory stacked;stacked.AddItem(dagger,3);stacked.AddItem(poison,1);Equipment eq;eq.inv.entries.push_back(entry(dagger,Inventory::Worn::Right));
++  check(Coat(stacked,eq,poison,6,{0})==Result::Applied,"stack coat refused");
++  check(stacked.GetItemCount(dagger)==3 && stacked.entries.size()==2,"stack conservation failed");
++  check(stacked.entries[0].count==1 && stacked.entries[1].count==2 && !stacked.entries[1].poisonId,"whole stack poisoned");
++  check(FindOwned(stacked,eq.inv.entries[0]).has_value(),"poisoned stack instance became ambiguous");
++  // Dedicated host effect operation: all three resources decrease, never restore.
++  espm::Effects::Effect effect;effect.magnitude=5;
++  effect.effectId=loader.GetBrowser().LookupById(poison).ToGlobalId(alch.effects.front().effectId);
++  espm::MGEF::DATA info{};info.effectType=espm::MGEF::EffectType::ValueMod;info.flags=espm::MGEF::Flags::Detrimental;
++  for(auto av:{espm::ActorValue::Health,espm::ActorValue::Magicka,espm::ActorValue::Stamina}){
++    target.SetPercentages(normalValues);info.primaryAV=av;check(target.ApplyWeaponPoisonEffect(effect,info,false)==0,"direct family refused");
++    const auto values=target.GetChangeForm().actorValues;
++    check(av==espm::ActorValue::Health?values.healthPercentage<1:av==espm::ActorValue::Magicka?values.magickaPercentage<1:values.staminaPercentage<1,"resource restored instead of damaged");
++  }
++  info.primaryAV=espm::ActorValue::Health;
++  target.RemoveAllMagicEffects();target.SetPercentages(normalValues);
++  auto timed=effect;timed.duration=2;
++  check(target.ApplyWeaponPoisonEffect(timed,info,false)==0,"timed damage refused");
++  const auto first=target.GetChangeForm().actorValues.healthPercentage;
++  check(target.GetActiveMagicEffects().ToJson().empty(),"transient poison persisted runtime identity");
++  target.ReapplyMagicEffects();check(target.GetChangeForm().actorValues.healthPercentage==first,"transient poison reapplied as restoration");
++  check(target.ApplyWeaponPoisonEffect(timed,info,false)==static_cast<uint32_t>(Family::Overlap),"overlap not declared");
++  std::this_thread::sleep_for(std::chrono::milliseconds(1050));host.Tick();
++  check(target.GetChangeForm().actorValues.healthPercentage<first,"timed tick did not damage target");
++  check(!target.GetActiveMagicEffects().Has(info.primaryAV),"timed poison did not expire");
++
++  for(int family=0;family<6;++family){auto unsupported=effect;auto data=info;bool condition=false;
++    if(family==0)unsupported.duration=86401;if(family==1)data.effectType=espm::MGEF::EffectType::Paralysis;
++    if(family==2)data.primaryAV=espm::ActorValue::None;if(family==3)unsupported.magnitude=-5;
++    if(family==4)unsupported.areaOfEffect=1;if(family==5)condition=true;
++    target.SetPercentages(normalValues);check(target.ApplyWeaponPoisonEffect(unsupported,data,condition)!=0,"unsupported family silently accepted");
++    check(target.GetChangeForm().actorValues.ToTuple()==normalValues.ToTuple(),"unsupported effect changed resources");}
++  target.RemoveAllMagicEffects();auto low=normalValues;low.healthPercentage=0.001f;target.SetPercentages(low);
++  check(target.ApplyWeaponPoisonEffect(effect,info,false)==static_cast<uint32_t>(Family::Lethal),"uncertified poison kill not refused");
++  check(target.GetChangeForm().actorValues.healthPercentage==low.healthPercentage,"refused lethal parcel changed health");
++  // Native accepted-hit path, with the same existing formula on both sides.
++  host.SetDamageFormula(Legacy());host.SetUserActor(0,attackerId);host.worldState.aetheriusWeaponPoison=true;
++  setup(dagger);HitMessage msg;msg.data.aggressor=0x14;msg.data.target=targetId;msg.data.source=dagger;
++  const float uncoatedDamage=host.CalculateDamage(attacker,target,msg.data);
++  (void)attacker.OnEquip(poison);check(host.CalculateDamage(attacker,target,msg.data)==uncoatedDamage,"poison changed physical damage formula");
++  target.RemoveAllMagicEffects();target.SetPercentages(normalValues);attacker.SetLastHitTime(targetId,std::chrono::steady_clock::now()-std::chrono::seconds(10));
++  RawMessageData raw;raw.userId=0;host.GetActionListener().OnHit(raw,msg);
++  check(!weaponEntry().poisonId,"accepted OnHit did not spend final dose");
++  check(target.GetChangeForm().actorValues.healthPercentage<1-uncoatedDamage/target.GetMaximumValues().health,"OnHit did not apply separate poison damage");
++  // Opt out restores the exact legacy inventory transition (remove ALCH only).
++  host.worldState.aetheriusWeaponPoison=false;setup(dagger);auto expected=attacker.GetInventory();expected.RemoveItems({{poison,1}});
++  (void)attacker.OnEquip(poison);check(attacker.GetInventory().ToJson().dump()==expected.ToJson().dump(),"disabled inventory differs byte-for-byte from legacy");
++  check(!attacker.GetInventory().entries[0].poisonId,"disabled path poisoned weapon");
++  // D-P1-fix1: data copied from the owner's session, not a synthetic base-game
++  // weapon. Fixture stores StableFormKeys; remap every entry for this load order.
++  std::ifstream fixtureIn(fixturePath); nlohmann::json fixture; fixtureIn >> fixture;
++  std::cout << "REGRESSION source=" << fixture.at("source") << " sha256=" << fixture.at("sourceSha256") << '\n';
++  auto remap = [&](nlohmann::json inventory) {
++    for (auto& e : inventory.at("entries")) {
++      e["baseId"] = resolve(e.at("baseKey").get<std::string>().c_str());
++      e.erase("baseKey");
++    }
++    return inventory;
++  };
++  const auto realWeapon = resolve(fixture.at("weaponKey").get<std::string>().c_str());
++  const auto corrosion = resolve(fixture.at("poisonKey").get<std::string>().c_str());
++  const auto realInv = Inventory::FromJson(remap(fixture.at("inventory")));
++  auto eqJson = fixture.at("equipment"); eqJson["inv"] = remap(eqJson["inv"]);
++  const auto realEq = Equipment::FromJson(eqJson);
++  const auto weaponData = espm::GetData<espm::WEAP>(realWeapon, &host.worldState);
++  check(weaponData.weapDNAM && CanCoat(weaponData.weapDNAM->animType), "session weapon not coatable WEAP winner");
++  check(weaponData.weapDNAM->animType==espm::WEAP::AnimType::OneHandDagger,"session weapon no longer dagger");
++  const auto weaponRecord=loader.GetBrowser().LookupById(realWeapon);
++  uint32_t enchantment=0;
++  espm::RecordHeaderAccess::IterateFields(weaponRecord.rec,[&](const char* type,uint32_t size,const char* data){
++    if(!std::memcmp(type,"EITM",4) && size==sizeof(enchantment))std::memcpy(&enchantment,data,size);
++  },host.worldState.GetEspmCache());
++  check(enchantment!=0,"plugin dagger lost built-in enchantment fixture");
++  std::cout << "WEAPON key=" << fixture.at("weaponKey") << " winner=" << paths.at(weaponRecord.GetSourceId()).filename()
++    << " enchantment=" << FormDesc::FromFormId(weaponRecord.ToGlobalId(enchantment),host.worldState.pluginIndexMapping).ToString() << '\n';
++  check(FormDesc::FromFormId(realWeapon, host.worldState.pluginIndexMapping).file != "Skyrim.esm", "regression lost plugin weapon");
++  check(realInv.GetItemCount(realWeapon)==2 && realInv.GetItemCount(corrosion)==20, "fixture no longer represents session stacks");
++  PluginIndexMapping movedWeapon; movedWeapon.Build({"Grimoire.esp","Skyrim.esm"});
++  const auto weaponKey=FormDesc::FromString(fixture.at("weaponKey").get<std::string>());
++  check(weaponKey.ToFormId(movedWeapon)!=realWeapon &&
++    FormDesc::FromFormId(weaponKey.ToFormId(movedWeapon),movedWeapon)==weaponKey, "plugin weapon pinned to original slot");
++  auto makeActor = [&](const Inventory& inv, const Equipment& equipment, uint32_t bonus=6) -> MpActor& {
++    const auto id=host.CreateActor(0,{0,0,0},0,cell);
++    auto& actor=host.worldState.GetFormAt<MpActor>(id);
++    host.worldState.aetheriusWeaponPoison=false;
++    actor.SetInventory(inv); actor.SetEquipment(equipment); actor.SetPoisonDoseBonus(bonus);
++    host.SetUserActor(0,id); host.worldState.aetheriusWeaponPoison=true;
++    host.Tick(); host.Messages().clear();
++    return actor;
++  };
++  auto counts = [&]() {
++    host.Tick(); std::pair<int,int> result{};
++    for(const auto& m:host.Messages()) if(m.userId==0) {
++      if(m.j.value("t",0)==static_cast<int>(MsgType::UpdateEquipment)) ++result.first;
++      if(m.j.value("t",0)==static_cast<int>(MsgType::SetInventory)) ++result.second;
++    }
++    host.Messages().clear(); return result;
++  };
++  auto update = [&](MpActor& actor, Equipment equipment) {
++    UpdateEquipmentMessage updateMsg; updateMsg.idx=actor.GetIdx(); updateMsg.data=equipment;
++    SLNet::BitStream packet;PartOne::GetMessageSerializerInstance().Serialize(updateMsg,packet);
++    auto updateRaw=raw;updateRaw.unparsed=packet.GetData();updateRaw.unparsedLength=packet.GetNumberOfBytesUsed();
++    host.GetActionListener().OnUpdateEquipment(updateRaw,updateMsg);
++  };
++  auto repeat = [&](MpActor& actor, Equipment equipment, const char* label,
++                    std::pair<int,int> expected = {0,0}) {
++    for(int i=0;i<100;++i) {
++      update(actor,equipment);
++      check(counts()==expected,"repeated equipment publication count differs");
++    }
++    // The client's equip/unequip feedback increments numChanges too.
++    for(int i=0;i<100;++i) {
++      ++equipment.numChanges; update(actor,equipment);
++      check(counts()==expected,"numChanges-only publication count differs");
++    }
++    std::cout << "CONVERGENCE " << label << " identical=100 increasing-numChanges=100 equipment="
++      << 200*expected.first << " inventory=" << 200*expected.second << '\n';
++  };
++  std::ostringstream useLogs;
++  const auto oldLogger=spdlog::default_logger();
++  auto sink=std::make_shared<spdlog::sinks::ostream_sink_mt>(useLogs);
++  auto testLogger=std::make_shared<spdlog::logger>("poison-use-test",sink);
++  spdlog::set_default_logger(testLogger);
++  struct RestoreLogger { std::shared_ptr<spdlog::logger> logger; ~RestoreLogger(){spdlog::set_default_logger(logger);} } restore{oldLogger};
++  auto& realActor=makeActor(realInv,realEq);
++  update(realActor,realEq); check(counts()==std::pair<int,int>{0,0},"clean initial equipment published to owner");
++  check(realActor.OnEquip(corrosion),"real corrosion use unhandled");
++  check(counts()==std::pair<int,int>{1,1},"accepted coating must publish once per channel");
++  const auto findWorn = [&](const MpActor& actor) -> const Inventory::Entry& {
++    for(const auto& e:actor.GetInventory().entries) if(e.baseId==realWeapon && e.GetWorn()!=Inventory::Worn::None)return e;
++    throw std::runtime_error("session worn weapon missing");
++  };
++  check(realActor.GetInventory().GetItemCount(corrosion)==19,"real dose not consumed exactly once");
++  check(realActor.GetInventory().GetItemCount(realWeapon)==2,"real weapon stack count changed");
++  check(findWorn(realActor).count==1 && findWorn(realActor).poisonCount==7,"real coated unit not split with seven doses");
++  check(!findWorn(realActor).name && !findWorn(realActor).chargePercent,"client-only presentation imported into host instance");
++  const auto spare=std::find_if(realActor.GetInventory().entries.begin(),realActor.GetInventory().entries.end(),[&](const auto& e){return e.baseId==realWeapon && e.GetWorn()==Inventory::Worn::None;});
++  check(spare!=realActor.GetInventory().entries.end() && spare->count==1 && !spare->poisonId,"spare copy coated or lost");
++  const auto authoritativeEq=realActor.GetEquipment();
++  repeat(realActor,authoritativeEq,"accepted");
++  check(findWorn(realActor).poisonCount==7,"spare equipment entry cleared equipped instance");
++  auto forged=realEq;
++  for(auto& e:forged.inv.entries) if(e.baseId==realWeapon && e.GetWorn()!=Inventory::Worn::None){e.poisonId=poison;e.poisonCount=999;}
++  repeat(realActor,forged,"accepted-stale-or-forged");
++  check(findWorn(realActor).poisonId==corrosion && findWorn(realActor).poisonCount==7,"client poison selected another owned instance");
++  const auto corrosionRecord=loader.GetBrowser().LookupById(corrosion);
++  const auto corrosionData=espm::GetData<espm::ALCH>(corrosion,&host.worldState);
++  check(corrosionData.isPoison && corrosionData.effects.size()==1,"corrosion winner changed");
++  target.RemoveAllMagicEffects(); target.SetPercentages(normalValues);
++  realActor.ApplyWeaponPoisonHit(target,realWeapon,false,false,false);
++  check(realActor.GetPoisonResult()==static_cast<uint32_t>(Result::EffectsUnsupported) &&
++    (realActor.GetPoisonUnsupported() & static_cast<uint32_t>(Family::Conditions)),"corrosion condition not declared UNSUPPORTED");
++  check(target.GetChangeForm().actorValues.ToTuple()==normalValues.ToTuple() && findWorn(realActor).poisonCount==7,"unsupported corrosion applied or spent");
++  check(counts()==std::pair<int,int>{0,0},"unsupported hit published unchanged poison state");
++  const auto effectId=corrosionRecord.ToGlobalId(corrosionData.effects.front().effectId);
++  const auto mgefRecord=loader.GetBrowser().LookupById(effectId);
++  const auto corrosionEffect=espm::GetData<espm::MGEF>(effectId,&host.worldState).data;
++  std::cout << "WINNER poison=" << fixture.at("poisonKey") << " plugin=" << paths.at(corrosionRecord.GetSourceId()).filename()
++    << " effect=" << FormDesc::FromFormId(effectId,host.worldState.pluginIndexMapping).ToString()
++    << " plugin=" << paths.at(mgefRecord.GetSourceId()).filename()
++    << " archetype=" << static_cast<int>(corrosionEffect.effectType) << " av=" << static_cast<int>(corrosionEffect.primaryAV)
++    << " magnitude=" << corrosionData.effects.front().magnitude << " duration=" << corrosionData.effects.front().duration << " UNSUPPORTED=Conditions\n";
++  // Each real refusal gets one clean correction in a fresh authoritative state.
++  for(int reason=0;reason<4;++reason) {
++    auto inv=realInv; auto equipment=realEq;
++    if(reason==0) for(auto& e:equipment.inv.entries)e.SetWorn(Inventory::Worn::None);
++    if(reason==1) {auto extra=entry(realWeapon,Inventory::Worn::Left);extra.name="Blessed Northern Iron Dagger";equipment.inv.entries.push_back(extra);}
++    if(reason==2) {
++      inv.entries.erase(std::remove_if(inv.entries.begin(),inv.entries.end(),[&](const auto& e){return e.baseId==corrosion;}),inv.entries.end());
++      equipment.inv.entries.erase(std::remove_if(equipment.inv.entries.begin(),equipment.inv.entries.end(),[&](const auto& e){return e.baseId==corrosion;}),equipment.inv.entries.end());
++    }
++    if(reason==3) for(auto& e:inv.entries) if(e.baseId==realWeapon){e.health=1.5f;e.count=1;}
++    auto& refused=makeActor(inv,equipment); const auto prior=refused.GetInventory();
++    check(refused.OnEquip(corrosion),"refusal must be handled without eating");
++    check(refused.GetInventory()==prior,"refusal consumed item or altered inventory");
++    check(refused.GetPoisonResult()==static_cast<uint32_t>(reason==0?Result::NoWeapon:reason==2?Result::ItemAbsent:Result::AmbiguousWeapon),"wrong refusal reason");
++    check(counts()==std::pair<int,int>{1,1},"refusal must correct once");
++    auto local=equipment; for(auto& e:local.inv.entries)if(e.baseId==realWeapon){e.poisonId=corrosion;e.poisonCount=1;}
++    repeat(refused,local,"refused");
++    refused.ApplyWeaponPoisonHit(target,realWeapon,false,false,false);
++    check(target.GetChangeForm().actorValues.ToTuple()==normalValues.ToTuple(),"refused local poison applied on host");
++    check(counts()==std::pair<int,int>{0,0},"refused local hit published poison");
++    (void)refused.OnEquip(corrosion); check(counts()==std::pair<int,int>{0,0},"repeated refusal republished unchanged state");
++  }
++  // Stored host extras must disambiguate; client-only fields cannot create an
++  // instance. Current charge is ignored even when previously saved by host.
++  auto owned=entry(realWeapon,Inventory::Worn::Right), reported=owned;
++  reported.name="client presentation"; reported.chargePercent=0.f; reported.health=1.5f;
++  reported.enchantmentId=poison; reported.maxCharge=100.f; reported.removeEnchantmentOnUnequip=true; reported.soul=3;
++  check(SameInstance(owned,reported),"client-only extras caused false mismatch");
++  for(int extra=0;extra<6;++extra) {
++    auto e=owned;
++    if(extra==0)e.health=2.f;if(extra==1)e.enchantmentId=corrosion;if(extra==2)e.maxCharge=200.f;
++    if(extra==3)e.removeEnchantmentOnUnequip=false;if(extra==4)e.name="host rename";if(extra==5)e.soul=5;
++    check(!SameInstance(e,reported),"host instance discriminator ignored");
++  }
++  owned.chargePercent=99.f;check(SameInstance(owned,reported),"mutable charge treated as physical identity");
++  Inventory distinct;auto tempered=owned;tempered.health=2.f;distinct.entries={owned,tempered};
++  check(FindOwned(distinct,reported)==0,"stored health did not disambiguate host instances");
++  distinct.entries={owned,owned};check(!FindOwned(distinct,reported),"true owned ambiguity guessed an instance");
++  // Direct poison still spends/publishes once; stale client packets cannot
++  // resurrect the final charge. Use the same two-copy plugin weapon fixture.
++  auto supportedInv=realInv;supportedInv.AddItem(poison,2);
++  auto& spender=makeActor(supportedInv,realEq,2);(void)spender.OnEquip(poison);
++  check(counts()==std::pair<int,int>{1,1},"direct coating publication count");
++  const auto staleCharges=spender.GetEquipment();
++  for(int charge=2;charge>=0;--charge) {
++    target.RemoveAllMagicEffects();target.SetPercentages(normalValues);
++    spender.ApplyWeaponPoisonHit(target,realWeapon,false,false,false);
++    check(counts()==std::pair<int,int>{1,1},"charge change must publish once");
++    check(findWorn(spender).poisonCount.value_or(0)==static_cast<uint32_t>(charge),"charge count after publication incorrect");
++    repeat(spender,staleCharges,charge?"spent":"exhausted");
++    check(findWorn(spender).poisonCount.value_or(0)==static_cast<uint32_t>(charge),"feedback resurrected spent charge");
++  }
++  check(!findWorn(spender).poisonId,"final poison record not cleared");
++  // An unsolicited client-only poison mismatch before any use gets at most
++  // one correction. A clean response does not rearm the correction budget.
++  auto& unsolicited=makeActor(realInv,realEq);
++  auto localPoison=realEq;
++  for(auto& e:localPoison.inv.entries)if(e.baseId==realWeapon && e.GetWorn()!=Inventory::Worn::None){e.poisonId=corrosion;e.poisonCount=1;}
++  update(unsolicited,localPoison);check(counts()==std::pair<int,int>{1,1},"first poison mismatch not corrected once");
++  repeat(unsolicited,localPoison,"unsolicited-mismatch");
++  update(unsolicited,realEq);check(counts()==std::pair<int,int>{0,0},"clean equipment rearmed publication");
++  update(unsolicited,localPoison);check(counts()==std::pair<int,int>{0,0},"oscillating client poison restarted loop");
++  check(!findWorn(unsolicited).poisonId,"unsolicited poison written to owned inventory");
++  const auto logText=useLogs.str();
++  check(logText.find("weapon=14c4:Grimoire.esp poison=ffa02:Skyrim.esm reason=Applied")!=std::string::npos,"accepted stable records absent from log");
++  for(const char* reason:{"NoWeapon","AmbiguousWeapon","ItemAbsent"})
++    check(logText.find(std::string("reason=")+reason)!=std::string::npos,"refusal not logged at info");
++  check(logText.find("actor=")!=std::string::npos,"actor absent from use log");
++  // Option disabled: maintainer OnUpdateEquipment stores input verbatim, and
++  // legacy poison consumption publishes inventory only, never equipment.
++  auto& disabled=makeActor(realInv,realEq);host.worldState.aetheriusWeaponPoison=false;
++  update(disabled,forged);check(disabled.GetEquipment()==forged,"disabled equipment differs from maintainer");
++  // Maintainer SendToNeighbours includes self in this host's listener set:
++  // one original forwarded packet, no additional D-P1 deferred publication.
++  check(counts()==std::pair<int,int>{1,0},"disabled update added maintainer publications");
++  // makeActor's inventory lacked this legacy poison: add through ordinary host API.
++  disabled.SetInventory(supportedInv); counts(); auto legacy=supportedInv;legacy.RemoveItems({{poison,1}});
++  (void)disabled.OnEquip(poison);
++  check(disabled.GetInventory()==legacy,"disabled use changed maintainer inventory transition");
++  check(counts()==std::pair<int,int>{0,1},"disabled use added equipment publication");
++  repeat(disabled,forged,"disabled-maintainer-forwarding",{1,0});
++  std::cout << "USE LOGS\n" << logText;
++  std::cout << "PASS D-P1 " << checks << " checks; native PartOne, no sockets, official winner poison fixture\n";
++}

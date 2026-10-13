@@ -6,6 +6,8 @@ Cada sistema do Core (pedras guardiãs, raças, e os que vierem) precisa de duas
 
 Este documento não cobre a instalação do pacote (compilar o Core, compilar o servidor, registrar o Core no gamemode). Isso é assunto do guia de instalação, ainda a escrever (`integrations/host/INSTALL.md`). Aqui presume-se o Core já instalado e carregando.
 
+**Nota de supersessão (DOC-1, 12/10/2026):** o guia de instalação existe e fica em `integrations/INSTALL.md` (não em `integrations/host/`); o pacote do host fica em `integrations/host/` e o do cliente em `integrations/client/`.
+
 ## 1. O que o Core faz e não faz no banco
 
 - Usa o PostgreSQL que o gamemode já usa, pelo mesmo pool (`server/gamemode/core/pg.js`). A conexão vem de `GAME_DATABASE_URL` ou, se ausente, de `DATABASE_URL`. O Core não cria conexão própria.
@@ -17,6 +19,8 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 **C3d-fix1:** migration `0009_gc_attribute_allocation.sql`, com distribuição por CharacterKey e revisão, sem saldo armazenado. Usa PRIMARY KEY e NOT NULL, sem CHECK conforme a política fixa. Não negativos/múltiplos de 5 são garantidos pelo único comando writer; leitura inválida declara `ATTRIBUTE_ALLOCATION_INVALID`, conserva a linha e suprime bônus. A 0008 da B5b permanece intacta. A 0009 foi aplicada pelo runner somente em schemas descartáveis de aetherius_test. O bloqueio do relatório parcial C3d está supersedido por esta retomada.
 
 **Regra atual C3d:** 15 pontos por nível após o primeiro, blocos de 5 e ganho 1:1 de máximo; troca efetiva zera XP, nível e distribuição preservando fadiga/ciclo/limite diário. Trechos históricos C3a/C3c abaixo sobre preservar XP estão supersedidos pelo [contrato de atributos](../classes/ATRIBUTOS_C3d.md). Compilação/aceite nativo pendentes do revisor; validação com tela será no oficial.
+
+**Nota de supersessão (DOC-1, 12/10/2026):** a compilação Release do host e os testes nativos, dados acima como pendentes do revisor, foram feitos em 12/10/2026 (parecer `_work/reviews/C3d-review-1.md`; `_work/evidence/C3d-fix1/native-build-opus.txt` e `native-unit-opus.txt`). A validação com tela continua sendo no oficial.
 
 
 **C3c:** nenhuma migration, tabela, pool ou ledger novo. A varredura usa as tabelas anteriores e um nível transitório por personagem em memória; não cria nem altera `gc_leveling_progress`. O ponto `awardLevelingXp` usa o adaptador durável Leveling e seu `eventId` no ledger `gc_commands`; só o adaptador escreve XP, nível e fadiga.
@@ -190,6 +194,8 @@ Staff: `node runtime/allocate-attributes.mjs <pg.js> <profile:id> <vida delta> <
 
 Harness exclusivo do revisor, não executado nesta entrega: `node runtime/harness/attribute-allocation.mjs --port <porta-isolada> --work-dir <pasta-vazia> --addon <scam_native.node> --data-dir <pasta-plugins>`, com AETHERIUS_TEST_DATABASE_URL. Recusa 7777 e banco diferente de aetherius_test. Usa addon/bot reais, autoridade de identidade TS real com autenticação de fixture e Leveling durável; confere alocação, máximo nativo, reconexão e reset. Não certifica login de produção nem barras do Skyrim. A validação com tela será no oficial pelo desenvolvedor; não usar o ambiente local para homologar esta entrega.
 
+**Nota de supersessão (DOC-1, 12/10/2026):** o harness acima foi executado pelo revisor em 12/10/2026 com o servidor compilado, com resultado PASS (`_work/evidence/C3d-fix3/opus-harness-attributes.txt`). Continua valendo que ele não certifica login de produção nem as barras do jogo.
+
 
 ### Confirmação de remoção de perks (B5b-fix1)
 
@@ -296,6 +302,7 @@ Para o revisor/dono testar: configurar somente no ambiente local `GAMEPLAY_CORE_
   persistência real após loadGame; resultado nativo e dano mantêm seus donos.
 - No oficial com sessão autenticada, `offlineMode=true` permite pedras, raças e classes normalmente. Se `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` ficar por engano em produção, só classes ficam indisponíveis, com erro explícito; pedras e raças continuam para o jogador autenticado.
 - Rank representa posição na cadeia `NextPerk`, não o `NumRanks` de cada record. A concessão automática segue os marcos de classes; condições nativas de aquisição são evidência e não são avaliadas pelo sistema. Não há complemento automático de ranks/pré-requisitos. Os seis rótulos não resolvidos permanecem no catálogo como `UNSUPPORTED`.
+- **Nota de supersessão (DOC-1, 12/10/2026):** a frase acima sobre "seis rótulos não resolvidos" não descreve o catálogo atual: em `catalog/classes.json` a lista `unsupported` está vazia e as 350 entradas de perk das 18 classes estão `SUPPORTED`.
 - Fora de C3a: interface, custo/restrições de troca (incluindo Winterhold), skills, pontos/alocação de atributos, feitiços de classe e entrega B5b. O módulo legado permanece intocado e não é ligado pelo runtime novo.
 
 ### Veneno em arma (D-P1)
@@ -439,6 +446,7 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
   Roteiro em jogo e limitações no relatório B5b.
 
 - **No boot**, o log deve ter `[gameplay-core] bundle <versão>; initialized; active instances=1`. Sistemas que não podem subir aparecem com o motivo, por exemplo `[gameplay-core] classes: UNSUPPORTED; Catalog domain classes not delivered` (esperado para os sistemas ainda não entregues). Migration faltando aparece com o comando a rodar.
+- **Nota de supersessão (DOC-1, 12/10/2026):** o exemplo acima é anterior à entrega das classes. Com o bundle atual as classes carregam; os `UNSUPPORTED` esperados no boot são `leveling`, `religion`, `spells`, `perks` e `damage`, e aparece também `[gameplay-core] attribute maximum writer=CLASS_ADDITIVE; records provide base maxima` (log de 12/10/2026 em `_work/evidence/H/`).
 - **Raças:** a cada personagem observado, `[races] active: profile:<id> SUPPORTED <raça>`.
 - **No banco:** `SELECT version, applied_at FROM gc_schema_migrations ORDER BY version;` e, por personagem, `gc_standing_stone_choice`, `gc_race_observation`, `gc_commands`.
 - **Por personagem, com o servidor ligado ou parado:**
@@ -456,6 +464,7 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
   por desligar. Revogar classes com o protocolo ativo antes de desativá-lo se
   for necessária remoção por origem; não apagar a autoria no banco. Remoções
   dependem de confirmação e permanecem pendentes quando o cliente falha.
+- **Nota de supersessão (DOC-1, 12/10/2026):** a orientação acima de "revogar classes" para remover perks por origem **não é executável**: o domínio só tem `classes.set` para uma classe do catálogo e não há comando que remova a escolha (como a seção 5, "Varredura de classes", já diz). Esta entrega não tem procedimento de retirada dos perks de classe por revogação. Desligar conserva os perks no save e a autoria no banco. Não apagar tabela nem remover perks em massa; se a retirada total for exigida, é bloqueio que pede ordem própria.
 
 - **Desligar um sistema:** pôr o modo dele em `off` e reiniciar o servidor (ou recarregar o gamemode). A pedra guardiã volta ao comportamento nativo do jogo; as raças deixam de ser observadas.
 - **As tabelas ficam.** Desligar não apaga nada: a escolha de pedra e o registro do que o Core aplicou continuam no banco, e o sistema retoma de onde parou ao ser religado. Não há migration de remoção, de propósito.
@@ -464,6 +473,8 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+**Revalidação da entrega e retirada da varredura (12/10/2026, 23:02; acrescentado pela DOC-1 a partir do registro `_work/evidence/H/sessao-revalidacao-entrega-2026-10-12-2302.md`):** sessão em jogo do dono do projeto com o Core `c50c735`, o addon do servidor recompilado com o C++ da C3d, a migration 0009 aplicada no `aetherius_dev` e o cliente B5b-fix1 (`D538B93B2FA6`). Varredura por classe e por marco: 162 de 162 `result=OK`, sem `FAIL`, `ABORTED` nem `ACK_TIMEOUT`; linha final `done: ok=162 fail=0; classes=18; milestones=162; restored=viper; delivery=CONFIRMED`. Isso revalida em jogo a entrega de perks com a fila única da C3d-fix3. **Não valida os pontos de atributo:** o personagem não tinha pontos distribuídos; o boot mostrou `attribute maximum writer=CLASS_ADDITIVE`. Depois da sessão, `GAMEPLAY_CORE_DEV_CLASS_SWEEP` foi **retirada** do `.env` do servidor local (cópia anterior em `_work\backups\gamemode.env.before-sweep-off-20261012`); para religar no ambiente de desenvolvimento, repor a linha. **Nunca no servidor oficial.**
 
 **C3d-fix1 (12/10/2026, Sol 6.1):** retomada com a 0009 sem CHECK; testes exclusivamente em schemas descartáveis de aetherius_test; nenhuma migration em aetherius_dev, opção local ou .env alterada. Servidor/jogo não iniciados, parados ou reiniciados, nenhuma porta aberta e nenhum binário copiado para build/dist. Core verificado e bundle gerado para revisão; C++ não recompilado neste sandbox, comandos entregues ao revisor. Decisão do dono: homologação de atributos com tela no servidor oficial, pelo desenvolvedor responsável. Não há ativação local a desfazer. O roteiro oficial está no contrato de atributos; ler ACKs, máximos e barras antes/depois de alocar, reconectar e trocar classe.
 

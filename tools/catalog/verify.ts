@@ -18,7 +18,14 @@ for (const observation of observations) assert.ok(!('status' in observation), `U
 const actual = observations as readonly PluginFingerprint[];
 for (const domain of domains) {
   assert.equal(contentSignature(domain), domain.signature);
-  for (const plugin of domain.dependencies) assert.deepEqual(actual.find(p => p.filename.toLowerCase() === plugin.filename.toLowerCase()), plugin);
+  // Compare exactly the fingerprint fields. A catalog dependency may carry manifest
+  // metadata (isMaster, shipped, source) that is not part of a plugin's identity.
+  const fingerprint = (p: PluginFingerprint) => ({ filename: p.filename, size: p.size, crc32: p.crc32, isLight: p.isLight });
+  for (const plugin of domain.dependencies) {
+    const observed = actual.find(p => p.filename.toLowerCase() === plugin.filename.toLowerCase());
+    assert.ok(observed, `Plugin absent: ${plugin.filename}`);
+    assert.deepEqual(fingerprint(observed), fingerprint(plugin), `Plugin signature/kind mismatch: ${plugin.filename}`);
+  }
   for (const record of domain.records) {
     const defining = domain.dependencies.find(p => p.filename.toLowerCase() === record.definingPlugin.toLowerCase());
     assert.ok(defining, `Missing defining plugin: ${record.stableFormKey}`);
