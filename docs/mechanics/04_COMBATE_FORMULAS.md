@@ -10,8 +10,11 @@ Fontes: [PhysicalDamagePipeline](../../modules/damage-system/server/server/cpp/s
 
 Defina `B=weaponBase`, `F=flatItemDamage`, `I=itemMultiplier`, `S=weaponSkill`, `Pweapon` e `Pattack` como produtos dos handlers das duas entradas, `T=attackMultiplier` autorizado e `G=physicalMultiplier`.
 
+Para a **integração futura do RefinementSystem**, resolva a instância autorizada da arma e seu tier persistente `R` (0/I/II/III), com `r(R) = 0/0.25/0.50/0.75`. O refinamento deve afetar **apenas a base elegível**: `B_refinado = B × (1 + r(R))`. O provider deve inserir no helper C++ essa base já refinada **ou** um fator equivalente uma única vez, sem dupla incidência; não há implementação final de item instances nessa baseline.
+
 ```text
-normal = max(0, B + F) × max(0, I) × (1 + 0.005 × S)
+B_refinado = B × (1 + r(R))           // conceito; tier da instância permanece intacto
+normal = max(0, B_refinado + F) × max(0, I) × (1 + 0.005 × S)
 normal = normal × Pweapon × Pattack × max(0, T)
 critical = crítico_sorteado ? max(0, criticalBase) × Pcritical : 0
 preDefense = (normal + critical) × G
@@ -20,19 +23,20 @@ final = max(0, preDefense × (1 - blockReduction) × (1 - armorReduction))
 
 `criticalBase` vem do resolvedor autorizado da arma. O helper adiciona um componente crítico, não multiplica automaticamente todo o dano por dois. `criticalChance` não é recalculada pelo registry a partir de todas as perks instaladas; o contexto precisa fornecê-la com semântica validada. O multiplicador `T` também não é licença para aceitar qualquer número enviado pelo cliente.
 
-`Nonnegative` rejeita valores não finitos e limita valores negativos a zero. Isso não dispensa validar limites superiores, tipos e a construção do contexto. `flatItemDamage` e `itemMultiplier` devem ter providers com origem explícita para evitar aplicar tempering, buffs ou manutenção duas vezes.
+`Nonnegative` rejeita valores não finitos e limita valores negativos a zero. Isso não dispensa validar limites superiores, tipos e a construção do contexto. `flatItemDamage` e `itemMultiplier` devem ter providers com origem explícita para evitar aplicar tempering, buffs ou manutenção duas vezes. **O tier é relido do snapshot autorizado em cada hit e nunca é uma carga consumível.** "Uma vez" significa não duplicar seu fator **dentro do mesmo hit**; no hit seguinte, ele deve ser considerado novamente com o mesmo valor, caso a instância ainda possua o mesmo tier. Se o provider entregar `weaponBase` já refinado, não aplicar `r(R)` novamente. Cargas e penalidades de manutenção pertencem ao DurabilitySystem, não ao RefinementSystem.
 
 ## 4.3 Armadura e bloqueio
 
-Para cada peça, o helper calcula:
+Para cada peça, o helper calcula. Na integração futura, a base é a contribuição autorizada de Armor Rating daquela **instância** refinada, distinta de buffs e de flats:
 
 ```text
-rating = max(0, base + flat) × max(0, itemMultiplier)
+baseRefinada = base × (1 + r(tierDaInstancia))
+rating = max(0, baseRefinada + flat) × max(0, itemMultiplier)
          × (1 + 0.005 × armorSkill) × Parmadura
 pieceTotal = rating + hiddenArmorPerPiece
 ```
 
-A política de quais slots/peças entram no total precisa ser resolvida antes da chamada. O helper sozinho não descobre slots, armaduras sobrepostas, condições de set completo ou overlays. `hiddenArmorPerPiece` está zero na configuração auditada.
+A política de quais slots/peças entram no total precisa ser resolvida antes da chamada. A contribuição refinada de armaduras e escudos elegíveis deve ser considerada novamente em **todo** evento de dano físico sofrido, mantendo o tier intacto. O tier não altera diretamente a redução própria de Block. O helper sozinho não descobre slots, armaduras sobrepostas, condições de set completo ou overlays. `hiddenArmorPerPiece` está zero na configuração auditada.
 
 Curva configurada para armadura total `A`: até 0, redução zero; de 0 a 500, `A × 0.8/500`; de 500 a 1000, `0.8 + (A-500) × 0.1/500`; a partir de 1000, redução 0.9. São parâmetros do projeto auditado, não uma afirmação da fórmula vanilla.
 
@@ -61,6 +65,12 @@ Exemplo sintético para reproduzir a matemática do helper: arma base 20, flat 0
 Com Block Mastery aplicável no defensor, `Pblock=1.25`, redução de bloqueio `0.4375`, dano `12.65625`. Com penalidade hipotética de manutenção `itemMultiplier=0.7`, sem Block Mastery, o resultado fica `10.2375`. O fator 0.7 entra uma vez no componente do item, não novamente no dano final.
 
 Se criticalBase=5 e a mastery crítica aplicável produzir `1+0.05×50=3.5`, o componente crítico vale 17.5. Com as condições originais do exemplo, preDefense=55 e final=21.45. A chance de esse ramo ocorrer é responsabilidade do RNG/contexto, não desta conta. Arredondamento visual não deve arredondar o estado persistido em cada etapa.
+
+### Exemplo de persistência do tier entre eventos
+
+Arma com dano-base 20 e Tier II: `20 × 1.50 = 30` como base refinada em todos os golpes físicos, enquanto esse tier estiver na mesma instância. Golpe 1, golpe 2 e golpe 100 usam a mesma base refinada 30; o resultado final pode mudar por skill, perks, bloqueio e armadura, mas o tier **não decresce**. Armadura com base 40 e Tier III contribui com base refinada 70 em cada dano físico recebido. Regressão não existe no pipeline de dano: só o RefinementSystem pode alterá-la por falha total ao tentar o próximo tier.
+
+Estas contas descrevem a **regra desejada de integração**. O helper atual só multiplica entradas resolvidas pelo adapter e **não comprova que a identidade de instância e o provider de refino já estejam conectados**.
 
 ## 4.5 Magia
 
