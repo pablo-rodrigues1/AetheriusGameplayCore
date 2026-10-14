@@ -26,7 +26,7 @@ A restrição de pasta impede aplicar alterações nos projetos externos. O cód
 | Identidades / ESPFE | StableFormKey normalizado; bridge usa resolver atual da Base sem aritmética de slots; roundtrip na instalação nativa ainda não executado |
 | Catálogo | Housecarl compila metadados; startup verifica CRC32/size por Loader.GetFilesInfo, winner e EditorID por libespm. SHA256 fica na auditoria. Não substitui manifestGen |
 | Profession providers | IItemCombatModifierProvider e ICombatModifierProvider têm registry, validação, combinação, revisão e provenance; ICombatProfileProvider define fronteira; nenhuma dependência de profissão |
-| Refino por instância | Provider neutro por padrão; native Inventory ainda não oferece identidade persistente de instância. Nenhum extra health vindo do cliente é usado como refino |
+| Refino por instância | **Ainda não integrado**: provider neutro por padrão; native Inventory ainda não oferece identidade persistente de instância. Nenhum extra health vindo do cliente é usado como refino. Regra de integração: aplicar o tier persistente em cada hit/defesa elegível, **sem consumir/decrementar o tier no combate** |
 | Efeitos | Store por instância, sete regras, scheduler central, cancelamento de canal, persistência/restart e expiração testados; conexão ao tick/change form real pendente |
 | Magia | Núcleo por componente Health/Magicka/Stamina, elemento, caps, weakness e absorption testado; magnitude é por pulso, duração é responsabilidade do scheduler |
 | SPEL/MGEF/ENCH runtime | Bloqueados na fórmula experimental até auditoria/tradução e build nativa verificável; spells e armor encantada produzem erro explícito, sem fallback silencioso |
@@ -41,6 +41,8 @@ A restrição de pasta impede aplicar alterações nos projetos externos. O cód
 | Build e validação no Skyrim | Bloqueados: vcpkg não inicializado e compilador MSVC C++ exigido pela Base indisponível; testes em jogo, duelo/PvE e raid reais não executados |
 
 Decisões de balanceamento, não claims de paridade vanilla: Armor skill inicial `1+.005*skill`; Block inicial `baseReduction + reductionPerSkill*Block`, vezes a Mastery, limitado pelo cap. Valores de Block estão explícitos na configuração. A curva padrão mantém exatamente 500=80% e 1000=90%, sem armor oculto.
+
+**Regra normativa futura (não implementada nesta entrega):** Tier I/II/III (respectivamente +25/+50/+75% sobre a base elegível) permanece na instância de arma/armadura/escudo e influencia todos os eventos físicos pertinentes. A fórmula lê o tier a cada cálculo via snapshot, aplica o multiplicador uma única vez por cálculo e não executa nenhuma mutação/consumo de tier no hit. Só a operação de refino pode promover o tier por sucesso ou regredi-lo por falha total ao tentar o seguinte. O consumo de cargas de manutenção é independente; mudanças de tier exigem revisionamento/invalidação do cache. Ver [RefinementSystem](../../../refinement-system/README.md).
 
 O cache de equipamento inclui perfil, equipamento/aparência, efeitos e providers. Providers com dados mutáveis devem chamar `Invalidate()` após alteração autorizada. Sem identificador de instância, equipar duas armas com o mesmo baseId é recusado explicitamente em vez de selecionar o refino errado. Matching set, encantamentos e debuffs reais não estão conectados.
 
