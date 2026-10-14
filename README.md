@@ -157,7 +157,9 @@ A proposta atual inclui:
 - moldes;
 - minigame por ciclos;
 - risco de falha e regressão de tier;
-- integração futura com DamageSystem.
+- integração futura com DamageSystem, com o bônus aplicado em **todo golpe ou defesa física pertinente enquanto a instância mantiver seu tier**, sem consumo ou regressão em combate.
+
+**Tier não é carga de uso:** somente uma tentativa de refino (sucesso ou falha total ao buscar o próximo tier) altera seu estado; "aplicar uma vez" significa evitar duplicação do bônus dentro de cada cálculo. A integração com o DamageSystem ainda é futura.
 
 Os valores numéricos de refino também são considerados parâmetros de balanceamento configuráveis.
 
