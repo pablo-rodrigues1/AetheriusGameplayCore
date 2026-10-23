@@ -65,6 +65,8 @@ O adaptador do host recebe essa identidade e resolve o FormID de runtime contra 
 
 ## Spawn e persistência
 
+> **Preflight preventivo de posicionamento (23/10/2026):** `src/spawning/location.mjs` valida as referências `ACHR` e converte posição/rotação do catálogo (`{x,y,z}`) em arrays (`[x,y,z]`) exigidos pelo SkyMP. O adapter só encaminha ao hook do host uma localização de registro original após a resolução explícita de `cellOrWorldDesc`; dados ausentes ou inválidos bloqueiam a operação sem fallback para a posição do jogador. O readiness passa a reprovar `DUNGEON_SPAWN_LOCATION_INVALID`. Ver [contrato de integração com o SkyMP](docs/SKYMP_RUNTIME_INTEGRATION.md). **Não equivale a integração ativa nem a validação em jogo.** Testes unitários: `tests/spawn-location.test.mjs`.
+
 - Seleção determinística no servidor.
 - Pesos preservados das quantidades e caminhos originais das `LVLN`.
 - Listas aninhadas, `Chance None`, thresholds, multiplicidade e ciclos são analisados.
