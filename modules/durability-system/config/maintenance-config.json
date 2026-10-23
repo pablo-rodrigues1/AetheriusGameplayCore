@@ -36,109 +36,233 @@
     "classification": {
       "unknownMaterialPolicy": "exclude",
       "moddedItemsRequireExplicitMapping": true,
-      "weaponCategories": ["physicalWeapon"],
-      "armorCategories": ["armor", "shield"]
+      "weaponCategories": [
+        "physicalWeapon"
+      ],
+      "armorCategories": [
+        "armor",
+        "shield"
+      ]
     },
     "materials": {
       "iron": {
         "displayName": "Ferro",
-        "aliases": ["iron", "ferro"],
-        "keywords": ["ArmorMaterialIron", "WeapMaterialIron"]
+        "aliases": [
+          "iron",
+          "ferro"
+        ],
+        "keywords": [
+          "ArmorMaterialIron",
+          "WeapMaterialIron"
+        ]
       },
       "steel": {
         "displayName": "Aço",
-        "aliases": ["steel", "aco", "aço"],
-        "keywords": ["ArmorMaterialSteel", "WeapMaterialSteel"]
+        "aliases": [
+          "steel",
+          "aco",
+          "aço"
+        ],
+        "keywords": [
+          "ArmorMaterialSteel",
+          "WeapMaterialSteel"
+        ]
       },
       "leather": {
         "displayName": "Couro",
-        "aliases": ["leather", "couros", "couro"],
-        "keywords": ["ArmorMaterialLeather"]
+        "aliases": [
+          "leather",
+          "couros",
+          "couro"
+        ],
+        "keywords": [
+          "ArmorMaterialLeather"
+        ]
       },
       "hide": {
         "displayName": "Pele",
-        "aliases": ["hide", "pele"],
-        "keywords": ["ArmorMaterialHide"]
+        "aliases": [
+          "hide",
+          "pele"
+        ],
+        "keywords": [
+          "ArmorMaterialHide"
+        ]
       },
       "elven": {
         "displayName": "Élfico",
-        "aliases": ["elven", "elfico", "élfico"],
-        "keywords": ["ArmorMaterialElven", "WeapMaterialElven"]
+        "aliases": [
+          "elven",
+          "elfico",
+          "élfico"
+        ],
+        "keywords": [
+          "ArmorMaterialElven",
+          "WeapMaterialElven"
+        ]
       },
       "dwarven": {
         "displayName": "Anão",
-        "aliases": ["dwarven", "anao", "anão", "dwemer"],
-        "keywords": ["ArmorMaterialDwarven", "WeapMaterialDwarven"]
+        "aliases": [
+          "dwarven",
+          "anao",
+          "anão",
+          "dwemer"
+        ],
+        "keywords": [
+          "ArmorMaterialDwarven",
+          "WeapMaterialDwarven"
+        ]
       },
       "orcish": {
         "displayName": "Orc",
-        "aliases": ["orcish", "orc"],
-        "keywords": ["ArmorMaterialOrcish", "WeapMaterialOrcish"]
+        "aliases": [
+          "orcish",
+          "orc"
+        ],
+        "keywords": [
+          "ArmorMaterialOrcish",
+          "WeapMaterialOrcish"
+        ]
       },
       "glass": {
         "displayName": "Vidro",
-        "aliases": ["glass", "vidro"],
-        "keywords": ["ArmorMaterialGlass", "WeapMaterialGlass"]
+        "aliases": [
+          "glass",
+          "vidro"
+        ],
+        "keywords": [
+          "ArmorMaterialGlass",
+          "WeapMaterialGlass"
+        ]
       },
       "ebony": {
         "displayName": "Ébano",
-        "aliases": ["ebony", "ebano", "ébano"],
-        "keywords": ["ArmorMaterialEbony", "WeapMaterialEbony"]
+        "aliases": [
+          "ebony",
+          "ebano",
+          "ébano"
+        ],
+        "keywords": [
+          "ArmorMaterialEbony",
+          "WeapMaterialEbony"
+        ]
       },
       "daedric": {
         "displayName": "Daédrico",
-        "aliases": ["daedric", "daedrico", "daédrico"],
-        "keywords": ["ArmorMaterialDaedric", "WeapMaterialDaedric"]
+        "aliases": [
+          "daedric",
+          "daedrico",
+          "daédrico"
+        ],
+        "keywords": [
+          "ArmorMaterialDaedric",
+          "WeapMaterialDaedric"
+        ]
       },
       "dragonbone": {
         "displayName": "Osso de Dragão",
-        "aliases": ["dragonbone", "osso de dragao", "osso de dragão"],
-        "keywords": ["ArmorMaterialDragonbone", "WeapMaterialDragonbone"]
+        "aliases": [
+          "dragonbone",
+          "osso de dragao",
+          "osso de dragão"
+        ],
+        "keywords": [
+          "ArmorMaterialDragonbone",
+          "WeapMaterialDragonbone"
+        ]
       },
       "stalhrim": {
         "displayName": "Stalhrim",
-        "aliases": ["stalhrim"],
-        "keywords": ["ArmorMaterialStalhrim", "WeapMaterialStalhrim"]
+        "aliases": [
+          "stalhrim"
+        ],
+        "keywords": [
+          "ArmorMaterialStalhrim",
+          "WeapMaterialStalhrim"
+        ]
       },
       "silver": {
         "displayName": "Prata",
-        "aliases": ["silver", "prata"],
-        "keywords": ["WeapMaterialSilver"]
+        "aliases": [
+          "silver",
+          "prata"
+        ],
+        "keywords": [
+          "WeapMaterialSilver"
+        ]
       },
       "wood": {
         "displayName": "Madeira",
-        "aliases": ["wood", "madeira"],
-        "keywords": ["WeapMaterialWood"]
+        "aliases": [
+          "wood",
+          "madeira"
+        ],
+        "keywords": [
+          "WeapMaterialWood"
+        ]
       },
       "scaled": {
         "displayName": "Escamado",
-        "aliases": ["scaled", "escamado"],
-        "keywords": ["ArmorMaterialScaled"]
+        "aliases": [
+          "scaled",
+          "escamado"
+        ],
+        "keywords": [
+          "ArmorMaterialScaled"
+        ]
       },
       "chitin": {
         "displayName": "Quitina",
-        "aliases": ["chitin", "quitina"],
-        "keywords": ["ArmorMaterialChitin"]
+        "aliases": [
+          "chitin",
+          "quitina"
+        ],
+        "keywords": [
+          "ArmorMaterialChitin"
+        ]
       },
       "bonemold": {
         "displayName": "Osso Moldado",
-        "aliases": ["bonemold", "osso moldado"],
-        "keywords": ["ArmorMaterialBonemold"]
+        "aliases": [
+          "bonemold",
+          "osso moldado"
+        ],
+        "keywords": [
+          "ArmorMaterialBonemold"
+        ]
       },
       "falmer": {
         "displayName": "Falmer",
-        "aliases": ["falmer"],
-        "keywords": ["ArmorMaterialFalmer"]
+        "aliases": [
+          "falmer"
+        ],
+        "keywords": [
+          "ArmorMaterialFalmer"
+        ]
       },
       "nordic": {
         "displayName": "Nórdico",
-        "aliases": ["nordic", "nordico", "nórdico"],
-        "keywords": ["ArmorMaterialNordic", "WeapMaterialNordic"]
+        "aliases": [
+          "nordic",
+          "nordico",
+          "nórdico"
+        ],
+        "keywords": [
+          "ArmorMaterialNordic",
+          "WeapMaterialNordic"
+        ]
       },
       "dragonscale": {
         "displayName": "Escama de Dragão",
-        "aliases": ["dragonscale", "escama de dragao", "escama de dragão"],
-        "keywords": ["ArmorMaterialDragonscale"]
+        "aliases": [
+          "dragonscale",
+          "escama de dragao",
+          "escama de dragão"
+        ],
+        "keywords": [
+          "ArmorMaterialDragonscale"
+        ]
       }
     },
     "kits": {
@@ -147,121 +271,169 @@
           "stableId": "weapon.iron",
           "displayName": "Kit de Manutenção de Armas de Ferro",
           "description": "Concede cargas para armas físicas de ferro.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponIron",
           "formId": null,
-          "iconSource": { "name": "Hammer", "editorId": "BlacksmithHammer01", "formId": "05CAE1:Skyrim.esm" }
+          "iconSource": {
+            "name": "Hammer",
+            "editorId": "BlacksmithHammer01",
+            "formId": "05CAE1:Skyrim.esm"
+          }
         },
         "steel": {
           "stableId": "weapon.steel",
           "displayName": "Kit de Manutenção de Armas de Aço",
           "description": "Concede cargas para armas físicas de aço.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponSteel",
           "formId": null,
-          "iconSource": { "name": "Hammer", "editorId": "BlacksmithHammer01", "formId": "05CAE1:Skyrim.esm" }
+          "iconSource": {
+            "name": "Hammer",
+            "editorId": "BlacksmithHammer01",
+            "formId": "05CAE1:Skyrim.esm"
+          }
         },
         "elven": {
           "stableId": "weapon.elven",
           "displayName": "Kit de Manutenção de Armas Élficas",
           "description": "Concede cargas para armas físicas élficas.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponElven",
           "formId": null,
-          "iconSource": { "name": "Hammer", "editorId": "BlacksmithHammer01", "formId": "05CAE1:Skyrim.esm" }
+          "iconSource": {
+            "name": "Hammer",
+            "editorId": "BlacksmithHammer01",
+            "formId": "05CAE1:Skyrim.esm"
+          }
         },
         "dwarven": {
           "stableId": "weapon.dwarven",
           "displayName": "Kit de Manutenção de Armas Anãs",
           "description": "Concede cargas para armas físicas anãs.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponDwarven",
           "formId": null,
-          "iconSource": { "name": "Hammer", "editorId": "BlacksmithHammer01", "formId": "05CAE1:Skyrim.esm" }
+          "iconSource": {
+            "name": "Hammer",
+            "editorId": "BlacksmithHammer01",
+            "formId": "05CAE1:Skyrim.esm"
+          }
         },
         "orcish": {
           "stableId": "weapon.orcish",
           "displayName": "Kit de Manutenção de Armas Orcs",
           "description": "Concede cargas para armas físicas orcs.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponOrcish",
           "formId": null,
-          "iconSource": { "name": "Hammer", "editorId": "BlacksmithHammer01", "formId": "05CAE1:Skyrim.esm" }
+          "iconSource": {
+            "name": "Hammer",
+            "editorId": "BlacksmithHammer01",
+            "formId": "05CAE1:Skyrim.esm"
+          }
         },
         "glass": {
           "stableId": "weapon.glass",
           "displayName": "Kit de Manutenção de Armas de Vidro",
           "description": "Concede cargas para armas físicas de vidro.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponGlass",
           "formId": null,
-          "iconSource": { "name": "Hammer", "editorId": "BlacksmithHammer01", "formId": "05CAE1:Skyrim.esm" }
+          "iconSource": {
+            "name": "Hammer",
+            "editorId": "BlacksmithHammer01",
+            "formId": "05CAE1:Skyrim.esm"
+          }
         },
         "ebony": {
           "stableId": "weapon.ebony",
           "displayName": "Kit de Manutenção de Armas de Ébano",
           "description": "Concede cargas para armas físicas de ébano.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponEbony",
           "formId": null,
-          "iconSource": { "name": "Hammer", "editorId": "BlacksmithHammer01", "formId": "05CAE1:Skyrim.esm" }
+          "iconSource": {
+            "name": "Hammer",
+            "editorId": "BlacksmithHammer01",
+            "formId": "05CAE1:Skyrim.esm"
+          }
         },
         "daedric": {
           "stableId": "weapon.daedric",
           "displayName": "Kit de Manutenção de Armas Daédricas",
           "description": "Concede cargas para armas físicas daédricas.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponDaedric",
           "formId": null,
-          "iconSource": { "name": "Hammer", "editorId": "BlacksmithHammer01", "formId": "05CAE1:Skyrim.esm" }
+          "iconSource": {
+            "name": "Hammer",
+            "editorId": "BlacksmithHammer01",
+            "formId": "05CAE1:Skyrim.esm"
+          }
         },
         "dragonbone": {
           "stableId": "weapon.dragonbone",
           "displayName": "Kit de Manutenção de Armas de Osso de Dragão",
           "description": "Concede cargas para armas físicas de osso de dragão.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponDragonbone",
           "formId": null,
-          "iconSource": { "name": "Hammer", "editorId": "BlacksmithHammer01", "formId": "05CAE1:Skyrim.esm" }
+          "iconSource": {
+            "name": "Hammer",
+            "editorId": "BlacksmithHammer01",
+            "formId": "05CAE1:Skyrim.esm"
+          }
         },
         "stalhrim": {
           "stableId": "weapon.stalhrim",
           "displayName": "Kit de Manutenção de Armas de Stalhrim",
           "description": "Concede cargas para armas físicas de stalhrim.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponStalhrim",
           "formId": null,
-          "iconSource": { "name": "Hammer", "editorId": "BlacksmithHammer01", "formId": "05CAE1:Skyrim.esm" }
+          "iconSource": {
+            "name": "Hammer",
+            "editorId": "BlacksmithHammer01",
+            "formId": "05CAE1:Skyrim.esm"
+          }
         },
         "silver": {
           "stableId": "weapon.silver",
           "displayName": "Kit de Manutenção de Armas de Prata",
           "description": "Concede cargas para armas físicas de prata.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponSilver",
           "formId": null,
-          "iconSource": { "name": "Hammer", "editorId": "BlacksmithHammer01", "formId": "05CAE1:Skyrim.esm" }
+          "iconSource": {
+            "name": "Hammer",
+            "editorId": "BlacksmithHammer01",
+            "formId": "05CAE1:Skyrim.esm"
+          }
         },
         "wood": {
           "stableId": "weapon.wood",
           "displayName": "Kit de Manutenção de Armas de Madeira",
           "description": "Concede cargas para armas físicas de madeira.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponWood",
           "formId": null,
-          "iconSource": { "name": "Hammer", "editorId": "BlacksmithHammer01", "formId": "05CAE1:Skyrim.esm" }
+          "iconSource": {
+            "name": "Hammer",
+            "editorId": "BlacksmithHammer01",
+            "formId": "05CAE1:Skyrim.esm"
+          }
         }
       },
       "armor": {
@@ -269,181 +441,253 @@
           "stableId": "armor.leather",
           "displayName": "Kit de Manutenção de Armaduras de Couro",
           "description": "Concede cargas para armaduras de couro.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorLeather",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "hide": {
           "stableId": "armor.hide",
           "displayName": "Kit de Manutenção de Armaduras de Pele",
           "description": "Concede cargas para armaduras de pele.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorHide",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "iron": {
           "stableId": "armor.iron",
           "displayName": "Kit de Manutenção de Armaduras de Ferro",
           "description": "Concede cargas para armaduras de ferro.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorIron",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "steel": {
           "stableId": "armor.steel",
           "displayName": "Kit de Manutenção de Armaduras de Aço",
           "description": "Concede cargas para armaduras de aço.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorSteel",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "elven": {
           "stableId": "armor.elven",
           "displayName": "Kit de Manutenção de Armaduras Élficas",
           "description": "Concede cargas para armaduras élficas.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorElven",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "dwarven": {
           "stableId": "armor.dwarven",
           "displayName": "Kit de Manutenção de Armaduras Anãs",
           "description": "Concede cargas para armaduras anãs.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorDwarven",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "orcish": {
           "stableId": "armor.orcish",
           "displayName": "Kit de Manutenção de Armaduras Orcs",
           "description": "Concede cargas para armaduras orcs.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorOrcish",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "glass": {
           "stableId": "armor.glass",
           "displayName": "Kit de Manutenção de Armaduras de Vidro",
           "description": "Concede cargas para armaduras de vidro.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorGlass",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "ebony": {
           "stableId": "armor.ebony",
           "displayName": "Kit de Manutenção de Armaduras de Ébano",
           "description": "Concede cargas para armaduras de ébano.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorEbony",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "daedric": {
           "stableId": "armor.daedric",
           "displayName": "Kit de Manutenção de Armaduras Daédricas",
           "description": "Concede cargas para armaduras daédricas.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorDaedric",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "dragonbone": {
           "stableId": "armor.dragonbone",
           "displayName": "Kit de Manutenção de Armaduras de Osso de Dragão",
           "description": "Concede cargas para armaduras de osso de dragão.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorDragonbone",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "stalhrim": {
           "stableId": "armor.stalhrim",
           "displayName": "Kit de Manutenção de Armaduras de Stalhrim",
           "description": "Concede cargas para armaduras de stalhrim.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorStalhrim",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "scaled": {
           "stableId": "armor.scaled",
           "displayName": "Kit de Manutenção de Armaduras Escamadas",
           "description": "Concede cargas para armaduras escamadas.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorScaled",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "chitin": {
           "stableId": "armor.chitin",
           "displayName": "Kit de Manutenção de Armaduras de Quitina",
           "description": "Concede cargas para armaduras de quitina.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorChitin",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "bonemold": {
           "stableId": "armor.bonemold",
           "displayName": "Kit de Manutenção de Armaduras de Osso Moldado",
           "description": "Concede cargas para armaduras de osso moldado.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorBonemold",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "falmer": {
           "stableId": "armor.falmer",
           "displayName": "Kit de Manutenção de Armaduras Falmer",
           "description": "Concede cargas para armaduras falmer.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorFalmer",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "nordic": {
           "stableId": "armor.nordic",
           "displayName": "Kit de Manutenção de Armaduras Nórdicas",
           "description": "Concede cargas para armaduras nórdicas.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorNordic",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         },
         "dragonscale": {
           "stableId": "armor.dragonscale",
           "displayName": "Kit de Manutenção de Armaduras de Escama de Dragão",
           "description": "Concede cargas para armaduras de escama de dragão.",
-          "charges": 10,
+          "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorDragonscale",
           "formId": null,
-          "iconSource": { "name": "Sylgja's Satchel", "editorId": "FFSS02SylgjaSatchel", "formId": "0E49F7:Skyrim.esm" }
+          "iconSource": {
+            "name": "Sylgja's Satchel",
+            "editorId": "FFSS02SylgjaSatchel",
+            "formId": "0E49F7:Skyrim.esm"
+          }
         }
       }
     }
