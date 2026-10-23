@@ -29,12 +29,13 @@ const SUPPORTED = new Map([[77, 5], [88, 6]]);
 
 /** Host ring model: same rows/sequence semantics as CombatProbe::Ring. */
 function hostProbe(capacity = 4) {
-  const rings = { hits: [], animations: [], health: [], equipment: [] }, totals = { hits: 0, animations: 0, health: 0, equipment: 0 };
+  const rings = { hits: [], animations: [], health: [], equipment: [], rejections: [] }, totals = { hits: 0, animations: 0, health: 0, equipment: 0, rejections: 0 };
   let calls = 0; const enchantmentCalls = [];
   return {
     rings, totals, enchantmentCalls, get calls() { return calls; },
     push(buffer, row) { const sequence = ++totals[buffer]; rings[buffer].push({ sequence, timeMs: 1000 + sequence, ...row }); if (rings[buffer].length > capacity) rings[buffer].shift(); },
     fn(id) {
+      if (id && typeof id === 'object') return JSON.stringify({ status: 'SUPPORTED', type: id.recordType === 200 ? 'ARMO' : 'WEAP' });
       if (id !== undefined) { enchantmentCalls.push(id);
         return JSON.stringify(SUPPORTED.has(id) ? { enchantmentId: id, status: 'SUPPORTED', effects: [{ mgef: SUPPORTED.get(id), magnitude: 10, actorValue: 24 }] }
           : { enchantmentId: id, status: 'UNSUPPORTED', reason: 'CREATED_RECORD_NOT_IN_LOAD_ORDER' }); }
@@ -248,4 +249,24 @@ test('host read failure is logged once and never thrown into the gamemode', asyn
   await h.recorder.flush();
   assert.equal(h.warnings.filter(w => w.includes('read failed')).length, 1);
   assert.equal(h.lines.filter(l => l.kind !== 'start' && l.kind !== 'writer' && l.kind !== 'counters').length, 0);
+});
+
+
+test('DS-0d: rejection checkpoints retry unchanged and overflow is explicit; armor has no hand', async () => {
+  const h = harness(); h.recorder.start(); await h.recorder.flush();
+  h.probe.push('rejections', {reason:'TOO_DISTANT',aggressor:1,target:2,source:3,targetState:{base:20,templateChain:['npc:plugin']}});
+  h.writer.mode = 'fail'; await h.poll();
+  for(let i=0;i<7;i++) h.probe.push('rejections', {reason:'DIFFERENT_CELL',aggressor:1,target:2,source:3});
+  h.writer.mode = 'ok'; await h.poll(); await h.poll();
+  const rows = h.lines.filter(r=>r.kind==='rejection');
+  assert.equal(rows[0].sequence, 1);
+  assert.equal(rows[0].targetState.resolvedNpcDesc, 'npc:plugin');
+  assert.equal(rows[0].targetState.baseDesc, 'desc:20');
+  assert.equal(rows[0].sourceDesc, 'desc:3');
+  assert(h.lines.some(r=>r.kind==='gap' && r.buffer==='rejections' && r.reason==='WRITE_FAILURE_RING_OVERWRITTEN' && r.lost===3));
+  h.probe.push('equipment', {actor:91,totalEntries:2,items:[{baseId:200,wornSlot:'RIGHT',worn:true},{baseId:100,wornSlot:'LEFT',worn:true}]});
+  await h.poll();
+  const items = h.lines.filter(r=>r.source==='HOST_TRANSITION').at(-1).equipped;
+  assert.deepEqual(items.map(i=>i.hand), ['NONE','LEFT']);
+  assert(items.every(i=>i.worn));
 });

@@ -61,3 +61,23 @@ test('CLI writes the report file; bad usage exits 2', async () => {
     assert.equal(spawnSync(process.execPath, [tool], { encoding: 'utf8' }).status, 2);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+
+test('DS-0d: refusals, position age, observed vs exact maximum, creature power and old format', async () => {
+  const source = new URL('./fixtures/combat-probe-rejections.jsonl', import.meta.url);
+  const parsed = parseLines(await readFile(source, 'utf8'));
+  const a = analyze(parsed.rows);
+  assert.equal(a.rejections.length, 3);
+  assert.equal(a.refusalsByReason.get('TOO_DISTANT'), 1);
+  assert.equal(a.refusalsByActor.get(2), 3);
+  assert.equal(a.positions.find(p => p.event.reason === 'TOO_DISTANT').ageMs, 5000);
+  assert.equal(a.positions.find(p => p.state.movementMatches === false).ageMs, null);
+  assert.equal(a.power[0].found.name, 'attackStart_ForwardPowerBite');
+  for (const name of ['attackStart_LeftPowerBite', 'attackPowerStartInPlace', 'BFCO_PowerAttack'])
+    assert(analyze([{kind:'hit',power:true,timeMs:1000,aggressor:1,aggressorAnimations:[{name,ageMs:10}]}]).power[0].found);
+  assert.equal(analyze([{kind:'hit',power:true,timeMs:1000,aggressor:1,aggressorAnimations:[{name:'attackStart',ageMs:10}]}]).power[0].found, null);
+  const md = render(String(source), parsed);
+  for (const text of ['Recusas por motivo e por ator', 'Posição parada', 'Vida máxima por alvo', 'TOO_DISTANT', 'USADO_NO_GOLPE', 'LAST_OBSERVED', 'UNAVAILABLE', 'overwrittenRejections']) assert(md.includes(text), text);
+  const old = render(fixture, parseLines(await readFile(fixture, 'utf8')));
+  assert.match(old, /medição indisponível; não significa zero recusas/);
+});

@@ -14,7 +14,7 @@ export const HEALTH_WINDOW_MS = 3000;
 /** Animation events taken as "strong attack" evidence. attackPower* is the
  * vanilla family; the others are names combat mods are known to emit. Every
  * distinct name is listed in the report so this list can be checked. */
-export const POWER_EVENT = /^attackPower|power_?attack|bfco_?power/i;
+export const POWER_EVENT = /^attackPower|power_?attack|bfco_?power|^attackStart_.*Power/i;
 
 export function parseLines(text) {
   const rows = [], invalid = [];
@@ -35,6 +35,7 @@ export function analyze(rows) {
   const hits = rows.filter(r => r.kind === 'hit').sort((a, b) => a.timeMs - b.timeMs || a.sequence - b.sequence);
   const animations = rows.filter(r => r.kind === 'animation').sort((a, b) => a.timeMs - b.timeMs || a.sequence - b.sequence);
   const health = rows.filter(r => r.kind === 'health').sort((a, b) => a.timeMs - b.timeMs || a.sequence - b.sequence);
+  const rejections = rows.filter(r => r.kind === 'rejection');
   const gaps = rows.filter(r => r.kind === 'gap');
   const resets = rows.filter(r => r.kind === 'reset');
   const counters = rows.filter(r => r.kind === 'counters').at(-1) ?? null;
@@ -81,7 +82,19 @@ export function analyze(rows) {
   for (const a of animations) names.set(a.name, (names.get(a.name) ?? 0) + 1);
   const hostNames = new Map((counters?.animationNames ?? []).map(n => [n.name, n.count]));
   const allNames = [...new Set([...names.keys(), ...hostNames.keys()])].sort();
-  return { hits, animations, health, gaps, resets, counters, equipment, writer, lostByReason, unavailableHealth, families, power, drops, altered, names, hostNames, allNames };
+  const refusalsByReason = new Map(), refusalsByActor = new Map();
+  for (const r of rejections) {
+    refusalsByReason.set(r.reason, (refusalsByReason.get(r.reason) ?? 0) + 1);
+    for (const actor of new Set([r.aggressor, r.target].filter(id => typeof id === 'number')))
+      refusalsByActor.set(actor, (refusalsByActor.get(actor) ?? 0) + 1);
+  }
+  const events = [...hits, ...rejections].sort((a, b) => a.timeMs - b.timeMs);
+  const positions = events.flatMap(event => ['aggressorState', 'targetState'].flatMap(role => {
+    const state = event[role];
+    return state ? [{ event, role, state, ageMs: state.movementMatches && Number.isFinite(state.lastMovementMs)
+      && event.timeMs >= state.lastMovementMs ? event.timeMs - state.lastMovementMs : null }] : [];
+  }));
+  return { rejections, refusalsByReason, refusalsByActor, events, positions, hits, animations, health, gaps, resets, counters, equipment, writer, lostByReason, unavailableHealth, families, power, drops, altered, names, hostNames, allNames };
 }
 
 export function render(file, parsed) {
@@ -143,7 +156,28 @@ export function render(file, parsed) {
         i.enchantment ? (i.enchantment.status === 'SUPPORTED' ? `SUPPORTED (${(i.enchantment.effects ?? []).map(x => `MGEF ${hex(x.mgef)} mag ${fmt(x.magnitude)} AV ${x.actorValue}`).join('; ')})` : `UNSUPPORTED: ${i.enchantment.reason}`) : '—',
         hex(i.poisonId)]))), '');
 
-  out.push('## 8. Amostras brutas', '');
+  out.push('## 8. Recusas por motivo e por ator', '');
+  out.push('Sem registros de recusa no formato antigo significa medição indisponível; não significa zero recusas.', '');
+  out.push(table(['motivo', 'recusas'], [...a.refusalsByReason]), '',
+    table(['ator (agressor ou alvo)', 'recusas'], [...a.refusalsByActor].map(([id, n]) => [hex(id), n])), '');
+  out.push(table(['seq', 'tempo', 'motivo', 'agressor', 'alvo', 'fonte', 'distância (unidades)'],
+    a.rejections.map(r => [r.sequence, r.timeMs, r.reason, hex(r.aggressor), hex(r.target), r.sourceDesc ?? hex(r.source), fmt(r.distance)])), '');
+
+  out.push('## 9. Posição parada: idade do último movimento aceito', '');
+  out.push('A idade mede ausência de movimento aceito, não imobilidade física. Posição diferente da última amostra aceita, timestamp ausente ou relógio invertido = idade indisponível. Troca de hoster não renova esse horário.', '');
+  out.push(table(['evento', 'seq', 'papel', 'ator', 'posição no hit', 'célula/worldspace', 'hoster', 'último movimento (ms)', 'idade (ms)', 'última tentativa (ms)', 'aceita', 'posição tentada', 'célula tentada', 'movimentos recusados'],
+    a.positions.map(p => [p.event.kind, p.event.sequence, p.role, hex(p.state.actor), (p.state.position ?? []).map(fmt).join(', '),
+      p.state.cellOrWorld ?? '—', p.state.hosterDesc ?? hex(p.state.hoster), fmt(p.state.lastMovementMs), fmt(p.ageMs), fmt(p.state.lastMovementAttemptMs), fmt(p.state.lastMovementAccepted),
+      (p.state.lastAttemptPosition ?? []).map(fmt).join(', '), p.state.lastAttemptCellDesc ?? hex(p.state.lastAttemptCellOrWorld), fmt(p.state.rejectedMovements)])), '');
+
+  out.push('## 10. Vida máxima por alvo', '');
+  out.push('USADO_NO_GOLPE é o denominador da conta do host. CACHED_INPUTS_CURRENT compara os insumos atuais com a última leitura de GetMaximumValues, sem resolver records; calcula a expiração de fraqueza pelo relógio atual. Mudança de insumos, contexto ausente ou excedente dos limites = UNAVAILABLE. LAST_OBSERVED (formato intermediário) não garante máximo atual. resolvedNpcDesc é o terminal da cadeia escolhida pelo host; traits e stats podem vir de outro elo.', '');
+  out.push(table(['alvo', 'evento', 'seq', 'máximo usado no golpe', 'máximo atual', 'último máximo observado', 'observado em (ms)', 'estado', 'base', 'NPC terminal', 'cadeia', 'elos omitidos'],
+    a.events.map(e => [hex(e.target), e.kind, e.sequence, fmt(e.targetMaximumHealth), fmt(e.targetState?.maximumHealth), fmt(e.targetState?.lastObservedMaximum),
+      fmt(e.targetState?.maximumObservedMs), e.targetState?.maximumStatus ?? 'UNAVAILABLE', e.targetState?.baseDesc ?? hex(e.targetState?.base),
+      e.targetState?.resolvedNpcDesc ?? '—', (e.targetState?.templateChain ?? []).join(' → '), fmt(e.targetState?.truncatedTemplates)])), '');
+
+  out.push('## 11. Amostras brutas', '');
   out.push('### Golpes', '', table(['seq', 'tempo', 'agressor', 'alvo', 'fonte', 'família', 'flags', 'dano', 'antes', 'candidato', 'depois', 'bloqueio agr/alvo', 'agachado'],
     a.hits.map(h => [h.sequence, h.timeMs, hex(h.aggressor), hex(h.target), h.sourceDesc ?? hex(h.source), h.family,
       ['power', 'sneak', 'bash', 'blocked', 'clientBlocked'].filter(f => h[f]).join(',') || '—', fmt(h.damage), fmt(h.healthBefore), fmt(h.healthCandidate), fmt(h.healthAfter),

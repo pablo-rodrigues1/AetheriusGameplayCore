@@ -83,6 +83,16 @@ Actor value sem fonte comprovada vale `UNSUPPORTED` no trace. Nunca é tratado c
 - **Bloqueio:** `blockStart`/`blockStop` marcam o estado. O hit infere bloqueio por ângulo e equipamento, mas não desmarca `blocked=true` vindo do cliente (A1 §3).
 - **Vida informada pelo cliente:** `OnChangeValues` recebe o percentual absoluto e aceita qualquer queda; só a subida por regeneração é cortada (`ActionListener.cpp:861–936`). O cliente envia com cadência de até 2000 ms, por canal não confiável (`aetherius-client` `sendInputsService.ts:163–194`). Se o motor do cliente também aplicar o dano recebido e relatar a queda, o dano pode ser contado duas vezes. A DS-0b mede isso com janela de 3000 ms e rotula o resultado como suspeita; a prova causal exige golpe isolado em caso controlado.
 
+### Achados DS-0d da sessão de 23/10/2026
+
+O [diagnóstico com fontes e classificação PROVADO/HIPÓTESE](DIAGNOSTICO_SESSAO_DS-0.md) é a referência atual para D1–D4 e corrige o resumo inicial da sessão. **D1:** 80 recusas por distância; 66 envolvem 85541, sendo 62 no par com o jogador. Movimento autorizado de NPC também é recusado por salto ≥4096 ou troca de pai; só o jogador recebe teleporte corretivo. O mecanismo de posição parada está demonstrado no código, sua ocorrência específica ainda exige a captura nova.
+
+**D2:** a base do ref é um NPC intermediário cuja cadeia pode selecionar um NPC por LVLN com pcLevel=0 (sem filtro). O host soma RACE.startingHealth + NPC.healthOffset, sem auto-calc de nível. Winner não garante a mesma vida/seleção do cliente. Há leitura de HareRace para LvlAmbientCreatures no log; a atribuição a cada ref continua hipótese. O primeiro golpe do jogador em 107CF6 foi 44, não 22. A sonda DS-0d copia a cadeia existente e o máximo usado, sem sortear novamente.
+
+**D3:** o DamageMult padrão é 2 para NPC→base de jogador; existe exemplo documental versionado de multiplier=1, não configuração de deployment encontrada. A conta 60×0,8365×2×2=200,76 confere com o golpe 16. Armadura: 69 + ENCH DamageResist 40; GMSTs 0,15/80. A raça histórica que forneceu 60 não foi registrada: WolfRace instalada tem 12, enquanto candidatos BearBlackRace/TrollRace têm 60. Não atribuir o 60 ao lobo mostrado sem conferir a cadeia. HealthCandidate=0 e healthAfter≈0,01 não permitem deduzir máximo≈203. Nada disso determina a configuração do servidor oficial.
+
+**Supersessão da observação de animação acima:** com a sonda de desenvolvimento ligada, os eventos aceitos de NPC hospedado também são copiados, independentemente do AnimationSystem. A extensão DS-0d acrescenta recusas, posição corrente/último movimento/tentativa, hoster e máximos com estado de disponibilidade; fora da sonda o comportamento nativo continua o descrito. Skills ainda não são projetadas pelo Core; deltas de máximos C3d já são projetados (ver D4 do diagnóstico).
+
 ## 7. Dono de cada família
 
 A coluna Owner usa só os quatro valores do AGENTS §4: `AETHERIUS_SERVER`, `NATIVE_SERVER`, `NATIVE_CLIENT` e `DISABLED`. Pela regra do plano de integração (§2), o que não é calculado pelo servidor fica `NATIVE_CLIENT`: o motor do cliente calcula, e o servidor não finge que validou. No dano físico, isso significa que o efeito **não muda o dano aplicado pelo servidor**. Capacidade, pendência e trava de promoção ficam na coluna Capacidade e condição.

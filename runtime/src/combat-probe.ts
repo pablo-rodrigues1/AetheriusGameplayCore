@@ -33,13 +33,13 @@ export function developmentCombatProbe(env: CoreEnvironment): CombatProbeConfig 
 }
 
 // No argument: the buffers snapshot. Numeric argument: read-only enchantment resolution.
-type ProbeMp = RuntimeMp & { getAetheriusCombatProbe?: (enchantmentId?: number) => unknown };
+type ProbeMp = RuntimeMp & { getAetheriusCombatProbe?: (request?: number | { recordType: number }) => unknown };
 type Row = Record<string, unknown> & { sequence: number };
-type Buffer = 'hits' | 'animations' | 'health' | 'equipment';
-const buffers: readonly Buffer[] = ['hits', 'animations', 'health', 'equipment'];
-const kinds: Record<Exclude<Buffer, 'equipment'>, string> = { hits: 'hit', animations: 'animation', health: 'health' };
+type Buffer = 'hits' | 'animations' | 'health' | 'equipment' | 'rejections';
+const buffers: readonly Buffer[] = ['hits', 'animations', 'health', 'equipment', 'rejections'];
+const kinds: Record<Exclude<Buffer, 'equipment'>, string> = { hits: 'hit', animations: 'animation', health: 'health', rejections: 'rejection' };
 const maxDescriptors = 4096;
-/** Upper bound of one batch: the host rings (1024 + 4096 + 1024 + 256 rows),
+/** Upper bound of one batch: the host rings (1024 + 4096 + 1024 + 256 + 1024 rows),
  * one state line per tracked character and a few control lines. */
 export const COMBAT_PROBE_MAX_IN_FLIGHT_BATCHES = 1;
 
@@ -73,7 +73,7 @@ interface WriterStats {
 }
 
 export class CombatProbeRecorder {
-  private committed: Checkpoint = { started: false, last: { hits: 0, animations: 0, health: 0, equipment: 0 },
+  private committed: Checkpoint = { started: false, last: { hits: 0, animations: 0, health: 0, equipment: 0, rejections: 0 },
     startedAtMs: undefined, counters: '', equipment: new Map(), writer: '' };
   private inFlight: Promise<void> | undefined;
   private failing = false;
@@ -83,6 +83,7 @@ export class CombatProbeRecorder {
   private readonly stats: WriterStats = { writeFailures: 0, pollsSkippedWhileWriting: 0, batches: 0, lostRows: {}, lastError: null };
   private readonly tracked = new Map<number, SessionBinding>();
   private readonly enchantments = new Map<number, Record<string, unknown>>();
+  private readonly recordTypes = new Map<number, string | null>();
   private readonly descriptors = new Map<number, string | null>();
   private readonly warned = new Set<string>();
   private active = false;
@@ -223,9 +224,33 @@ export class CombatProbeRecorder {
     return typeof actorId === 'number' ? this.tracked.get(actorId)?.characterKey ?? null : null;
   }
 
+  /** Type lookup is requested only here, outside the hit, with bounded cache. */
+  private hand(id: unknown, wornHand: string): string {
+    if (typeof id !== 'number') return 'UNAVAILABLE';
+    if (!this.recordTypes.has(id)) {
+      let type: string | null = null;
+      try {
+        const answer = JSON.parse(String((this.options.mp as ProbeMp).getAetheriusCombatProbe!({ recordType: id })));
+        if (answer.status === 'SUPPORTED' && typeof answer.type === 'string') type = answer.type;
+      } catch { /* unsupported is explicit; never guess a hand */ }
+      if (this.recordTypes.size < maxDescriptors) this.recordTypes.set(id, type);
+      else return 'UNAVAILABLE';
+    }
+    const type = this.recordTypes.get(id);
+    return type === 'WEAP' || type === 'SPEL' ? wornHand : type ? 'NONE' : 'UNAVAILABLE';
+  }
+
+  private actorState(value: unknown): unknown {
+    if (!value || typeof value !== 'object') return value ?? null;
+    const state = value as Record<string, unknown>;
+    const chain = Array.isArray(state.templateChain) ? state.templateChain : [];
+    return { ...state, lastAttemptCellDesc: this.descriptor(state.lastAttemptCellOrWorld), baseDesc: this.descriptor(state.base), hosterDesc: this.descriptor(state.hoster),
+      resolvedNpcDesc: state.truncatedTemplates || chain.some(key => typeof key !== 'string') ? null : chain.length ? chain.at(-1) : this.descriptor(state.base) };
+  }
+
   private item(entry: Record<string, unknown>, hand: string) {
     const enchantmentId = entry.enchantmentId ?? null;
-    return { baseId: entry.baseId, baseDesc: this.descriptor(entry.baseId), count: entry.count, hand,
+    return { baseId: entry.baseId, baseDesc: this.descriptor(entry.baseId), count: entry.count, hand: this.hand(entry.baseId, hand), worn: true,
       health: entry.health ?? null,
       enchantmentId, enchantmentDesc: this.descriptor(enchantmentId),
       enchantment: enchantmentId === null ? null : this.enchantment(enchantmentId),
@@ -239,7 +264,7 @@ export class CombatProbeRecorder {
       characterKey: this.characterOf(row.actor), actorId: row.actor, actorDesc: this.descriptor(row.actor), numChanges: row.numChanges,
       totalEntries: row.totalEntries, truncatedEntries: Math.max(0, Number(row.totalEntries ?? 0) - items.length),
       spells: { left: row.leftSpell, right: row.rightSpell, voice: row.voiceSpell, instant: row.instantSpell },
-      equipped: items.filter(i => i.hand === 'RIGHT' || i.hand === 'LEFT').map(i => this.item(i, String(i.hand))) };
+      equipped: items.filter(i => i.worn === true || i.hand === 'RIGHT' || i.hand === 'LEFT').map(i => this.item(i, String(i.wornSlot ?? i.hand))) };
   }
 
   /** Polled state; returns the line only when it differs from the committed state. */
@@ -280,8 +305,8 @@ export class CombatProbeRecorder {
   }
 
   private describe(buffer: Buffer, row: Row): Record<string, unknown> {
-    if (buffer === 'hits') return { sourceDesc: this.descriptor(row.source), aggressorDesc: this.descriptor(row.aggressor),
-      targetDesc: this.descriptor(row.target) };
+    if (buffer === 'hits' || buffer === 'rejections') return { sourceDesc: this.descriptor(row.source), aggressorDesc: this.descriptor(row.aggressor),
+      targetDesc: this.descriptor(row.target), aggressorState: this.actorState(row.aggressorState), targetState: this.actorState(row.targetState) };
     return { actorDesc: this.descriptor(row.actor) };
   }
 
