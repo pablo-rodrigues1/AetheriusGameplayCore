@@ -8,7 +8,7 @@ Registro das decisões D1–D8 do plano de integração de gameplay. Cada ADR tr
 | [D2](D2-banco.md) | Banco | decidida em 07/10/2026 |
 | [D3](D3-bundle-e-carga.md) | Como o Core roda no servidor | decidida em 07/10/2026 |
 | [D4](D4-projecao-de-grants.md) | Projeção de concessões no cliente | decidida em 07/10/2026 |
-| [D5](D5-dano.md) | Encaixe da fórmula de dano | proposta, com evidência do spike S3; adiada pela prioridade |
+| [D5](D5-dano.md) | Encaixe da fórmula de dano | decidida em 22/10/2026 |
 | [D6](D6-catalogo-de-records.md) | Catálogo de records e leitura dinâmica | decidida em 07/10/2026 |
 | [D7](D7-ordem-de-implementacao.md) | Ordem de implementação | decidida em 07/10/2026 |
 | [D8](D8-mudancas-no-host.md) | Mudanças em server e client, e instalação do pacote | decidida em 07/10/2026 |

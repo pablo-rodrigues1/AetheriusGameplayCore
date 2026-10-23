@@ -31,14 +31,17 @@ Para cada peça, o helper calcula. Na integração futura, a base é a contribui
 
 ```text
 baseRefinada = base × (1 + r(tierDaInstancia))
+scaling = fArmorRatingBase + (fArmorRatingPCMax − fArmorRatingBase) × armorSkill/100   // 1 + 0.4 × skill/100
 rating = max(0, baseRefinada + flat) × max(0, itemMultiplier)
-         × (1 + 0.005 × armorSkill) × Parmadura
+         × scaling × Parmadura
 pieceTotal = rating + hiddenArmorPerPiece
 ```
 
+> **Decisão do dono, 22/10/2026 (ADR D5, Q4) — regra aprovada, ainda não implementada; o código histórico do módulo usa `1+.005*skill` (IMPLEMENTATION_STATUS):** o fator de skill de armadura é o Scaling do motor, lido dos GMSTs vencedores (`fArmorRatingBase=1`, `fArmorRatingPCMax=1,4`): +0,4 % por nível, até +40 % no 100. A versão anterior deste trecho usava `1 + 0.005 × armorSkill`, que fica substituída. `Parmadura` inclui as perks de `ModArmorRating`, como a Light/Heavy Armor Mastery do Vokrii (×(1 + 0,01 × skill) nas peças do tipo). Scaling e Mastery são efeitos distintos e se multiplicam: peça leve de base 40, Light Armor 60, com Mastery, dá 40 × 1,24 × 1,60 = 79,36. A curva abaixo é absoluta e não configurável. Fontes: [FONTES_E_DONOS](../../modules/damage-system/docs/FONTES_E_DONOS.md).
+
 A política de quais slots/peças entram no total precisa ser resolvida antes da chamada. A contribuição refinada de armaduras e escudos elegíveis deve ser considerada novamente em **todo** evento de dano físico sofrido, mantendo o tier intacto. O tier não altera diretamente a redução própria de Block. O helper sozinho não descobre slots, armaduras sobrepostas, condições de set completo ou overlays. `hiddenArmorPerPiece` está zero na configuração auditada.
 
-Curva configurada para armadura total `A`: até 0, redução zero; de 0 a 500, `A × 0.8/500`; de 500 a 1000, `0.8 + (A-500) × 0.1/500`; a partir de 1000, redução 0.9. São parâmetros do projeto auditado, não uma afirmação da fórmula vanilla.
+Curva absoluta para armadura total `A` (decisão do dono, 22/10/2026): até 0, redução zero; de 0 a 500, `A × 0.8/500`; de 500 a 1000, `0.8 + (A-500) × 0.1/500`; a partir de 1000, redução 0.9. É regra do projeto, não a fórmula vanilla, e não é configurável.
 
 |Armadura efetiva|Redução|Dano restante de 100|
 |---:|---:|---:|
