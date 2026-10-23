@@ -57,6 +57,19 @@ A lista atual inclui casos como `weapon.wood` e kits de armadura de `scaled`, `c
 
 A presença de keywords de material basta para classificar um equipamento no DurabilitySystem, mas **não** comprova qual ingrediente deve ser consumido para fabricar o kit.
 
+### Relatório obrigatório de equipamentos com material não identificado (implementação futura)
+
+Quando o mapeamento de equipamentos for ampliado e integrado ao catálogo de records, **toda execução de varredura deverá gerar e comunicar ao responsável pelo projeto a lista COMPLETA de armas e armaduras cujo material pertinente não pôde ser identificado**. A obrigação inclui equipamentos vanilla, DLCs, mods e patches presentes na load order efetivamente auditada; não se limita aos 30 kits nem aos itens com receitas pendentes.
+
+- Percorrer todos os registros elegíveis `WEAP` e `ARMO` da release, usando os *winning records*. Distinguir a categoria do item e aplicar a classificação de material do DurabilitySystem com os identificadores `materialKey` já existentes.
+- Incluir no relatório **cada equipamento sem material confiável**, inclusive quando não houver keyword reconhecida, houver material desconhecido, dados insuficientes ou identificação ambígua. **Não filtrar, amostrar, truncar ou omitir resultados** para apresentar uma lista aparentemente completa.
+- Para cada entrada, informar no mínimo: `StableFormKey` (plugin de definição + FormID local), tipo de record (`WEAP`/`ARMO`), `EditorID` e nome (quando disponíveis), plugin vencedor, keywords/dados de material consultados e **motivo específico da falha**. Omitir somente campos comprovadamente indisponíveis, com indicação dessa ausência.
+- Produzir contagens auditáveis: total de armas/armaduras analisadas, quantidade classificada, quantidade não classificada e lista detalhada dos não classificados, separados por categoria. Registrar quais plugins/perfil e versão/assinatura do catálogo foram usados. Se não houver falhas, comunicar explicitamente **zero equipamentos com material não identificado**.
+- **Entregar a lista integral de forma acessível ao responsável pelo projeto para revisão**, além de persistir o relatório de auditoria. Não considerar apenas logs internos, avisos genéricos ou uma contagem agregada como comunicação suficiente.
+- Enquanto não houver material validado, marcar o equipamento como `UNRESOLVED_MATERIAL` (ou estado equivalente) e **não presumir material nem aplicar fallback silencioso**. A eventual decisão de acrescentar mappings será explícita e auditável.
+
+Este relatório trata de **material não identificado do próprio equipamento** e é **distinto** do relatório de receita sem ingrediente/lingote correspondente, que pode ocorrer mesmo quando o material do equipamento já é conhecido. A implementação da varredura e do envio do relatório é futura; esta revisão apenas estabelece o requisito documental.
+
 ## 5. Profissões e workstations
 
 - Reaproveitar o `ProfessionCraftMapping` e os gates atuais documentados pelo CraftingSystem.

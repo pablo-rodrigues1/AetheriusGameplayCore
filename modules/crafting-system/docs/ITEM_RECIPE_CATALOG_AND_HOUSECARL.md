@@ -384,6 +384,14 @@ Toda geração deve listar:
 
 Unresolved não entra silenciosamente na UI.
 
+### Auditoria completa de armas/armaduras sem material identificado
+
+Na futura implementação do mapeamento da load order, gerar e **comunicar ao responsável pelo projeto a lista completa**, sem amostragem ou truncamento, de **todos os registros `WEAP` e `ARMO` elegíveis cujo material não foi identificado de modo confiável**, incluindo conteúdo vanilla, DLCs, mods e winning records de patches.
+
+Cada item não classificado deve constar individualmente com `StableFormKey`, tipo de record, `EditorID`/nome quando disponíveis, plugin vencedor, dados/keywords examinados e motivo da impossibilidade de classificação. Entregar também os totais analisados, classificados e não classificados por categoria, a identificação da load order/catálogo auditado e uma declaração explícita de zero pendências caso a lista esteja vazia. O relatório **deve ser apresentado integralmente ao responsável**, e não apenas armazenado em logs ou resumido em contagens.
+
+**Separar estes equipamentos sem `materialKey` reconhecido** das recipes cujo ingrediente correspondente não foi validado: são duas situações diferentes. Preservar `UNRESOLVED`/estado equivalente, sem atribuir material por suposição. Ver também [KIT_RECIPES_AND_BALANCE.md](../../durability-system/docs/KIT_RECIPES_AND_BALANCE.md).
+
 ## 21. Assinatura
 
 ~~~text
