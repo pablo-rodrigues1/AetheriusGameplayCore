@@ -38,9 +38,9 @@ O multiplicador furtivo de arco e besta não foi localizado no recorte de GMSTs 
 |---|---|---|---|
 | Grant do servidor: classe | 149 perks distintas das 18 classes, 78 efeitos físicos | jogadores, pelo servidor | entra no perfil (DS-4) |
 | Grant do servidor: raça e pedra | perks e habilidades dos domínios `races` e `standing-stones` | jogadores, pelo servidor | entra no perfil (DS-4) |
-| Lista `Perks` do NPC_ do jogador (`000007:Skyrim.esm`, vencedor AETHERIUS - LEVELED LISTS.esp) | 12 perks, entre elas `AlchemySkillBoosts` (0A725C) e `PerkSkillBoosts` (0CF788) | record; **não determinado** se o ator de jogador do SkyMP herda essa lista no cliente | sob a Q8: medir primeiro (ordem própria, ver §8); se confirmado e aprovado, entra no perfil do jogador com origem `RECORD` |
+| Lista `Perks` do NPC_ do jogador (`000007:Skyrim.esm`, vencedor AETHERIUS - LEVELED LISTS.esp) | 12 perks, entre elas `AlchemySkillBoosts` (0A725C) e `PerkSkillBoosts` (0CF788) | record; **não determinado** se o ator de jogador do SkyMP herda essa lista no cliente | decisão Q8: as necessárias (SkillBoosts) entram no perfil do jogador com origem `RECORD`, depois da medição DS-0c |
 | Lista `Perks` do NPC_ (com template) | perks de cada NPC | record | perfil do NPC (decisão Q2) |
-| SPID, linhas sem filtro | `MAG_ControllerGeneralPerk` (ADA501:Update.esm, vencedor Thaumaturgy), os 3 controladores do For Honor Balance Patch, os 2 do Reforged Directional Combat, `_SD_SDPerk` do DynamicBlockHit, e também 0A725C/0CF788 pelos INIs do Thaumaturgy e do Apothecary | **NPCs**: a gramática do SPID exclui o jogador no caminho on-load (`!IsPlayer()`); alcance sobre os atores de jogador do SkyMP **não determinado** | NPC: perfil do NPC. Jogador: depende da medição (DS-0b/sessão) e da decisão Q8; sem prova, não entra |
+| SPID, linhas sem filtro | `MAG_ControllerGeneralPerk` (ADA501:Update.esm, vencedor Thaumaturgy), os 3 controladores do For Honor Balance Patch, os 2 do Reforged Directional Combat, `_SD_SDPerk` do DynamicBlockHit, e também 0A725C/0CF788 pelos INIs do Thaumaturgy e do Apothecary | **NPCs**: a gramática do SPID exclui o jogador no caminho on-load (`!IsPlayer()`); alcance sobre os atores de jogador do SkyMP **não determinado** | decisão Q8: só as necessárias ao funcionamento dos sistemas entram, pelo registro de distribuições (origem `DISTRIBUTION`), para NPC e jogador, depois da medição DS-0c: `MAG_ControllerGeneralPerk`, 0A725C e 0CF788. **Não entram** (decisão Q7): os controladores do For Honor Balance Patch e do Reforged Directional Combat, inteiros. `_SD_SDPerk` do DynamicBlockHit é proc (ApplyWeaponSwingSpell) e fica no cliente |
 | SPID por raça | 3 perks raciais do Aetherius - A Race Overhaul | NPCs da raça; jogador não provado | conferir na DS-4 se o domínio `races` já as concede; nunca conceder duas vezes |
 | SPID de religião para NPC | `MAG_CultistSheogorathPerkNPC`, `MAG_CultistMeridiaPerkNPC` (Pilgrim) | NPCs | perfil do NPC |
 
@@ -67,7 +67,7 @@ Actor value sem fonte comprovada vale `UNSUPPORTED` no trace. Nunca é tratado c
 
 | Mod | Efeito em records | Condições | Situação |
 |---|---|---|---|
-| For Honor Balance Patch: `ReforgedParryController`, `ReforgedFollowupController`, `ReforgedDirectionalAttackController` (SPID sem filtro) | ModAttackDamage, ModIncomingDamage, ModArmorRating, ModPercentBlocked, crítico, stagger, procs | quase tudo com `HasMagicEffect` (estados de aparar, continuação e direção criados no cliente). Uma entrada sem condição: `ReforgedFollowupController` Effects[4], ModAttackDamage ×0,9 | não aplicados pela linha de base. Entradas com estado do cliente: `UNSUPPORTED` (Q7). A entrada sem condição depende do alcance do SPID (seção 3) e da Q8 |
+| For Honor Balance Patch: `ReforgedParryController`, `ReforgedFollowupController`, `ReforgedDirectionalAttackController` (SPID sem filtro) | ModAttackDamage, ModIncomingDamage, ModArmorRating, ModPercentBlocked, crítico, stagger, procs | quase tudo com `HasMagicEffect` (estados de aparar, continuação e direção criados no cliente). Uma entrada sem condição: `ReforgedFollowupController` Effects[4], ModAttackDamage ×0,9 | não aplicados pela linha de base; fora do servidor por inteiro, inclusive a entrada sem condição (decisão Q7) |
 | Reforged Directional Combat: `Passives` (dano feito ×1,05/×1,25, recebido ×0,95/×0,75), `Actives` (procs) | ModAttackDamage, ModIncomingDamage, ApplyCombatHitSpell | `HasMagicEffect` | não aplicados; `UNSUPPORTED` (Q7); procs ficam no cliente |
 | SCSI-ACTbfco: `bfco_baseperk001_bfcoSTYLE1` (0008CD:SCSI-ACTbfco-Main.esp) | **ModAttackDamage ×1,5** em duas entradas; dois ApplyCombatHitSpell; Activate | `GetGraphVariableInt` e IsAttacking/IsSprinting/IsPowerAttacking | não aplicados. Condição por graph variable: `UNSUPPORTED`. Concessão da perk não determinada |
 | BFCO (DLL), For Honor Power Attack (DLL, `bDirectionalPowerAttack=false`) | animações e eventos de ataque | DLL | **risco para a Q3**: os nomes dos eventos de ataque forte podem diferir de `attackPowerStart*`. A DS-0b registra os nomes reais |
@@ -93,9 +93,10 @@ A coluna Owner usa só os quatro valores do AGENTS §4: `AETHERIUS_SERVER`, `NAT
 | Armadura: rating, ENCH `DamageResist` do record e curva | NATIVE_SERVER | AETHERIUS_SERVER | curva absoluta Q4; preserva ENCH DamageResist |
 | Perks de classe, raça e pedra com condição certificada | NATIVE_CLIENT | AETHERIUS_SERVER | hoje projetadas ao cliente sem efeito no dano do servidor; DS-3/DS-4 |
 | Perks com condição de estado do cliente (`HasMagicEffect` de parry e direção, graph variable, distância, ângulo, correndo) | NATIVE_CLIENT | NATIVE_CLIENT | `UNSUPPORTED` no servidor e listadas na cobertura; promoção bloqueada (Q7) |
-| Perks do record do jogador e do SPID | NATIVE_CLIENT | NATIVE_CLIENT até a Q8 | alcance sobre o jogador não medido; promoção bloqueada até medição e decisão |
+| Perks globais necessárias (record do jogador e SPID: SkillBoosts, controlador do Thaumaturgy) | NATIVE_CLIENT | AETHERIUS_SERVER pelo registro de distribuições (Q8) | promoção só depois da medição DS-0c; filtro não avaliável `UNSUPPORTED` |
+| Perks dos mods de combate (For Honor, Reforged, SCSI) | NATIVE_CLIENT | NATIVE_CLIENT | fora do servidor (Q7); golpe direcional calculado como convencional |
 | Ataque forte | NATIVE_SERVER (flag do cliente) | AETHERIUS_SERVER | confirmação pelo nome do evento (Q3); jogador: nome já guardado; NPC: mudança no host (DS-5) |
-| Ataque furtivo | NATIVE_SERVER (flag do cliente, ×1,3) | DISABLED | sem critério de detecção; Q9 |
+| Ataque furtivo | NATIVE_SERVER (flag do cliente, ×1,3) | DISABLED | decisão Q9 do dono: desligado |
 | Bloqueio | NATIVE_SERVER (×0,1 com flag) | AETHERIUS_SERVER | bloqueio confirmado pelo estado nativo |
 | Têmpera de ferraria | NATIVE_CLIENT | AETHERIUS_SERVER | `health` do item do host |
 | Encantamento estático: efeitos além de DamageResist | NATIVE_CLIENT | AETHERIUS_SERVER por actor value certificado | demais actor values `UNSUPPORTED` |
@@ -110,9 +111,8 @@ A coluna Owner usa só os quatro valores do AGENTS §4: `AETHERIUS_SERVER`, `NAT
 | Vida relatada pelo cliente (`OnChangeValues`) | NATIVE_CLIENT | NATIVE_CLIENT | se a DS-0b/DS-7 provar segunda origem de dano físico, propor bloqueio em ordem própria; até lá, nenhuma família física vai a `active` sem essa prova |
 | Durabilidade | DISABLED | DISABLED | — |
 
-## 8. Perguntas para o dono
+## 8. Decisões do dono sobre as perguntas da DS-0 (23/10/2026)
 
-- **Q7.** As perks dos mods de combate que dependem de estado do cliente (aparar, ataque direcional, continuação) continuam sem efeito no dano do servidor, como hoje? Ou o servidor aceita esse estado como evidência do cliente, com o risco de trapaça declarado?
-- **Medição pendente para a Q8:** a sonda DS-0b é do servidor e não lê as perks efetivas do ator no cliente. Medir isso exige uma ordem própria (consulta `HasPerk`/rank no cliente pelo canal de entrega de perks da B5b, só leitura e só desenvolvimento).
-- **Q8.** Depois de medir quais perks os atores de jogador realmente têm no cliente (record do jogador e SPID), elas devem entrar no cálculo do servidor? Sem a medição, nada entra.
-- **Q9.** Como o servidor não sabe se o alvo detectou o atacante, o bônus de ataque furtivo fica desligado (sem bônus) até existir um critério? Alternativa: aceitar "agachado e fora do campo de visão do alvo" (ângulo) como critério, com o risco declarado.
+- **Q7 — fora.** Os efeitos dos mods de combate condicionados a estado do cliente não entram no cálculo do servidor; os controladores do For Honor Balance Patch e do Reforged Directional Combat ficam inteiros fora (inclusive `ReforgedFollowupController` Effects[4], ×0,9 sem condição). Ataques direcionais e quaisquer golpes aceitos pelo host contam como ataques convencionais: a animação nunca zera nem reduz o dano; só a falta de confirmação de ataque forte deixa de dar esse bônus.
+- **Q8 — sim, quando necessárias.** As perks globais necessárias ao funcionamento dos sistemas entram no perfil por um registro de distribuições no servidor (grants de origem `DISTRIBUTION` derivados das linhas dos `_DISTR.ini` do catálogo, com filtro avaliado no servidor; filtro não avaliável fica `UNSUPPORTED`). Necessárias nesta load order: `PerkSkillBoosts` (0CF788), `AlchemySkillBoosts` (0A725C) e `MAG_ControllerGeneralPerk` (ADA501). A medição DS-0c confirma o que o cliente aplica de fato ao jogador e aos NPCs, inclusive pela lista `Perks` do record do jogador.
+- **Q9 — desligado.** Sem bônus de ataque furtivo por enquanto.

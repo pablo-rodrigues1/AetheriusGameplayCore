@@ -1,6 +1,6 @@
 # D5 — Encaixe da fórmula de dano
 
-Estado: **decidida em 22/10/2026** pelo dono do projeto, que aprovou o `PLANO_DAMAGE_SYSTEM.md` (workspace) com as decisões Q1–Q6. Substitui a versão de 07/10, que era uma proposta adiada pela prioridade de pedras, raças, classes e religião.
+Estado: **decidida em 22/10/2026** pelo dono do projeto, que aprovou o `PLANO_DAMAGE_SYSTEM.md` (workspace) com as decisões Q1–Q6; completada em 23/10/2026 com Q7–Q9. Substitui a versão de 07/10, que era uma proposta adiada pela prioridade de pedras, raças, classes e religião.
 
 ## Contexto
 
@@ -14,15 +14,17 @@ Levantamento da DS-0: [FONTES_E_DONOS](../../../modules/damage-system/docs/FONTE
 2. **Modos por família**, configurados em `server-settings.json`: `off` monta exatamente a cadeia atual; `shadow` aplica a cadeia atual e registra o candidato; `active` aplica o candidato. O rollback é mudar a configuração e reiniciar.
 3. **Skills (Q1):** o valor da skill é o do estágio da classe atual, sem bônus de raça. NPC: skill do record.
 4. **NPCs (Q2):** entram na fórmula, com perfil do record vencedor (nível, skills, raça, perks e template).
-5. **Ataque forte e furtivo (Q3):** o bônus vale quando o servidor confirma o ataque por evento de animação recebido pelo host. Sem confirmação, não há bônus. O ataque forte é confirmável pelo nome do evento (no jogador já guardado pelo host; no NPC exige mudança no host). O furtivo não é: o host não sabe se o alvo detectou o atacante, e agachado não é ataque furtivo. Pela própria regra da Q3, o bônus furtivo fica desligado até existir critério aprovado (pergunta Q9 em FONTES_E_DONOS).
+5. **Ataque forte e furtivo (Q3):** o bônus vale quando o servidor confirma o ataque por evento de animação recebido pelo host. Sem confirmação, não há bônus. O ataque forte é confirmável pelo nome do evento (no jogador já guardado pelo host; no NPC exige mudança no host). O furtivo não é: o host não sabe se o alvo detectou o atacante, e agachado não é ataque furtivo. Pela própria regra da Q3, o bônus furtivo fica desligado (decisão Q9 do dono, 23/10/2026).
 6. **Constantes e curva (Q4):** escala de arma (+0,5 % por nível) e de armadura (+0,4 % por nível) pelos GMSTs vencedores; as perks (Vokrii e as demais) pela semântica do record vencedor, multiplicando-se à escala. A curva de armadura é absoluta: 500 → 80 %, 1000 → 90 %, teto de 90 %.
 7. **Linha de base e entrega (Q5):** a comparação do shadow é contra a cadeia padrão do SkyMP. A entrega vai ao repositório do Core com o pacote de integração do host (ADR D8).
 8. **Refino (Q6):** a fórmula consulta um `RefinementTierProvider` a cada cálculo e aplica o tier uma vez, na base elegível, sem consumi-lo. O provider instalado é neutro até existir identidade de instância de item.
-9. **O que não muda nesta trilha:** dano e cura mágicos, procs ao acertar, stagger, durabilidade e veneno.
+9. **Mods de combate (Q7, 23/10/2026):** os efeitos dos mods condicionados a estado do cliente (aparar, ataque direcional e continuação do For Honor e do Reforged) não entram no cálculo do servidor; os controladores desses mods ficam inteiros fora. **Todo golpe aceito pelo host é um ataque convencional**, qualquer que seja a animação que o originou (direcional, BFCO, combo): animação desconhecida ou não confirmada só deixa de dar o bônus de ataque forte e nunca zera nem reduz o dano.
+10. **Distribuições do SPID (Q8, 23/10/2026):** as perks globais necessárias ao funcionamento dos sistemas (as `SkillBoosts` e o controlador do Thaumaturgy) entram no perfil. Como o SPID roda no cliente e o servidor não as guarda, o DamageSystem registra as distribuições no servidor: o catálogo traz as linhas dos `_DISTR.ini`, o ActorState avalia os filtros suportados e registra grants de origem `DISTRIBUTION`. Filtro não avaliável fica `UNSUPPORTED`. A medição DS-0c confirma o que o cliente aplica de fato.
+11. **O que não muda nesta trilha:** dano e cura mágicos, procs ao acertar, stagger, durabilidade e veneno.
 
 ## Consequências
 
-- Perks de classe, raça e pedra passam a mudar o dano aplicado pelo servidor, o que hoje não acontece. Perks que o jogador recebe só no cliente (lista do record do jogador, SPID) **não** entram por esta decisão: dependem de medição e da pergunta Q8.
+- Perks de classe, raça e pedra passam a mudar o dano aplicado pelo servidor, o que hoje não acontece. Perks que o jogador recebe só no cliente (lista do record do jogador, SPID) entram pelo registro de distribuições (item 10), limitadas ao que a medição DS-0c confirmar.
 - A contribuição que a linha de base já aplica (encantamento `DamageResist` da armadura) é preservada; perdê-la seria regressão.
 - Efeitos que dependem de estado que só o cliente conhece (aparar e ataque direcional dos mods, distância, ângulo) ficam sem aplicar e aparecem na cobertura como `UNSUPPORTED`.
 - Confirmar ataque forte de NPC exige que o host registre a animação dos atores hospedados, o que hoje não faz (mudança pequena no host, DS-5).
