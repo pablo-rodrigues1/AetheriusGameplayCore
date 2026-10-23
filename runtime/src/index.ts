@@ -35,6 +35,8 @@ import { developmentAttributes, DevelopmentAttributesProjection } from './attrib
 export { developmentAttributes } from './attributes.ts';
 import { PoisonIntents } from './poison-intents.ts';
 export { PoisonIntents } from './poison-intents.ts';
+import { developmentCombatProbe, CombatProbeRecorder } from './combat-probe.ts';
+export { developmentCombatProbe, CombatProbeRecorder } from './combat-probe.ts';
 export { poisonDoseBonus } from './poison.ts';
 import { developmentLevel } from '../../modules/class-progression-system/src/index.ts';
 export { classGrants, readClass, createClassCommands, developmentLevel, withDevelopmentLevel, createAttributeCommands, readAttributeState, readAllocation, earnedAttributePoints } from '../../modules/class-progression-system/src/index.ts';
@@ -234,6 +236,11 @@ export function createGameplayCore(host: HostContext) {
     try{devAttributes=developmentAttributes(env);
       if(devAttributes)warn(`DEV attributes override=${devAttributes.health},${devAttributes.magicka},${devAttributes.stamina}; transient; never use on official server`);
     }catch(error){warn(`ERROR ${(error as Error).message}; DEV attributes refused; record maxima retained`);}
+    // DS-0b: development-only combat probe recorder (reads the host probe; never writes to the host).
+    let devCombatProbe:ReturnType<typeof developmentCombatProbe>;
+    try{devCombatProbe=developmentCombatProbe(env);
+      if(devCombatProbe)warn(`DEV COMBAT PROBE ENABLED: DEVELOPMENT ONLY, NEVER ON THE OFFICIAL SERVER; polls mp.getAetheriusCombatProbe every 2 s into ${devCombatProbe.file}`);
+    }catch(error){warn(`ERROR ${(error as Error).message}; DEV combat probe refused`);}
     failures.set('leveling','SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED: runtime awardLevelingXp entry available after boot; no caller/event source connected');
     for (const spec of specs.values()) mode(spec.id);
     if (devEnabled('ENABLE_STANDING_STONE_SPIKE') && ['canary', 'active'].includes(mode('standing-stones'))) {
@@ -320,6 +327,15 @@ export function createGameplayCore(host: HostContext) {
     actors.onBound(binding=>attributesProjection.publish(binding));
     actors.onReady(({binding})=>attributesProjection.publish(binding));
     actors.onUnbound(binding=>attributesProjection.clear(binding));
+    if(devCombatProbe){
+      const recorder=new CombatProbeRecorder({mp:host.mp,file:devCombatProbe.file,scope,warn});
+      if(recorder.start()){
+        actors.onReady(({binding})=>recorder.track(binding));
+        actors.onUnbound(binding=>recorder.untrack(binding));
+        // Final read and pending appends are awaited by shutdown (stopSystems).
+        stops.push(()=>recorder.shutdown());
+      }
+    }
     if(host.mp?.getServerSettings().aetheriusCombat?.weaponPoison===true)
       actors.onReady(({binding})=>{void composition?.inspect(binding).catch(()=>warn('poison dose UNSUPPORTED: composition unavailable'));});
     composition = new ActorComposition({ pool: db.status === 'SUPPORTED' ? pool : undefined,

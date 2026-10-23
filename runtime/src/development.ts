@@ -1,7 +1,7 @@
 export type CoreEnvironment = Readonly<Record<string, string | undefined>>;
 export const DEVELOPMENT_OPTIONS = Object.freeze([
   'GAMEPLAY_CORE_DEV_CLASS_SWEEP', 'GAMEPLAY_CORE_DEV_CLASS_LEVEL', 'GAMEPLAY_CORE_DEV_ATTRIBUTES', 'GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY',
-  'GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV', 'ENABLE_STANDING_STONE_SPIKE'
+  'GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV', 'ENABLE_STANDING_STONE_SPIKE', 'GAMEPLAY_CORE_DEV_COMBAT_PROBE'
 ] as const);
 
 /** offlineMode is a transport/login setting, including on the official server. */
