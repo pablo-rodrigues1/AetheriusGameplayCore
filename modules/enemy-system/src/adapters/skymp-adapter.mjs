@@ -5,6 +5,7 @@
  * index is persisted, so a reordered plugin list does not invalidate state.
  */
 import { parseStableRecordIdentity } from '../records/identity.mjs';
+import { prepareSkyMpSpawnLocation } from '../spawning/location.mjs';
 
 export class SkyMpIntegrationAdapter {
   constructor({
@@ -13,6 +14,7 @@ export class SkyMpIntegrationAdapter {
     onDungeonGeneration = null,
     onDungeonReset = null,
     resolveCanonicalRecord = null,
+    resolveCellOrWorldDesc = null,
     persistence = null,
     loot = null
   } = {}) {
@@ -21,6 +23,7 @@ export class SkyMpIntegrationAdapter {
     this.onDungeonGeneration = onDungeonGeneration;
     this.onDungeonReset = onDungeonReset;
     this.resolveCanonicalRecord = resolveCanonicalRecord;
+    this.resolveCellOrWorldDesc = resolveCellOrWorldDesc;
     this.persistence = persistence;
     this.loot = loot;
   }
@@ -30,6 +33,18 @@ export class SkyMpIntegrationAdapter {
     if (!canonical) return { status: 'UNRESOLVED', reason: 'invalid canonical identity' };
     if (typeof this.resolveCanonicalRecord !== 'function') return { status: 'UNRESOLVED', reason: 'host canonical resolver is not bound', canonical };
     return this.resolveCanonicalRecord(canonical);
+  }
+
+  prepareSpawnLocation(spawnRef) {
+    return prepareSkyMpSpawnLocation(spawnRef, this.resolveCellOrWorldDesc);
+  }
+
+  /** Call host spawn only with a validated original ACHR location, never player coordinates. */
+  spawnAtPlacedReference({ spawnRef, ...context } = {}) {
+    const prepared = this.prepareSpawnLocation(spawnRef);
+    if (prepared.status !== 'RESOLVED') return prepared;
+    if (typeof this.onServerSpawn !== 'function') return { status: 'FAILED', reason: 'HOST_SPAWN_UNBOUND' };
+    return this.onServerSpawn({ ...context, spawnRef, location: prepared.location });
   }
 
   beginDungeonGeneration(context) {
@@ -50,6 +65,7 @@ export class SkyMpIntegrationAdapter {
     return {
       deathHook: typeof this.onServerDeath === 'function' ? 'BOUND_BY_HOST' : 'UNRESOLVED',
       spawnHook: typeof this.onServerSpawn === 'function' ? 'BOUND_BY_HOST' : 'UNRESOLVED',
+      spawnLocationResolver: typeof this.resolveCellOrWorldDesc === 'function' ? 'BOUND_BY_HOST' : 'UNRESOLVED',
       dungeonGenerationHook: typeof this.onDungeonGeneration === 'function' ? 'BOUND_BY_HOST' : 'UNRESOLVED',
       dungeonResetHook: typeof this.onDungeonReset === 'function' ? 'BOUND_BY_HOST' : 'UNRESOLVED',
       canonicalRecordResolver: typeof this.resolveCanonicalRecord === 'function' ? 'BOUND_BY_HOST' : 'UNRESOLVED',
