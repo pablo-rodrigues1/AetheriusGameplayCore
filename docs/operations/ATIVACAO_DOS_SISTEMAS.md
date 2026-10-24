@@ -16,6 +16,8 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 
 ## 2. Tabelas, por migration
 
+**DS-0i:** nenhuma migration, tabela, pool ou ledger. Cadência de transporte e diagnóstico ficam em memória; não alteram spawn, criatura, geração ou respawn.
+
 **DS-0g-fix4:** sem migration/tabela nova. A observação v2 reutiliza templateChain e private.aetheriusNpcObservation no changeform do host; acrescenta v=2/race estável e revalida no carregamento.
 
 **DS-0g-fix3 (parada):** investigação sem mudança de schema, persistência ou canal. Sem migration nova.
@@ -91,6 +93,8 @@ npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
 **O servidor não aplica migrations sozinho.** Se faltar alguma, o Core sobe, deixa indisponíveis os sistemas que dependem do banco, e escreve no log o comando a rodar. O servidor do jogo não cai por isso.
 
 ## 4. Opções de configuração
+
+**DS-0i:** nenhuma opção nova. Recompilar host e cliente; a correção indexada usa o protocolo existente e independe da sonda. O diagnóstico no host exige a sonda DEV já documentada; no cliente usa logTrace existente. Addon para revisão em aetherius-server/build/ds0i-server/scam_native.node; cliente em _work/evidence/DS-0i/artifact/skymp5-client.js. Esta entrega não instala nem liga opções.
 
 **DS-0g-fix4:** nenhuma opção nova. Recompilar host/cliente/Core em conjunto. O host novo aceita v1 e v2; distribuir primeiro o host evita rejeição v2 por binário antigo. Sonda mantém as travas DEV da seção abaixo. Esta ordem não instala nem ativa artefatos; addon isolado em aetherius-server/build/fix4-server/scam_native.node e cliente em _work/evidence/DS-0g/fix4/artifact/.
 
@@ -206,6 +210,26 @@ Fora dessa combinação, **a presença da opção, inclusive vazia ou `false`, �
 A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolvimento: ela transferiu para o sistema novo a pedra de um personagem de teste que vinha do protótipo. O servidor oficial não tem dados do protótipo e não precisa dela.
 
 ## 5. O que cada sistema faz quando ligado
+
+### DS-0i: correção de posição de NPC hospedado
+
+Movimento divergente autorizado continua recusado; o host manda posição/rotação/mundo atuais em TeleportMessage com idx
+para o hoster atual. Primeiro envio imediato, seguintes no máximo 1/s; aceite, troca de hoster e destruição limpam a
+cadência. Nenhum pacote recusado atualiza a âncora. O jogador conserva TeleportMessage2. Spawn e respawn nativos intocados.
+
+Observar no JSONL os contadores npcMovementRejections por DISTANCE/WORLD_OR_CELL/TELEPORT_FLAG, npcCorrectionsSent e
+npcCorrectionsSuppressed. Nos snapshots do ator, lastNpcCorrection contém timeMs, idx, hoster, position, rotation,
+cellOrWorld e reason. O relatório mostra isso na seção 9.1. Esses contadores só existem com a sonda DEV.
+No cliente, procurar indexedTeleport RECEIVED / RESOLVED / RAGDOLL_PENDING / APPLIED. Falhas: IDX_UNRESOLVED,
+REFERENCE_ABSENT, IDENTITY_CHANGED, DESTINATION_ABSENT, APPLY_FAILED. APPLIED só confirma retorno da chamada nativa.
+Se o callback não retornar ou houver corrida comprovada no jogo, registrar a evidência para ordem própria; não remover
+ragdoll nem acrescentar espera arbitrária. A DS-0i não usa o canal de diagnóstico de criatura.
+
+Revisor: usar o harness parametrizado _work/evidence/DS-0i/teste-servidor-local.cjs conforme o relatório da ordem.
+Exige --port isolada, --work-dir vazia, --addon, --manifest de plugins e --npc-ref estável de uma referência já colocada.
+O bot não recebe pacotes de volta pela API: o harness prova contadores/recusa/aceite no host; morte/respawn, recebimento do
+teleporte e convergência no motor exigem sessão do dono, idealmente com dois clientes. Não executar na pasta/porta do dono.
+
 
 **DS-0g-fix4 — supersessão do bloqueio de base temporária (fix2/fix3):** com base estável, cliente mantém v1. Com base sem chave estável, lê raça efetiva e nível, envia v2 {channel,v,actor,race,level,generation}, sem root/getTemplate. Host enumera cadeias vencedoras sem pcLevel/sorteio e só adota uma única compatível por UseTraits/UseStats. Zero = NO_MATCHING_OBSERVATION, várias = AMBIGUOUS_OBSERVATION, sem desempate. Novos motivos de não envio: RACE_ABSENT e RACE_HAS_NO_STABLE_KEY. Q13: DamageSystem só observa; não muda base, não cria/remove NPC nem sorteia spawn.
 
@@ -530,6 +554,8 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 
 ## 8. Como desligar ou voltar atrás
 
+**DS-0i:** não há flag própria. Para reverter o comportamento, o responsável recompila os fontes anteriores desta ordem preservados no delta/snapshot e restaura host e cliente anteriores numa janela autorizada. Desligar a sonda só desliga diagnóstico, não a correção. Não apagar changeforms ou dados; nada foi ativado nesta entrega.
+
 - **B5b:** definir `GAMEPLAY_CORE_CLIENT_PERKS_MODE=off`, recarregar o Core e
   restaurar o bundle anterior conforme o guia. Perks já no save não são apagados
   por desligar. Revogar classes com o protocolo ativo antes de desativá-lo se
@@ -544,6 +570,13 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+**DS-0i (24/10/2026, Sol 6.1):** correção indexada, cadência, instrumentação do cliente e relatório da sonda preparados
+para revisão. Builds do host em saída isolada e cliente sem deploy; aceites, hashes, tentativas que falharam e roteiro em
+_work/evidence/DS-0i/ e _work/orders/DS-0i-correcao-posicao-npc.result.md. Nenhum servidor iniciado/parado,
+.env/server-settings/STATE, banco, jogo ou MO2 alterado. Nenhuma política de spawn/respawn mudou. Teste local e sessão em jogo
+não executados pelo implementador; nenhuma ativação a desfazer.
+
 
 **DS-0g-fix4 (24/10/2026, Sol 6.1):** código v2 por raça+nível, resolução única, persistência e diagnósticos preparados para revisão. Saídas de compilação isoladas/cliente sem deploy; aceites, hashes e limitações no relatório _work/orders/DS-0g-fix4-raca-e-nivel.result.md e evidências _work/evidence/DS-0g/fix4/. Nenhum .env/settings, migration/banco, jogo/MO2, servidor ou STATE alterado; nada foi ativado a desfazer. Sessão em jogo e revisão independente pendentes.
 

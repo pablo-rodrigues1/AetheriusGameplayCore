@@ -312,3 +312,18 @@ test('DS-0g-fix4: v2 race, candidates and nested version counters survive retry 
   assert.equal(rows[0].actorDesc,'desc:91');
   assert.deepEqual(h.lines.filter(r=>r.kind==='counters').at(-1).counters.npcReportVersions,counts);
 });
+
+
+test('DS-0i correction samples and movement counters survive a failed append unchanged',async()=>{
+  const h=harness();h.recorder.start();await h.recorder.flush();
+  const correction={timeMs:1500,idx:7,hoster:92,position:[1,2,3],rotation:[0,0,90],cellOrWorld:'abc:Location.esp',reason:'DISTANCE'};
+  const counts={DISTANCE:2,WORLD_OR_CELL:1,TELEPORT_FLAG:0};
+  const original=h.probe.fn;h.probe.fn=id=>{const answer=original(id);if(id!==undefined)return answer;
+    const snapshot=JSON.parse(answer);Object.assign(snapshot.counters,{npcMovementRejections:counts,npcCorrectionsSent:1,npcCorrectionsSuppressed:2});return JSON.stringify(snapshot);};
+  h.probe.push('hits',{aggressor:91,target:92,aggressorState:{actor:91,lastNpcCorrection:correction}});
+  h.writer.mode='fail';await h.poll();h.writer.mode='ok';await h.poll();await h.poll();
+  assert.deepEqual(h.lines.find(l=>l.kind==='hit').aggressorState.lastNpcCorrection,correction);
+  assert.equal(h.lines.filter(l=>l.kind==='hit').length,1);
+  const c=h.lines.filter(l=>l.kind==='counters').at(-1).counters;
+  assert.deepEqual(c.npcMovementRejections,counts);assert.equal(c.npcCorrectionsSent,1);assert.equal(c.npcCorrectionsSuppressed,2);
+});

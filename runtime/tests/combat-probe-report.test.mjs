@@ -140,3 +140,14 @@ test('DS-0g-fix4: v1 and v2 totals, reasons, race and candidate count remain sep
   assert(!md.includes('[object Object]'));
   const old=render('historical',{rows:[],invalid:[]});assert(old.includes('| v2 | — | — | — | — |'));
 });
+
+
+test('DS-0i reports movement rejection reasons and last authoritative NPC correction without claiming convergence', () => {
+  const rows=[{kind:'counters',counters:{npcMovementRejections:{DISTANCE:3,WORLD_OR_CELL:1,TELEPORT_FLAG:1},npcCorrectionsSent:2,npcCorrectionsSuppressed:3}},
+    {kind:'rejection',sequence:1,timeMs:2000,aggressor:9,target:2,reason:'TOO_DISTANT',aggressorState:{actor:9,
+      lastNpcCorrection:{timeMs:1800,idx:7,hoster:10,position:[100,200,300],rotation:[0,0,90],cellOrWorld:'abc:Location.esp',reason:'DISTANCE'}}}];
+  const md=render('DS-0i',{rows,invalid:[]});
+  for(const value of ['npcCorrectionsSent | 2','npcCorrectionsSuppressed | 3','DISTANCE=3','WORLD_OR_CELL=1','TELEPORT_FLAG=1',
+    '0x9 | 1800 | 7 | 0xA | DISTANCE | 100, 200, 300 | 0, 0, 90 | abc:Location.esp','não comprova recebimento'])assert(md.includes(value),value);
+  assert(render('old',{rows:[{kind:'hit',sequence:1,timeMs:1,aggressorState:{actor:9}}],invalid:[]}).includes('INDISPONÍVEL'));
+});

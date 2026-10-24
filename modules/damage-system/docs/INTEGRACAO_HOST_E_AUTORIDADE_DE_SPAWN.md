@@ -60,6 +60,22 @@ Sessões em jogo de 23 e 24/10/2026 (registros em `_work\evidence\H\` do workspa
 - **Sonda de combate, só de desenvolvimento** (`aetheriusCombat.probe` no `server-settings.json`; DS-0b, DS-0d): anéis em
   memória com golpes aceitos e recusados, animações, vida, equipamento e estado do ator; o gamemode grava em JSONL fora do
   caminho do hit. **Nunca ligar no servidor oficial.** Arquivo: `aetherius_combat/CombatProbe.h`.
+- **Correção de posição de NPC hospedado** (DS-0i, entrega para revisão; convergência em jogo pendente):
+  - Movimento autorizado que muda mundo/célula ou chega a distância **>=4096** da posição atual continua recusado;
+    teleportFlag também continua forçando recusa. O host envia ao hoster vigente uma **TeleportMessage com idx do NPC**,
+    confiável, com posição, rotação e mundo/célula atuais do próprio host. TeleportMessage2 continua exclusivo do jogador.
+  - Primeira correção imediata; novas correções no máximo uma por segundo por NPC/hoster (relógio monotônico).
+    Aceite limpa a cadência; OnHostAttempt limpa na troca efetiva de hoster; o evento BeforeDestroy limpa o estado mesmo
+    com shared_ptr externo. Referências fracas e checagem de identidade/idx/hoster antes do envio evitam reutilização.
+    Não há timer de reenvio, segundo ActorCombatState, persistência ou decisão de spawn/respawn/geração/criatura (Q13).
+  - Com a sonda DEV, contadores npcMovementRejections (DISTANCE, WORLD_OR_CELL, TELEPORT_FLAG), npcCorrectionsSent e
+    npcCorrectionsSuppressed, além de lastNpcCorrection nos snapshots de ator. São cópias em memória, sem I/O no hit.
+    O relatório da sonda mostra a última correção na seção 9.1; envio não comprova aplicação no motor.
+  - No cliente, remoteServer.ts registra indexedTeleport: RECEIVED, RESOLVED, RAGDOLL_PENDING e APPLIED, ou o motivo
+    explícito da falha. O callback confere novamente modelo, mapeamento e referência local antes de aplicar. APPLIED
+    significa retorno da chamada nativa; RAGDOLL_PENDING sem APPLIED continua sendo investigação, sem timeout novo.
+    ragdollService, CanHit, fórmulas, filtro do golpe, limite e respawn nativo permanecem intocados.
+  - Recomendações fora da DS-0i: encaminhar movimento a vizinhos só após validação; tratar limite de velocidade por pacote.
 - **Observação da criatura** (DS-0g):
   - `ActionListener::OnCustomPacket` intercepta o canal `aetherius.npc.observation` e valida tamanho, formato exato,
     sessão, NPC, hoster atual, vivo, chave estável `plugin:ID` (nunca FormID de runtime) e geração.

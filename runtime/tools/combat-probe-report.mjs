@@ -175,6 +175,13 @@ export function render(file, parsed) {
       p.state.cellOrWorld ?? '—', p.state.hosterDesc ?? hex(p.state.hoster), fmt(p.state.lastMovementMs), fmt(p.ageMs), fmt(p.state.lastMovementAttemptMs), fmt(p.state.lastMovementAccepted),
       (p.state.lastAttemptPosition ?? []).map(fmt).join(', '), p.state.lastAttemptCellDesc ?? hex(p.state.lastAttemptCellOrWorld), fmt(p.state.rejectedMovements)])), '');
 
+  out.push('### 9.1 Correções de posição de NPC (DS-0i)', '');
+  out.push('Os contadores npcMovementRejections, npcCorrectionsSent e npcCorrectionsSuppressed estão na seção 1. Última correção é uma amostra do envio confiável pelo host; não comprova recebimento ou convergência no motor. Formato histórico sem o campo = indisponível.', '');
+  out.push(table(['evento', 'seq', 'ator', 'correção em (ms)', 'idx', 'hoster', 'motivo', 'posição enviada', 'rotação enviada', 'célula/worldspace'],
+    a.positions.map(p => { const c = p.state.lastNpcCorrection; return [p.event.kind, p.event.sequence, hex(p.state.actor),
+      fmt(c?.timeMs), fmt(c?.idx), hex(c?.hoster), c?.reason ?? 'INDISPONÍVEL',
+      c ? (c.position ?? []).map(fmt).join(', ') : '—', c ? (c.rotation ?? []).map(fmt).join(', ') : '—', c?.cellOrWorld ?? '—']; })), '');
+
   out.push('## 10. Vida máxima por alvo', '');
   out.push('USADO_NO_GOLPE é o denominador da conta do host. CACHED_INPUTS_CURRENT compara os insumos atuais com a última leitura de GetMaximumValues, sem resolver records; calcula a expiração de fraqueza pelo relógio atual. Mudança de insumos, contexto ausente ou excedente dos limites = UNAVAILABLE. LAST_OBSERVED (formato intermediário) não garante máximo atual. A criatura mostra os provedores de raça e stats; quando ausentes no formato histórico ficam indisponíveis. resolvedNpcDesc é só o terminal histórico e não identifica a criatura.', '');
   out.push(table(['alvo', 'evento', 'seq', 'máximo usado no golpe', 'máximo atual', 'último máximo observado', 'observado em (ms)', 'estado', 'base', 'criatura (raça / stats)', 'cadeia', 'elos omitidos'],
