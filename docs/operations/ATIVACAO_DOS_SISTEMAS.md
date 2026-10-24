@@ -16,6 +16,9 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 
 ## 2. Tabelas, por migration
 
+**DS-2:** catálogo combat estático, sem migration, tabela, pool ou ledger novo. A reconciliação lê arquivos de plugins somente no boot. Testes automatizados de persistência usam apenas aetherius_test.
+
+
 **DS-0i:** nenhuma migration, tabela, pool ou ledger. Cadência de transporte e diagnóstico ficam em memória; não alteram spawn, criatura, geração ou respawn.
 
 **DS-0g-fix4:** sem migration/tabela nova. A observação v2 reutiliza templateChain e private.aetheriusNpcObservation no changeform do host; acrescenta v=2/race estável e revalida no carregamento.
@@ -93,6 +96,9 @@ npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
 **O servidor não aplica migrations sozinho.** Se faltar alguma, o Core sobe, deixa indisponíveis os sistemas que dependem do banco, e escreve no log o comando a rodar. O servidor do jogo não cai por isso.
 
 ## 4. Opções de configuração
+
+**DS-2:** nenhuma opção nova ou alteração local. Recompilar o bundle do Core inclui catalog/combat.json em BUILD_DOMAINS. O modo damage mantém off como padrão; configurar outro modo não entrega perfil nem ponte nativa. O C++ do spike ainda exige physicalRecords quando shadow é ligado: a DS-2 não altera/ativa esse caminho (ver integrations/host/COMBAT_DS2.md).
+
 
 **DS-0i:** nenhuma opção nova. Recompilar host e cliente; a correção indexada usa o protocolo existente e independe da sonda. O diagnóstico no host exige a sonda DEV já documentada; no cliente usa logTrace existente. Addon para revisão em aetherius-server/build/ds0i-server/scam_native.node; cliente em _work/evidence/DS-0i/artifact/skymp5-client.js. Esta entrega não instala nem liga opções.
 
@@ -210,6 +216,9 @@ Fora dessa combinação, **a presença da opção, inclusive vazia ou `false`, �
 A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolvimento: ela transferiu para o sistema novo a pedra de um personagem de teste que vinha do protótipo. O servidor oficial não tem dados do protótipo e não precisa dela.
 
 ## 5. O que cada sistema faz quando ligado
+
+**DS-2 — definições de combate:** o boot usa createFileHost para conferir os plugins relevantes e resolver WEAP/ARMO/AMMO/RACE/KYWD por StableFormKey. damage.catalog.domain passa a combat; catálogo SUPPORTED significa apenas reconciliação. damage.status permanece UNSUPPORTED com COMBAT_PROFILE_PROJECTION_NOT_DELIVERED (DS-4) e NATIVE_COMBAT_CATALOG_BRIDGE_NOT_DELIVERED (DS-5), além de dependências ausentes no ambiente. Não muda fórmula, ownership ou spawn (Q13); lacunas de ENCH, herança e AttackData ficam explícitas no catálogo.
+
 
 ### DS-0i: correção de posição de NPC hospedado
 
@@ -570,6 +579,9 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+**DS-2 (24/10/2026, Sol 6.1):** domínio combat gerado dos exports combat-20261024, runtime e documentação preparados para revisão. Saídas dos aceites, inclusive falhas/interrupções, em _work/evidence/DS-2/; resultados e roteiro nativo em _work/orders/DS-2-catalogo-combat.result.md. Nenhum servidor iniciado/parado, jogo/MO2, .env/settings/STATE ou aetherius_dev alterado. Bundle de build local recompilado, sem implantação ou ativação a desfazer. real-host.ts e sessão em jogo não executados pelo implementador; Opus executa o ensaio parametrizado em porta/pasta isoladas.
+
 
 **DS-0i (24/10/2026, Sol 6.1):** correção indexada, cadência, instrumentação do cliente e relatório da sonda preparados
 para revisão. Builds do host em saída isolada e cliente sem deploy; aceites, hashes, tentativas que falharam e roteiro em

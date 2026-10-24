@@ -83,7 +83,8 @@ const defaults: readonly SystemSpec[] = [
   { id: 'standing-stones', domain: 'standing-stones', requiresDatabase: true },
   { id: 'races', domain: 'races', requiresDatabase: true },
   { id: 'leveling', requiresDatabase:true },
-  ...['classes', 'religion', 'spells', 'perks', 'damage'].map(id => ({ id, domain: id, requiresDatabase: true }))
+  { id: 'damage', domain: 'combat', requiresDatabase: true },
+  ...['classes', 'religion', 'spells', 'perks'].map(id => ({ id, domain: id, requiresDatabase: true }))
 ];
 const coordinatorKey = Symbol.for('aetherius.runtime.coordinator.v1');
 interface Coordinator { tail: Promise<unknown>; active?: { shutdown(): Promise<void> } }
@@ -241,6 +242,7 @@ export function createGameplayCore(host: HostContext) {
     try{devCombatProbe=developmentCombatProbe(env);
       if(devCombatProbe)warn(`DEV COMBAT PROBE ENABLED: DEVELOPMENT ONLY, NEVER ON THE OFFICIAL SERVER; polls mp.getAetheriusCombatProbe every 2 s into ${devCombatProbe.file}`);
     }catch(error){warn(`ERROR ${(error as Error).message}; DEV combat probe refused`);}
+    failures.set('damage', 'COMBAT_PROFILE_PROJECTION_NOT_DELIVERED (DS-4); NATIVE_COMBAT_CATALOG_BRIDGE_NOT_DELIVERED (DS-5): catalog definitions do not certify a damage calculation');
     failures.set('leveling','SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED: runtime awardLevelingXp entry available after boot; no caller/event source connected');
     for (const spec of specs.values()) mode(spec.id);
     if (devEnabled('ENABLE_STANDING_STONE_SPIKE') && ['canary', 'active'].includes(mode('standing-stones'))) {

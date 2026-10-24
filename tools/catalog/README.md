@@ -69,3 +69,46 @@ do domínio. Seu `runtime/build.mjs` embute os JSONs em `BUILD_DOMAINS`; o revis
 precisa executar `npm run build --workspace @aetherius/runtime` na raiz do Core
 com as dependências instaladas antes de usar a correção no bundle. B2-fix1 não
 reescreve `runtime/` nem `dist/`.
+
+## Gerar e conferir combat (DS-2)
+
+Da raiz do workspace, com Node 22 e as dependências do Core já instaladas:
+
+```powershell
+node --experimental-strip-types AetheriusGameplayCore/tools/catalog/build.ts _work/exports/combat-20261024 aetherius-server/build/dist/server/data/aetherius-loadorder.json AetheriusGameplayCore/catalog combat
+node --experimental-strip-types AetheriusGameplayCore/tools/catalog/verify.ts .
+cd AetheriusGameplayCore
+npm run build --workspace @aetherius/runtime
+node --test runtime/tests/combat.test.mjs
+```
+
+O quarto argumento `combat` gera somente combat.json. Sem esse argumento, o
+comando mantém o comportamento histórico e gera apenas pedras/raças; não use os
+exports novos nesse modo. Classes mantêm seu gerador. O reader de streaming
+comum está em exports.ts, preservando a seleção/assinaturas dos domínios antigos.
+
+combat.ts exige WEAP/ARMO/AMMO/RACE/KYWD com contagens e epoch coerentes; indexa
+por FormID e inclui todos os records físicos, sem filtro por nome ou jogabilidade.
+Usa apenas fingerprints relevantes do manifesto explícito. O manifesto não prova
+correspondência criptográfica entre o export houseCARL e os arquivos; verify.ts
+compara os fingerprints catalogados com os arquivos reais. MANIFESTO.txt dos
+exports fornece hashes de reprodução; não fornece fingerprints TES4.
+
+Assinaturas de domínio e de cada record independem da ordem do manifesto. O teste
+combat.test.mjs regenera o arquivo canônico com o manifesto invertido, confere os
+valores por FormID, resolve FULL/LIGHT com IDs distintos e assinaturas iguais,
+confere ausência de record, lacunas de dados, epoch divergente e metadados ausentes.
+O contrato duplo usa os wrappers reais do host; não prova execução nativa.
+
+verify.ts e real-host.ts incluem agora combat. O ensaio nativo continua reservado
+ao Opus (AGENTS §7.1), com porta e pasta explícitas, a partir do workspace:
+
+```powershell
+node --experimental-strip-types AetheriusGameplayCore/tools/catalog/real-host.ts . _work/evidence/DS-2/real-host-opus 7791
+```
+
+Esse comando não foi executado pelo implementador: exige servidor local. A porta
+é exemplo, não padrão; conferir que está livre e não usar a porta do dono. O
+harness prepara processos isolados, sem gamemode/banco/saves, e compara todos os
+records após reordenar. O bundle é reconstruído com combat em BUILD_DOMAINS e o
+boot usa o mesmo createFileHost. A DS-2 não instala nem ativa esses artefatos.

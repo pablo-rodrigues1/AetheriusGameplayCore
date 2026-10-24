@@ -32,7 +32,7 @@ export interface UnsupportedLink {
 }
 export interface DomainData {
   readonly schemaVersion: 1;
-  readonly domain: 'standing-stones' | 'races' | 'classes';
+  readonly domain: 'standing-stones' | 'races' | 'classes' | 'combat';
   readonly exportEpoch: string;
   readonly signature: CatalogSignature;
   readonly dependencies: readonly PluginFingerprint[];

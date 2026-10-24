@@ -1,5 +1,4 @@
-import { createReadStream, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decodeFormKey, encodeFormKey } from '../../shared/record-catalog/src/codecs.ts';
@@ -8,35 +7,8 @@ import type { CatalogRecord, DomainData, PluginFingerprint, UnsupportedLink } fr
 import type { JsonObject, JsonValue } from '../../shared/contracts/src/messages.ts';
 import type { RecordType, StableFormKey } from '../../shared/contracts/src/identity.ts';
 
-interface ExportField { path: string; value?: string; note?: string }
-interface ExportRow { formid: string; type: string; editorid: string; winner: string; fields: ExportField[] }
-interface ExportManifest { housecarl_artifact: number; row_count: number; epoch: string }
-interface ExportFile { manifest: ExportManifest; rows: ExportRow[] }
-
-async function readExport(file: string): Promise<ExportFile> {
-  const lines = createInterface({ input: createReadStream(file, 'utf8'), crlfDelay: Infinity });
-  let manifest: ExportManifest | undefined;
-  const rows: ExportRow[] = [];
-  const identities = new Set<string>();
-  for await (const line of lines) {
-    if (!line.trim()) continue;
-    const parsed: unknown = JSON.parse(line.replace(/^\uFEFF/, ''));
-    if (!manifest) {
-      manifest = parsed as ExportManifest;
-      if (manifest.housecarl_artifact !== 1 || !Number.isSafeInteger(manifest.row_count) || typeof manifest.epoch !== 'string') {
-        throw new TypeError(`Invalid export manifest: ${file}`);
-      }
-    } else {
-      const row = parsed as ExportRow;
-      if (typeof row.formid !== 'string' || typeof row.winner !== 'string' || !Array.isArray(row.fields)) throw new TypeError(`Invalid row: ${file}`);
-      if (identities.has(row.formid.toLowerCase())) throw new TypeError(`Duplicate record: ${row.formid}`);
-      identities.add(row.formid.toLowerCase());
-      rows.push(row);
-    }
-  }
-  if (!manifest || rows.length !== manifest.row_count) throw new TypeError(`Export row count mismatch: ${file}`);
-  return { manifest, rows };
-}
+import { readExport } from './exports.ts';
+import type { ExportRow, ExportFile } from './exports.ts';
 const value = (row: ExportRow, path: string): string | undefined => row.fields.find(f => f.path === path)?.value;
 const recordTypes: Readonly<Record<string, RecordType>> = { Activator: 'ACTI', Race: 'RACE', Spell: 'SPEL', MagicEffect: 'MGEF', Perk: 'PERK' };
 
@@ -188,10 +160,13 @@ export async function buildDomains(exportsDir: string, fingerprints: readonly Pl
 }
 
 async function main(): Promise<void> {
-  const [exportsDir, manifestPath, outputDir] = process.argv.slice(2);
-  if (!exportsDir || !manifestPath || !outputDir) throw new TypeError('Usage: build.ts <exports-dir> <plugin-manifest.json> <output-dir>');
+  const [exportsDir, manifestPath, outputDir, domain] = process.argv.slice(2);
+  if (domain !== undefined && domain !== 'combat') throw new TypeError('Unknown domain argument (expected combat)');
+  if (!exportsDir || !manifestPath || !outputDir) throw new TypeError('Usage: build.ts <exports-dir> <plugin-manifest.json> <output-dir> [combat]');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8').replace(/^\uFEFF/, '')) as { plugins: PluginFingerprint[] };
-  const domains = await buildDomains(resolve(exportsDir), manifest.plugins);
+  const domains = domain === 'combat'
+    ? [await (await import('./combat.ts')).buildCombatDomain(resolve(exportsDir), manifest.plugins)]
+    : await buildDomains(resolve(exportsDir), manifest.plugins);
   mkdirSync(outputDir, { recursive: true });
   for (const data of domains) {
     writeFileSync(join(outputDir, `${data.domain}.json`), `${canonicalJson(data)}\n`);

@@ -176,3 +176,38 @@ A coluna Owner usa só os quatro valores do AGENTS §4: `AETHERIUS_SERVER`, `NAT
 - **Q7 — fora.** Os efeitos dos mods de combate condicionados a estado do cliente não entram no cálculo do servidor; os controladores do For Honor Balance Patch e do Reforged Directional Combat ficam inteiros fora (inclusive `ReforgedFollowupController` Effects[4], ×0,9 sem condição). Ataques direcionais e quaisquer golpes aceitos pelo host contam como ataques convencionais: a animação nunca zera nem reduz o dano; só a falta de confirmação de ataque forte deixa de dar esse bônus.
 - **Q8 — sim, quando necessárias.** As perks globais necessárias ao funcionamento dos sistemas entram no perfil por um registro de distribuições no servidor (grants de origem `DISTRIBUTION` derivados das linhas dos `_DISTR.ini` do catálogo, com filtro avaliado no servidor; filtro não avaliável fica `UNSUPPORTED`). Necessárias nesta load order: `PerkSkillBoosts` (0CF788), `AlchemySkillBoosts` (0A725C) e `MAG_ControllerGeneralPerk` (ADA501). A medição DS-0c confirma o que o cliente aplica de fato ao jogador e aos NPCs, inclusive pela lista `Perks` do record do jogador.
 - **Q9 — desligado.** Sem bônus de ataque furtivo por enquanto.
+
+## 9. Fonte combat entregue na DS-2 (24/10/2026)
+
+Fonte efetiva: exports WEAP/ARMO/AMMO/RACE/KYWD de
+_work/exports/combat-20261024, gerados pelo Opus com houseCARL na instância
+C:\modOrganizer, perfil AETHERIUS - GRAFICO - QUALIDADE, epoch
+e2-771486e30fc46d2a. O implementador usa esses artefatos por FormID, sem nova
+consulta ao houseCARL nem mudança de instância. MANIFESTO.txt registra seus hashes.
+
+catalog/combat.json inclui todos os records físicos exportados, inclusive
+equipamento não jogável e RACE de NPC; KYWD somente alcançados. Nenhum filtro
+por nome, nenhum valor de memória ou de descrição de mod. Os fingerprints de
+plugins vêm explicitamente do manifesto local de plugins e são conferidos contra
+os arquivos reais por verify.ts/createFileHost. Isso não prova por si só a
+correspondência criptográfica entre o epoch houseCARL e o conteúdo dos plugins.
+
+Campos e política de ausência estão em catalog/README.md. Enchantments são
+referências, não contribuição certificada de ENCH DamageResist. Templates de
+WEAP/ARMO/AttackRace não são resolvidos; depth 3 deixa os detalhes de
+RACE.Attacks[].AttackData indisponíveis. Essas lacunas constam de unsupported,
+sem default e sem inferência por evento de animação.
+
+**Supersessão da previsão da seção 2:** esta ordem recebe cinco tipos físicos,
+sem export GMST; os valores numéricos da tabela histórica não foram incorporados
+como constantes. Ler/certificar GMST no boot continua pendente para a integração
+da fórmula. Furtivo permanece desligado (Q9). PERK depth 12 fica com o compilador
+DS-3. As linhas vencedoras SPID da Q8 não estão entre os artefatos desta ordem;
+registro de distribuições não está entregue pelo domínio combat.
+
+O runtime associa damage a combat e resolve pelo adapter de arquivos comum.
+Catálogo reconciliado não significa cálculo certificado: damage continua
+UNSUPPORTED pelos motivos DS-4 (perfil) e DS-5 (ponte nativa). O mapa e proposta
+para substituir physicalRecords estão em integrations/host/COMBAT_DS2.md;
+o C++ não foi alterado. Nenhuma família muda de dono. Q13: nenhum sorteio,
+criação, remoção, substituição ou decisão de spawn/respawn é feito pelo catálogo.

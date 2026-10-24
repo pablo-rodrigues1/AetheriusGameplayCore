@@ -79,7 +79,7 @@ function reorder(order: string[], metadata: PluginFingerprint[], dependencies: M
   throw new Error('No valid swap for light plugins');
 }
 function child(workspace: string, evidence: string, port: number, configFile: string): void {
-  const data = ['standing-stones', 'races', 'classes'].map(name => JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog', `${name}.json`), 'utf8')) as DomainData);
+  const data = ['standing-stones', 'races', 'classes', 'combat'].map(name => JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog', `${name}.json`), 'utf8')) as DomainData);
   const settings = JSON.parse(readFileSync(configFile, 'utf8')) as Settings;
   assert.equal(settings.port, port, 'Child settings must use the requested port');
   const require = createRequire(import.meta.url);

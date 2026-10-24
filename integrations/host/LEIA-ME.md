@@ -251,3 +251,13 @@ node integrations/host/make-package.mjs --server "<caminho do aetherius-server>"
 - Revisão independente da correção `fix-1010` e conferência, pelo mantenedor, da diferença de comportamento para ator sem aparência (seção 3).
 - Bônus de atributos e veneno sem validação em jogo; o estado de cada sistema está no `INSTALL.md`, seção 2.
 - O pacote precisa ser regenerado (seção 8) se a árvore do `aetherius-server` de desenvolvimento mudar depois de 12/10/2026.
+
+## Atualização DS-2 (24/10/2026): catálogo combat no Core
+
+A afirmação histórica de que a trilha de dano está adiada está supersedida por
+PLANO_DAMAGE_SYSTEM.md. O Core agora embute e resolve o domínio combat no boot,
+mas o pacote C++ desta pasta conserva o spike com physicalRecords. O mapa dos
+consumidores, a substituição necessária na DS-5 e as limitações do boot estão em
+[COMBAT_DS2.md](COMBAT_DS2.md). Não copiar combat.json para physicalRecords:
+o domínio completo excede a capacidade do spike. A DS-2 não aplica nem regenera
+este patch, não modifica aetherius-server e não certifica cálculo de dano.
