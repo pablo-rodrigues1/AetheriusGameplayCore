@@ -16,6 +16,8 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 
 ## 2. Tabelas, por migration
 
+**DS-0g-fix3 (parada):** investigação sem mudança de schema, persistência ou canal. Sem migration nova.
+
 **DS-0g-fix2:** diagnóstico de não envio usa anel/contadores em memória; nenhuma migration, tabela ou persistência nova.
 
 **DS-0g:** nenhuma migration/pool/ledger novo. A escolha validada de NPC e sua geração são persistidas pelo changeform nativo existente (templateChain + propriedade privada), sem PostgreSQL.
@@ -87,6 +89,8 @@ npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
 **O servidor não aplica migrations sozinho.** Se faltar alguma, o Core sobe, deixa indisponíveis os sistemas que dependem do banco, e escreve no log o comando a rodar. O servidor do jogo não cai por isso.
 
 ## 4. Opções de configuração
+
+**DS-0g-fix3 (parada):** nenhuma opção ou binário novo. A equivalência de getTemplate com o terminal TPLT/LVLN não foi comprovada; ver FONTES_E_DONOS §6 e _work/evidence/DS-0g/fix3/raiz-semantica-investigacao.md.
 
 **DS-0g-fix2:** nenhuma opção nova. Distribuir host, cliente e bundle do Core recompilados para capturar o diagnóstico; sonda mantém as travas DEV. Base temporária não resolvida (limite de getTemplate, FONTES_E_DONOS §6).
 
@@ -198,6 +202,8 @@ Fora dessa combinação, **a presença da opção, inclusive vazia ou `false`, �
 A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolvimento: ela transferiu para o sistema novo a pedra de um personagem de teste que vinha do protótipo. O servidor oficial não tem dados do protótipo e não precisa dela.
 
 ## 5. O que cada sistema faz quando ligado
+
+**DS-0g-fix3 (parada):** a explicação histórica da fix2 sobre raiz não prova que nextTemplate do motor corresponda à cadeia TPLT/LVLN. V2 não implementado; diagnóstico fix2 e UNSUPPORTED da base temporária continuam vigentes. Nenhum procedimento novo de ativação.
 
 ### Atributos distribuídos (C3d-fix1)
 
@@ -528,6 +534,8 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+**DS-0g-fix3 (24/10/2026, Sol 6.1):** parada conforme Pedido 2 por semântica não comprovada: SKSE percorre nextTemplate/faceNPC, distinto do campo TPLT percorrido pelo host. Investigação e notas documentais somente; nenhum build/artefato novo, instalação, configuração, migration, banco ou servidor alterado. Evidência em _work/evidence/DS-0g/fix3; relatório _work/orders/DS-0g-fix3-raiz-e-raca.result.md. Nada foi ativado nesta ordem.
 
 **Q10 (decisão do dono, 23/10/2026 21:00):** incluir no server-settings.json do oficial a chave `"damageMultFormulaSettings": {"multiplier": 1}`. Sem a chave, DamageMultFormula aplica o padrão 2 a NPC→jogador. A sessão DS-0d 21:08 usou 1× no local (registro `_work/evidence/H/sessao-DS-0d-20261023.md`); esta ordem não leu nem alterou settings. O outro desenvolvedor confirma/aplica a mesma chave no oficial. Não desligar a opção removendo a chave, pois isso repõe 2×.
 
