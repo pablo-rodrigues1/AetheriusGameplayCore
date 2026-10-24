@@ -540,12 +540,17 @@
       "description": "Entry point ModPowerAttackDamage na perk de classe Furious Strength (formid=03AF81:Skyrim.esm, editorid=VKR_One_040_FuriousStrength_Perk_WasSavageStrike, winner=Vokrii - Minimalistic Perks of Skyrim.esp, concedida por arqueiro nv.20, mestre_espadachim nv.20, paladino nv.20 e ranger nv.20). Effects[0]: Modification=MultiplyOnePlusAVMult, ActorValue=Stamina, Value=0.001, Priority=120, Rank=0. Conta explicita com Stamina=60: 1 + 0.001 * 60 = 1.06.",
       "origin": "PERK-depth12.jsonl formid=03AF81:Skyrim.esm editorid=VKR_One_040_FuriousStrength_Perk_WasSavageStrike + modules/class-system/config/classes-config.json (arqueiro, mestre_espadachim, paladino, ranger) + PLANO_DAMAGE_SYSTEM.md §2 e §3 Funções 4, 5 e 6",
       "expectedStatus": "PENDING",
-      "pendingPlanFunction": "Função 4, Função 5 e Função 6 (DS-3 / DS-5): suportar entry point ModPowerAttackDamage (MultiplyOnePlusAVMult Stamina 0.001) e condições GetEquippedItemType e IsWeaponSkillType",
+      "pendingPlanFunction": "Função 4 e Função 5 (DS-3 / DS-5): ModPowerAttackDamage with MultiplyOnePlusAVMult Stamina 0.001; exported HasKeyword OR conditions.",
       "formKey": "Skyrim.esm:03AF81",
       "formid": "03AF81:Skyrim.esm",
       "editorid": "VKR_One_040_FuriousStrength_Perk_WasSavageStrike",
       "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
-      "classGrantedBy": ["arqueiro", "mestre_espadachim", "paladino", "ranger"],
+      "classGrantedBy": [
+        "arqueiro",
+        "mestre_espadachim",
+        "paladino",
+        "ranger"
+      ],
       "recordEffect": {
         "EntryPoint": "ModPowerAttackDamage",
         "Modification": "MultiplyOnePlusAVMult",
@@ -554,23 +559,62 @@
         "Priority": 120,
         "Rank": 0,
         "Conditions": [
-          { "RunOnTabIndex": 0, "Function": "GetEquippedItemType", "CompareOperator": "NotEqualTo", "ComparisonValue": 9.0, "Flags": "0", "parameter1": "Left" },
-          { "RunOnTabIndex": 0, "Function": "GetEquippedItemType", "CompareOperator": "NotEqualTo", "ComparisonValue": 9.0, "Flags": "0", "parameter1": "Right" },
-          { "RunOnTabIndex": 1, "Function": "IsWeaponSkillType", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "OR", "parameter1": "OneHanded" },
-          { "RunOnTabIndex": 1, "Function": "GetEquipped", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "OR", "parameter1": "0001F4:Skyrim.esm" }
+          {
+            "RunOnTabIndex": 1,
+            "Function": "HasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "01E713:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 1,
+            "Function": "HasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "01E714:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 1,
+            "Function": "HasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "01E711:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 1,
+            "Function": "HasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "01E712:Skyrim.esm"
+          }
         ]
       },
       "input": {
         "entryPoint": "ModPowerAttackDamage",
         "operation": "MultiplyOnePlusAVMult",
         "perkFormKey": "Skyrim.esm:03AF81",
-        "actorSkills": { "OneHanded": 60.0, "Stamina": 60.0 },
-        "actorPerks": ["Skyrim.esm:03AF81"],
-        "keywords": ["Skyrim.esm:01E711"]
+        "actorSkills": {
+          "OneHanded": 60,
+          "Stamina": 60
+        },
+        "actorPerks": [
+          "Skyrim.esm:03AF81"
+        ],
+        "keywords": [
+          "Skyrim.esm:01E711"
+        ]
       },
       "expected": {
         "multiplier": 1.06,
-        "tolerance": 1e-6
+        "tolerance": 0.000001
       }
     },
     {
@@ -653,33 +697,65 @@
       "formid": "0C1E91:Skyrim.esm",
       "editorid": "VKR_One_070_AdvancedSword_Perk_WasBladesman3",
       "winner": "Vokrii - Apply Spell Conditions Fix.esp",
-      "classGrantedBy": ["mestre_espadachim"],
+      "classGrantedBy": [
+        "mestre_espadachim"
+      ],
       "exportDifferenceNote": "Em PERK.jsonl (linha 1471, depth 5) o record 0C1E91:Skyrim.esm contem todos os 16 efeitos (Effects[0..13] ApplyCombatHitSpell, Effects[14] CalculateMyCriticalHitChance Add 100.0 Priority 100 Rank 0, Effects[15] CalculateMyCriticalHitDamage Multiply 10.0 Priority 99 Rank 0). Em PERK-depth12.jsonl (linha 1471, depth 12) a expansao e truncada no limite de 2000 linhas dentro de Effects[9].Conditions[0].Conditions[3], mostrando apenas Effects[0..9] (ApplyCombatHitSpell).",
       "noClassPerkForOperation": "NO_CLASS_PERK_IN_LOAD_ORDER para operacao Set em CalculateMyCriticalHitChance: busca nas perks de classe contra PERK.jsonl e PERK-depth12.jsonl retornou apenas 0C1E91:Skyrim.esm (Add 100.0 em PERK.jsonl Effects[14]); 03FD10:Vokrii - Minimalistic Perks of Skyrim.esp (Set 100.0) nao pertence a nenhuma classe.",
       "recordEffect": {
         "EntryPoint": "CalculateMyCriticalHitChance",
         "Modification": "Add",
-        "Value": 100.0,
+        "Value": 100,
         "Priority": 100,
         "Rank": 0,
         "Conditions": [
-          { "RunOnTabIndex": 0, "Function": "IsPowerAttacking", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0" },
-          { "RunOnTabIndex": 1, "Function": "HasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "01E711:Skyrim.esm" },
-          { "RunOnTabIndex": 2, "Function": "GetActorValuePercent", "CompareOperator": "LessThan", "ComparisonValue": 0.25, "Flags": "0", "parameter1": "Health" }
+          {
+            "RunOnTabIndex": 0,
+            "Function": "IsPowerAttacking",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject"
+          },
+          {
+            "RunOnTabIndex": 1,
+            "Function": "HasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "01E711:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 2,
+            "Function": "HasMagicEffect",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "23331D:Vokrii - Minimalistic Perks of Skyrim.esp"
+          }
         ]
       },
       "input": {
         "entryPoint": "CalculateMyCriticalHitChance",
         "operation": "Add",
         "perkFormKey": "Skyrim.esm:0C1E91",
-        "actorSkills": { "OneHanded": 60.0 },
-        "actorPerks": ["Skyrim.esm:0C1E91"],
-        "keywords": ["Skyrim.esm:01E711"]
+        "actorSkills": {
+          "OneHanded": 60
+        },
+        "actorPerks": [
+          "Skyrim.esm:0C1E91"
+        ],
+        "keywords": [
+          "Skyrim.esm:01E711"
+        ]
       },
       "expected": {
-        "multiplier": 100.0,
-        "tolerance": 1e-6
-      }
+        "multiplier": 100,
+        "tolerance": 0.000001
+      },
+      "statusReason": "UNSUPPORTED_UNCERTIFIED_CONDITIONS: IsPowerAttacking and HasMagicEffect are present in the exported effect; remains PENDING under DamageSystem Function 5."
     },
     {
       "id": "EP-06A-CalculateMyCriticalHitDamage-ArcheryMastery-MultiplyOnePlusAVMult",
@@ -731,38 +807,70 @@
       "formid": "0C1E91:Skyrim.esm",
       "editorid": "VKR_One_070_AdvancedSword_Perk_WasBladesman3",
       "winner": "Vokrii - Apply Spell Conditions Fix.esp",
-      "classGrantedBy": ["mestre_espadachim"],
+      "classGrantedBy": [
+        "mestre_espadachim"
+      ],
       "exportDifferenceNote": "Em PERK.jsonl (linha 1471, depth 5) o record 0C1E91:Skyrim.esm contem todos os 16 efeitos (Effects[0..13] ApplyCombatHitSpell, Effects[14] CalculateMyCriticalHitChance Add 100.0 Priority 100 Rank 0, Effects[15] CalculateMyCriticalHitDamage Multiply 10.0 Priority 99 Rank 0). Em PERK-depth12.jsonl (linha 1471, depth 12) a expansao e truncada no limite de 2000 linhas dentro de Effects[9].Conditions[0].Conditions[3], mostrando apenas Effects[0..9] (ApplyCombatHitSpell).",
       "recordEffect": {
         "EntryPoint": "CalculateMyCriticalHitDamage",
         "Modification": "Multiply",
-        "Value": 10.0,
+        "Value": 10,
         "Priority": 99,
         "Rank": 0,
         "Conditions": [
-          { "RunOnTabIndex": 0, "Function": "IsPowerAttacking", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0" },
-          { "RunOnTabIndex": 1, "Function": "HasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "01E711:Skyrim.esm" },
-          { "RunOnTabIndex": 2, "Function": "GetActorValuePercent", "CompareOperator": "LessThan", "ComparisonValue": 0.25, "Flags": "0", "parameter1": "Health" }
+          {
+            "RunOnTabIndex": 0,
+            "Function": "IsPowerAttacking",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject"
+          },
+          {
+            "RunOnTabIndex": 1,
+            "Function": "HasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "01E711:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 2,
+            "Function": "HasMagicEffect",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "23331D:Vokrii - Minimalistic Perks of Skyrim.esp"
+          }
         ]
       },
       "input": {
         "entryPoint": "CalculateMyCriticalHitDamage",
         "operation": "Multiply",
         "perkFormKey": "Skyrim.esm:0C1E91",
-        "actorSkills": { "OneHanded": 60.0 },
-        "actorPerks": ["Skyrim.esm:0C1E91"],
-        "keywords": ["Skyrim.esm:01E711"]
+        "actorSkills": {
+          "OneHanded": 60
+        },
+        "actorPerks": [
+          "Skyrim.esm:0C1E91"
+        ],
+        "keywords": [
+          "Skyrim.esm:01E711"
+        ]
       },
       "expected": {
-        "multiplier": 10.0,
-        "tolerance": 1e-6
-      }
+        "multiplier": 10,
+        "tolerance": 0.000001
+      },
+      "statusReason": "UNSUPPORTED_UNCERTIFIED_CONDITIONS: IsPowerAttacking and HasMagicEffect are present in the exported effect; remains PENDING under DamageSystem Function 5."
     },
     {
       "id": "EP-07-ModIncomingDamage-BattleFatigue-Multiply",
       "group": "G2_CLASS_PERK_ENTRY_POINTS",
       "kind": "perk_entry_point",
-      "description": "Entry point ModIncomingDamage na perk de classe Battle Fatigue (formid=2C1037:Vokrii - Minimalistic Perks of Skyrim.esp, editorid=VKR_Hea_030_BattleFatigue_Perk, winner=Vokrii - Minimalistic Perks of Skyrim.esp, concedida por cavaleiro_negro nv.10, guardiao nv.10 e paladino nv.10). Effects[0]: Modification=Multiply, Value=0.8, Priority=190, Rank=0 quando defensor veste armadura pesada completa (06C0EC/06C0ED/06C0EE/06C0EF:Skyrim.esm == 1 e 06BBD3:Skyrim.esm == 0) e atacante tem Stamina <= 25%.",
+      "description": "ModIncomingDamage na perk Battle Fatigue (2C1037:Vokrii - Minimalistic Perks of Skyrim.esp): Effects[0] Multiply 0.8, Priority 200, Rank 0. Condições exportadas incluem WornHasKeyword, HasPerk(008028) e GetActorValuePercent(Stamina) <= 0.125.",
       "origin": "PERK-depth12.jsonl formid=2C1037:Vokrii - Minimalistic Perks of Skyrim.esp editorid=VKR_Hea_030_BattleFatigue_Perk + modules/class-system/config/classes-config.json (cavaleiro_negro, guardiao, paladino) + PLANO_DAMAGE_SYSTEM.md §2 e §3 Funções 4 e 5",
       "expectedStatus": "PENDING",
       "pendingPlanFunction": "Função 4 e Função 5 (DS-3 / DS-5): suportar entry point ModIncomingDamage e condições WornHasKeyword e GetActorValuePercent no PerkRegistry e no PhysicalDamagePipeline",
@@ -770,28 +878,93 @@
       "formid": "2C1037:Vokrii - Minimalistic Perks of Skyrim.esp",
       "editorid": "VKR_Hea_030_BattleFatigue_Perk",
       "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
-      "classGrantedBy": ["cavaleiro_negro", "guardiao", "paladino"],
+      "classGrantedBy": [
+        "cavaleiro_negro",
+        "guardiao",
+        "paladino"
+      ],
       "recordEffect": {
         "EntryPoint": "ModIncomingDamage",
         "Modification": "Multiply",
         "Value": 0.8,
-        "Priority": 190,
+        "Priority": 200,
         "Rank": 0,
         "Conditions": [
-          { "RunOnTabIndex": 0, "Function": "WornHasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "06C0EC:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornHasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "06C0ED:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornHasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "06C0EE:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornHasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "06C0EF:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornHasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 0.0, "Flags": "0", "parameter1": "06BBD3:Skyrim.esm" },
-          { "RunOnTabIndex": 1, "Function": "GetActorValuePercent", "CompareOperator": "LessThanOrEqualTo", "ComparisonValue": 0.25, "Flags": "0", "parameter1": "Stamina" }
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornHasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 0,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "06BBD3:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornHasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "06C0ED:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornHasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "06C0EC:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornHasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "06C0EF:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornHasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06C0EE:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "HasPerk",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "008028:Vokrii - Minimalistic Perks of Skyrim.esp"
+          },
+          {
+            "RunOnTabIndex": 1,
+            "Function": "GetActorValuePercent",
+            "CompareOperator": "LessThanOrEqualTo",
+            "ComparisonValue": 0.125,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "Stamina"
+          }
         ]
       },
       "input": {
         "entryPoint": "ModIncomingDamage",
         "operation": "Multiply",
         "perkFormKey": "Vokrii - Minimalistic Perks of Skyrim.esp:2C1037",
-        "actorSkills": { "HeavyArmor": 70.0 },
-        "actorPerks": ["Vokrii - Minimalistic Perks of Skyrim.esp:2C1037"],
+        "actorSkills": {
+          "HeavyArmor": 70
+        },
+        "actorPerks": [
+          "Vokrii - Minimalistic Perks of Skyrim.esp:2C1037"
+        ],
         "keywords": [
           "Skyrim.esm:06C0EC",
           "Skyrim.esm:06C0ED",
@@ -800,62 +973,106 @@
         ]
       },
       "expected": {
-        "multiplier": 0.80,
-        "tolerance": 1e-6
+        "multiplier": 0.8,
+        "tolerance": 0.000001
       }
     },
     {
-      "id": "EP-08-ModTargetDamageResistance-Alkahest-Multiply",
-      "group": "G2_CLASS_PERK_ENTRY_POINTS",
-      "kind": "perk_entry_point",
-      "description": "Entry point ModTargetDamageResistance na perk de classe Alkahest (formid=105F2B:Skyrim.esm, editorid=VKR_Alc_070_Alkahest_Perk_WasExperimenter3, winner=Vokrii - Minimalistic Perks of Skyrim.esp, concedida por viper nv.35). Effects[0]: Modification=Multiply, Value=0.5, Priority=125, Rank=0 quando alvo possui efeito magico com keyword MagicAlchHarmful (042509:Skyrim.esm, condicao HasMagicEffectKeyword nao certificada na Funcao 5). Tambem documentado o efeito de Denting Blows (formid=0C1E92:Skyrim.esm, editorid=VKR_One_030_BasicMace2_Perk_WasBoneBreaker2, winner=Vokrii - Apply Spell Conditions Fix.esp, classe paladino nv.20: Effects[6] ModTargetDamageResistance Add -0.18 Priority 20 Rank 0 com maca 01E714:Skyrim.esm).",
-      "origin": "PERK-depth12.jsonl formid=105F2B:Skyrim.esm editorid=VKR_Alc_070_Alkahest_Perk_WasExperimenter3 + PERK-depth12.jsonl formid=0C1E92:Skyrim.esm editorid=VKR_One_030_BasicMace2_Perk_WasBoneBreaker2 + modules/class-system/config/classes-config.json (viper, paladino) + PLANO_DAMAGE_SYSTEM.md §2 e §3 Funções 4 e 5",
-      "expectedStatus": "PENDING",
-      "pendingPlanFunction": "Função 4 e Função 5 (DS-3 / DS-5): suportar entry point ModTargetDamageResistance antes de ArmorReduction (nota: Alkahest usa HasMagicEffectKeyword não certificada; Denting Blows 0C1E92:Skyrim.esm usa Add -0.18 com HasKeyword 01E714:Skyrim.esm)",
-      "formKey": "Skyrim.esm:105F2B",
-      "formid": "105F2B:Skyrim.esm",
-      "editorid": "VKR_Alc_070_Alkahest_Perk_WasExperimenter3",
-      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
-      "classGrantedBy": ["viper"],
-      "recordEffect": {
-        "EntryPoint": "ModTargetDamageResistance",
-        "Modification": "Multiply",
-        "Value": 0.5,
-        "Priority": 125,
-        "Rank": 0,
-        "Conditions": [
-          { "RunOnTabIndex": 2, "Function": "HasMagicEffectKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "042509:Skyrim.esm" }
-        ]
-      },
-      "companionRecordEffects": [
-        {
-          "formid": "0C1E92:Skyrim.esm",
-          "editorid": "VKR_One_030_BasicMace2_Perk_WasBoneBreaker2",
-          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
-          "classGrantedBy": ["paladino"],
+        "id": "EP-08-ModTargetDamageResistance-Alkahest-Multiply",
+        "group": "G2_CLASS_PERK_ENTRY_POINTS",
+        "kind": "perk_entry_point",
+        "description": "Entry point ModTargetDamageResistance na perk de classe Alkahest (105F2B:Skyrim.esm, VKR_Alc_070_Alkahest_Perk_WasExperimenter3, winner Vokrii - Minimalistic Perks of Skyrim.esp, perk RESOLVED para viper). Effects[0]: Multiply 0.5, Priority 125, Rank 0. Tab 2: HasMagicEffectKeyword(042509:Skyrim.esm) == 1; GetIsID(000007:Skyrim.esm) == 0; GetActorValue(DamageResist) > 0. O efeito inteiro permanece UNSUPPORTED/PENDING porque HasMagicEffectKeyword não é certificada e o PerkRegistry atual não aceita essas condições nem ModTargetDamageResistance; 0.5 é o multiplicador do efeito no export, condicionado ao conjunto completo.",
+        "origin": "_work/exports/combat-20261024/PERK.jsonl formid=105F2B:Skyrim.esm Effects[0] + _work/exports/classes/perk-crosswalk.jsonl (RESOLVED, viper@30) + PLANO_DAMAGE_SYSTEM.md §3 Funções 4 e 5",
+        "expectedStatus": "PENDING",
+        "statusReason": "UNSUPPORTED_UNCERTIFIED_CONDITIONS",
+        "pendingPlanFunction": "Função 4 e Função 5: ModTargetDamageResistance/Multiply e o conjunto exato de condições ainda não são suportados pelo PerkRegistry; HasMagicEffectKeyword é não certificada. O estado continua PENDING; multiplier 0.5 é o valor do Effects[0] exportado, não resultado validado.",
+        "formKey": "Skyrim.esm:105F2B",
+        "formid": "105F2B:Skyrim.esm",
+        "editorid": "VKR_Alc_070_Alkahest_Perk_WasExperimenter3",
+        "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+        "classGrantedBy": [
+          "viper"
+        ],
+        "recordEffect": {
           "EntryPoint": "ModTargetDamageResistance",
-          "Modification": "Add",
-          "Value": -0.18,
-          "Priority": 20,
+          "Modification": "Multiply",
+          "Value": 0.5,
+          "Priority": 125,
           "Rank": 0,
           "Conditions": [
-            { "RunOnTabIndex": 1, "Function": "HasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "01E714:Skyrim.esm" }
+            {
+              "RunOnTabIndex": 2,
+              "Function": "HasMagicEffectKeyword",
+              "CompareOperator": "EqualTo",
+              "ComparisonValue": 1,
+              "Flags": "0",
+              "RunOn": "Subject",
+              "parameter1": "042509:Skyrim.esm"
+            },
+            {
+              "RunOnTabIndex": 2,
+              "Function": "GetIsID",
+              "CompareOperator": "EqualTo",
+              "ComparisonValue": 0,
+              "Flags": "0",
+              "RunOn": "Subject",
+              "parameter1": "000007:Skyrim.esm"
+            },
+            {
+              "RunOnTabIndex": 2,
+              "Function": "GetActorValue",
+              "CompareOperator": "GreaterThan",
+              "ComparisonValue": 0,
+              "Flags": "0",
+              "RunOn": "Subject",
+              "parameter1": "DamageResist"
+            }
           ]
+        },
+        "companionRecordEffects": [
+          {
+            "formid": "0C1E92:Skyrim.esm",
+            "editorid": "VKR_One_030_BasicMace2_Perk_WasBoneBreaker2",
+            "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+            "classGrantedBy": [
+              "paladino"
+            ],
+            "EntryPoint": "ModTargetDamageResistance",
+            "Modification": "Add",
+            "Value": -0.18,
+            "Priority": 20,
+            "Rank": 0,
+            "Conditions": [
+              {
+                "RunOnTabIndex": 1,
+                "Function": "HasKeyword",
+                "CompareOperator": "EqualTo",
+                "ComparisonValue": 1,
+                "Flags": "0",
+                "parameter1": "01E714:Skyrim.esm"
+              }
+            ]
+          }
+        ],
+        "input": {
+          "entryPoint": "ModTargetDamageResistance",
+          "operation": "Multiply",
+          "perkFormKey": "Skyrim.esm:105F2B",
+          "actorSkills": {
+            "Alchemy": 70
+          },
+          "actorPerks": [
+            "Skyrim.esm:105F2B"
+          ],
+          "keywords": [
+            "Skyrim.esm:01E713"
+          ]
+        },
+        "expected": {
+          "multiplier": 0.5,
+          "tolerance": 0.000001
         }
-      ],
-      "input": {
-        "entryPoint": "ModTargetDamageResistance",
-        "operation": "Multiply",
-        "perkFormKey": "Skyrim.esm:105F2B",
-        "actorSkills": { "Alchemy": 70.0 },
-        "actorPerks": ["Skyrim.esm:105F2B"],
-        "keywords": ["Skyrim.esm:01E713"]
       },
-      "expected": {
-        "multiplier": 0.50,
-        "tolerance": 1e-6
-      }
-    },
     {
       "id": "EP-09A-ModArmorRating-HeavyArmorMastery-MultiplyOnePlusAVMult",
       "group": "G2_CLASS_PERK_ENTRY_POINTS",
@@ -899,7 +1116,7 @@
       "id": "EP-09B-ModArmorRating-HeavyArmorFit-Multiply",
       "group": "G2_CLASS_PERK_ENTRY_POINTS",
       "kind": "perk_entry_point",
-      "description": "Entry point ModArmorRating na perk de classe Armor Padding / Heavy Armor Fit (formid=058F6F:Skyrim.esm, editorid=VKR_Hea_030_HeavyArmorFit_Perk_30_WasWellFitted, winner=Vokrii - Minimalistic Perks of Skyrim.esp, concedida por cavaleiro_negro nv.10, guardiao nv.10 e paladino nv.10). Effects[0]: Modification=Multiply, Value=1.15, Priority=190, Rank=0. Nota sobre operacao Add em ModArmorRating: NO_CLASS_PERK_IN_LOAD_ORDER — Add em ModArmorRating existe apenas em 20AA8C:Vokrii - Minimalistic Perks of Skyrim.esp (VKR_Smi_040_DecorativeSmithing_Perk) e 058F7E:Skyrim.esm (VKR_Alt_050_Octasacrum_Perk_WasMagicResistance3), ambas ausentes de classes-config.json.",
+      "description": "ModArmorRating na perk Heavy Armor Fit (058F6F:Skyrim.esm): Effects[0] Multiply 1.15, Priority 190, Rank 0. Condições exportadas incluem WornHasKeyword e HasPerk(008028:Vokrii - Minimalistic Perks of Skyrim.esp).",
       "origin": "PERK-depth12.jsonl formid=058F6F:Skyrim.esm editorid=VKR_Hea_030_HeavyArmorFit_Perk_30_WasWellFitted + modules/class-system/config/classes-config.json (cavaleiro_negro, guardiao, paladino) + PLANO_DAMAGE_SYSTEM.md §2 e §3 Funções 4 e 5",
       "expectedStatus": "PENDING",
       "pendingPlanFunction": "Função 4 e Função 5 (DS-3 / DS-5): operação Multiply em ModArmorRating + condição WornHasKeyword (para operação Add em ModArmorRating: NO_CLASS_PERK_IN_LOAD_ORDER)",
@@ -907,7 +1124,11 @@
       "formid": "058F6F:Skyrim.esm",
       "editorid": "VKR_Hea_030_HeavyArmorFit_Perk_30_WasWellFitted",
       "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
-      "classGrantedBy": ["cavaleiro_negro", "guardiao", "paladino"],
+      "classGrantedBy": [
+        "cavaleiro_negro",
+        "guardiao",
+        "paladino"
+      ],
       "noClassPerkForOperation": "NO_CLASS_PERK_IN_LOAD_ORDER para operacao Add em ModArmorRating: busca nas 72 perks de classes-config.json contra PERK-depth12.jsonl retornou zero perks de classe com Add em ModArmorRating (apenas 20AA8C:Vokrii - Minimalistic Perks of Skyrim.esp e 058F7E:Skyrim.esm fora das classes).",
       "recordEffect": {
         "EntryPoint": "ModArmorRating",
@@ -916,26 +1137,79 @@
         "Priority": 190,
         "Rank": 0,
         "Conditions": [
-          { "RunOnTabIndex": 0, "Function": "WornHasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "06C0EC:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornHasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "06C0ED:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornHasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "06C0EE:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornHasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "06C0EF:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornHasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 0.0, "Flags": "0", "parameter1": "06BBD3:Skyrim.esm" },
-          { "RunOnTabIndex": 1, "Function": "HasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "06BBD2:Skyrim.esm" },
-          { "RunOnTabIndex": 1, "Function": "HasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 0.0, "Flags": "0", "parameter1": "0965B2:Skyrim.esm" }
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornHasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 0,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "06BBD3:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornHasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "06C0EC:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornHasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "06C0ED:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornHasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "06C0EF:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornHasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06C0EE:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "HasPerk",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "008028:Vokrii - Minimalistic Perks of Skyrim.esp"
+          }
         ]
       },
       "input": {
         "entryPoint": "ModArmorRating",
         "operation": "Multiply",
         "perkFormKey": "Skyrim.esm:058F6F",
-        "actorSkills": { "HeavyArmor": 60.0 },
-        "actorPerks": ["Skyrim.esm:058F6F"],
-        "keywords": ["Skyrim.esm:06BBD2"]
+        "actorSkills": {
+          "HeavyArmor": 60
+        },
+        "actorPerks": [
+          "Skyrim.esm:058F6F"
+        ],
+        "keywords": [
+          "Skyrim.esm:06BBD2"
+        ]
       },
       "expected": {
         "multiplier": 1.15,
-        "tolerance": 1e-6
+        "tolerance": 0.000001
       }
     },
     {
@@ -1138,7 +1412,7 @@
       "id": "COND-04-WornApparelHasKeywordCount-positive-negative-missing",
       "group": "G3_CERTIFIED_CONDITIONS",
       "kind": "condition_eval",
-      "description": "Condicao certificada WornApparelHasKeywordCount na perk de classe Matching Heavy Set (formid=107832:Skyrim.esm, editorid=VKR_Hea_070_MatchingHeavySet_Perk_WasMatchingSetHeavy, winner=Vokrii - Minimalistic Perks of Skyrim.esp, concedida por cavaleiro_negro nv.25, guardiao nv.25 e paladino nv.25). Effects[0] (ModArmorRating, Multiply 1.15, Priority 155, Rank 0) Tab 0 exige WornApparelHasKeywordCount >= 3.0 para keyword de material pesado (ex.: Skyrim.esm:06BBD4 ArmorMaterialImperialHeavy) e Tab 1 exige HasKeyword(06BBD2:Skyrim.esm) == 1 e HasKeyword(0965B2:Skyrim.esm) == 0: positivo com 3 pecas (1.15), negativo com 2 pecas (1.0) e ausente sem contexto de pecas vestidas (1.0).",
+      "description": "Condição WornApparelHasKeywordCount na perk Matching Heavy Set (107832:Skyrim.esm). Effects[0] ModArmorRating Multiply 1.15, Priority 155, Rank 0. O export contém apenas o grupo Tab 0 com 11 condições WornApparelHasKeywordCount >= 3 (OR), sem condições HasKeyword adicionais.",
       "origin": "PERK-depth12.jsonl formid=107832:Skyrim.esm editorid=VKR_Hea_070_MatchingHeavySet_Perk_WasMatchingSetHeavy + modules/class-system/config/classes-config.json (cavaleiro_negro, guardiao, paladino) + PLANO_DAMAGE_SYSTEM.md §3 Função 5 (WornApparelHasKeywordCount)",
       "expectedStatus": "PENDING",
       "pendingPlanFunction": "Função 5 (DS-3 / DS-5): avaliador de condição WornApparelHasKeywordCount no PerkRegistry",
@@ -1146,7 +1420,11 @@
       "formid": "107832:Skyrim.esm",
       "editorid": "VKR_Hea_070_MatchingHeavySet_Perk_WasMatchingSetHeavy",
       "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
-      "classGrantedBy": ["cavaleiro_negro", "guardiao", "paladino"],
+      "classGrantedBy": [
+        "cavaleiro_negro",
+        "guardiao",
+        "paladino"
+      ],
       "recordEffect": {
         "EntryPoint": "ModArmorRating",
         "Modification": "Multiply",
@@ -1154,15 +1432,105 @@
         "Priority": 155,
         "Rank": 0,
         "Conditions": [
-          { "RunOnTabIndex": 0, "Function": "WornApparelHasKeywordCount", "CompareOperator": "GreaterThanOrEqualTo", "ComparisonValue": 3.0, "Flags": "OR", "parameter1": "06BBD4:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornApparelHasKeywordCount", "CompareOperator": "GreaterThanOrEqualTo", "ComparisonValue": 3.0, "Flags": "OR", "parameter1": "06BBD5:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornApparelHasKeywordCount", "CompareOperator": "GreaterThanOrEqualTo", "ComparisonValue": 3.0, "Flags": "OR", "parameter1": "06BBD6:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornApparelHasKeywordCount", "CompareOperator": "GreaterThanOrEqualTo", "ComparisonValue": 3.0, "Flags": "OR", "parameter1": "06BBD7:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornApparelHasKeywordCount", "CompareOperator": "GreaterThanOrEqualTo", "ComparisonValue": 3.0, "Flags": "OR", "parameter1": "06BBD8:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornApparelHasKeywordCount", "CompareOperator": "GreaterThanOrEqualTo", "ComparisonValue": 3.0, "Flags": "OR", "parameter1": "06BBD9:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "WornApparelHasKeywordCount", "CompareOperator": "GreaterThanOrEqualTo", "ComparisonValue": 3.0, "Flags": "OR", "parameter1": "06BBDA:Skyrim.esm" },
-          { "RunOnTabIndex": 1, "Function": "HasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "06BBD2:Skyrim.esm" },
-          { "RunOnTabIndex": 1, "Function": "HasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 0.0, "Flags": "0", "parameter1": "0965B2:Skyrim.esm" }
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornApparelHasKeywordCount",
+            "CompareOperator": "GreaterThanOrEqualTo",
+            "ComparisonValue": 3,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06BBD4:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornApparelHasKeywordCount",
+            "CompareOperator": "GreaterThanOrEqualTo",
+            "ComparisonValue": 3,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06BBD5:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornApparelHasKeywordCount",
+            "CompareOperator": "GreaterThanOrEqualTo",
+            "ComparisonValue": 3,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06BBD7:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornApparelHasKeywordCount",
+            "CompareOperator": "GreaterThanOrEqualTo",
+            "ComparisonValue": 3,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06BBE2:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornApparelHasKeywordCount",
+            "CompareOperator": "GreaterThanOrEqualTo",
+            "ComparisonValue": 3,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06BBE5:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornApparelHasKeywordCount",
+            "CompareOperator": "GreaterThanOrEqualTo",
+            "ComparisonValue": 3,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06BBE3:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornApparelHasKeywordCount",
+            "CompareOperator": "GreaterThanOrEqualTo",
+            "ComparisonValue": 3,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06BBE4:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornApparelHasKeywordCount",
+            "CompareOperator": "GreaterThanOrEqualTo",
+            "ComparisonValue": 3,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06BBE6:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornApparelHasKeywordCount",
+            "CompareOperator": "GreaterThanOrEqualTo",
+            "ComparisonValue": 3,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06BBE7:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornApparelHasKeywordCount",
+            "CompareOperator": "GreaterThanOrEqualTo",
+            "ComparisonValue": 3,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06BBD8:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "WornApparelHasKeywordCount",
+            "CompareOperator": "GreaterThanOrEqualTo",
+            "ComparisonValue": 3,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "0009C0:Update.esm"
+          }
         ]
       },
       "input": {
@@ -1172,13 +1540,13 @@
         "minCount": 3,
         "entryPoint": "ModArmorRating",
         "skill": "HeavyArmor",
-        "skillValue": 60.0
+        "skillValue": 60
       },
       "expected": {
         "positiveMultiplier": 1.15,
-        "negativeMultiplier": 1.0,
-        "missingMultiplier": 1.0,
-        "tolerance": 1e-6
+        "negativeMultiplier": 1,
+        "missingMultiplier": 1,
+        "tolerance": 0.000001
       }
     },
     {
@@ -1226,82 +1594,129 @@
       "id": "COND-06-GetEquippedItemType-positive-negative-missing",
       "group": "G3_CERTIFIED_CONDITIONS",
       "kind": "condition_eval",
-      "description": "Condicao certificada GetEquippedItemType na perk de classe Furious Strength (formid=03AF81:Skyrim.esm, editorid=VKR_One_040_FuriousStrength_Perk_WasSavageStrike, winner=Vokrii - Minimalistic Perks of Skyrim.esp, concedida por arqueiro, mestre_espadachim, paladino e ranger). Effects[0] (ModPowerAttackDamage, MultiplyOnePlusAVMult Stamina 0.001, Priority 120, Rank 0) Tab 0 exige GetEquippedItemType(Left) NotEqualTo 9.0 e GetEquippedItemType(Right) NotEqualTo 9.0: em Stamina=60, positivo quando Left != 9 e Right != 9 (1 + 0.001*60 = 1.06), negativo quando equipa feitiço (tipo 9 -> 1.0) e ausente quando o slot nao esta disponivel no contexto (1.0).",
-      "origin": "PERK-depth12.jsonl formid=03AF81:Skyrim.esm editorid=VKR_One_040_FuriousStrength_Perk_WasSavageStrike + modules/class-system/config/classes-config.json (arqueiro, mestre_espadachim, paladino, ranger) + PLANO_DAMAGE_SYSTEM.md §3 Função 5 (GetEquippedItemType)",
+      "description": "GetEquippedItemType em Dual Flurry (1), perk de classe 106256:Skyrim.esm, winner Vokrii - ADXP Patch.esp. Effects[0]: ModAttackDamage Multiply 1.1, Priority 0, Rank 0; quatro condições GetEquippedItemType nos slots Left e Right (tipo > 0 e <= 4), RunOn Subject.",
+      "origin": "PERK.jsonl formid=106256:Skyrim.esm editorid=VKR_One_030_DualFlurry1_Perk_WasDualFlurry1 + _work/exports/classes/perk-crosswalk.jsonl (RESOLVED: mestre_espadachim@20, viper@20, anti_mago@15)",
       "expectedStatus": "PENDING",
       "pendingPlanFunction": "Função 5 (DS-3 / DS-5): avaliador de condição GetEquippedItemType no PerkRegistry",
-      "formKey": "Skyrim.esm:03AF81",
-      "formid": "03AF81:Skyrim.esm",
-      "editorid": "VKR_One_040_FuriousStrength_Perk_WasSavageStrike",
-      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
-      "classGrantedBy": ["arqueiro", "mestre_espadachim", "paladino", "ranger"],
+      "formKey": "Skyrim.esm:106256",
+      "formid": "106256:Skyrim.esm",
+      "editorid": "VKR_One_030_DualFlurry1_Perk_WasDualFlurry1",
+      "winner": "Vokrii - ADXP Patch.esp",
+      "classGrantedBy": [
+        "mestre_espadachim",
+        "viper",
+        "anti_mago"
+      ],
       "recordEffect": {
-        "EntryPoint": "ModPowerAttackDamage",
-        "Modification": "MultiplyOnePlusAVMult",
-        "ActorValue": "Stamina",
-        "Value": 0.001,
-        "Priority": 120,
+        "EntryPoint": "ModAttackDamage",
+        "Modification": "Multiply",
+        "Value": 1.1,
+        "Priority": 0,
         "Rank": 0,
         "Conditions": [
-          { "RunOnTabIndex": 0, "Function": "GetEquippedItemType", "CompareOperator": "NotEqualTo", "ComparisonValue": 9.0, "Flags": "0", "parameter1": "Left" },
-          { "RunOnTabIndex": 0, "Function": "GetEquippedItemType", "CompareOperator": "NotEqualTo", "ComparisonValue": 9.0, "Flags": "0", "parameter1": "Right" }
+          {
+            "RunOnTabIndex": 0,
+            "Function": "GetEquippedItemType",
+            "CompareOperator": "GreaterThan",
+            "ComparisonValue": 0,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "Left"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "GetEquippedItemType",
+            "CompareOperator": "LessThanOrEqualTo",
+            "ComparisonValue": 4,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "Left"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "GetEquippedItemType",
+            "CompareOperator": "GreaterThan",
+            "ComparisonValue": 0,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "Right"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "GetEquippedItemType",
+            "CompareOperator": "LessThanOrEqualTo",
+            "ComparisonValue": 4,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "Right"
+          }
         ]
       },
       "input": {
         "conditionFunction": "GetEquippedItemType",
-        "perkFormKey": "Skyrim.esm:03AF81",
+        "perkFormKey": "Skyrim.esm:106256",
         "slot": "Left",
-        "compareOperator": "NotEqualTo",
-        "expectedType": 9,
-        "entryPoint": "ModPowerAttackDamage",
-        "skill": "Stamina",
-        "skillValue": 60.0
+        "compareOperator": "GreaterThan",
+        "expectedType": 0,
+        "entryPoint": "ModAttackDamage",
+        "skill": "OneHanded",
+        "skillValue": 60
       },
       "expected": {
-        "positiveMultiplier": 1.06,
-        "negativeMultiplier": 1.0,
-        "missingMultiplier": 1.0,
-        "tolerance": 1e-6
+        "positiveMultiplier": 1.1,
+        "negativeMultiplier": 1,
+        "missingMultiplier": 1,
+        "tolerance": 0.000001,
+        "multiplier": 1.1
       }
     },
     {
       "id": "COND-07-IsWeaponSkillType-positive-negative-missing",
       "group": "G3_CERTIFIED_CONDITIONS",
       "kind": "condition_eval",
-      "description": "Condicao certificada IsWeaponSkillType na perk de classe Death or Glory (formid=005474:Vokrii - Minimalistic Perks of Skyrim.esp, editorid=VKR_Two_040_DeathOrGlory_Perk, winner=Vokrii - Minimalistic Perks of Skyrim.esp, concedida por berserker nv.15 e cavaleiro_negro nv.15). Effects[0] (ModPowerAttackDamage, Multiply 1.25, Priority 153, Rank 0) Tab 1 exige IsWeaponSkillType(TwoHanded) EqualTo 1.0: positivo quando weaponSkill == TwoHanded (1.25), negativo quando OneHanded (1.0) e ausente quando weaponSkill esta vazio (1.0).",
-      "origin": "PERK-depth12.jsonl formid=005474:Vokrii - Minimalistic Perks of Skyrim.esp editorid=VKR_Two_040_DeathOrGlory_Perk + modules/class-system/config/classes-config.json (berserker, cavaleiro_negro) + PLANO_DAMAGE_SYSTEM.md §3 Função 5 (IsWeaponSkillType)",
+      "description": "IsWeaponSkillType em Sneak Attack, perk de classe 058210:Skyrim.esm, winner Vokrii - Minimalistic Perks of Skyrim. Effects[0]: ModSneakAttackMult Multiply 2, Priority 190, Rank 0; Tab 1 exige IsWeaponSkillType(OneHanded) == 1, RunOn Subject, Flags OR.",
+      "origin": "PERK.jsonl formid=058210:Skyrim.esm editorid=VKR_Sne_020_SneakAttack_Perk_WasBackstab + _work/exports/classes/perk-crosswalk.jsonl (RESOLVED: assassino@10)",
       "expectedStatus": "PENDING",
       "pendingPlanFunction": "Função 5 (DS-3 / DS-5): avaliador de condição IsWeaponSkillType no PerkRegistry",
-      "formKey": "Vokrii - Minimalistic Perks of Skyrim.esp:005474",
-      "formid": "005474:Vokrii - Minimalistic Perks of Skyrim.esp",
-      "editorid": "VKR_Two_040_DeathOrGlory_Perk",
+      "formKey": "Skyrim.esm:058210",
+      "formid": "058210:Skyrim.esm",
+      "editorid": "VKR_Sne_020_SneakAttack_Perk_WasBackstab",
       "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
-      "classGrantedBy": ["berserker", "cavaleiro_negro"],
+      "classGrantedBy": [
+        "assassino"
+      ],
       "recordEffect": {
-        "EntryPoint": "ModPowerAttackDamage",
+        "EntryPoint": "ModSneakAttackMult",
         "Modification": "Multiply",
-        "Value": 1.25,
-        "Priority": 153,
+        "Value": 2,
+        "Priority": 190,
         "Rank": 0,
         "Conditions": [
-          { "RunOnTabIndex": 0, "Function": "GetActorValuePercent", "CompareOperator": "LessThan", "ComparisonValue": 0.50, "Flags": "0", "parameter1": "Health" },
-          { "RunOnTabIndex": 1, "Function": "IsWeaponSkillType", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "TwoHanded" }
+          {
+            "RunOnTabIndex": 1,
+            "Function": "IsWeaponSkillType",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "OneHanded"
+          }
         ]
       },
       "input": {
         "conditionFunction": "IsWeaponSkillType",
-        "perkFormKey": "Vokrii - Minimalistic Perks of Skyrim.esp:005474",
-        "requiredSkill": "TwoHanded",
-        "wrongSkill": "OneHanded",
-        "entryPoint": "ModPowerAttackDamage",
-        "skill": "TwoHanded",
-        "skillValue": 60.0
+        "perkFormKey": "Skyrim.esm:058210",
+        "requiredSkill": "OneHanded",
+        "wrongSkill": "TwoHanded",
+        "entryPoint": "ModSneakAttackMult",
+        "skill": "Sneak",
+        "skillValue": 60
       },
       "expected": {
-        "positiveMultiplier": 1.25,
-        "negativeMultiplier": 1.0,
-        "missingMultiplier": 1.0,
-        "tolerance": 1e-6
+        "positiveMultiplier": 2,
+        "negativeMultiplier": 1,
+        "missingMultiplier": 1,
+        "tolerance": 0.000001
       }
     },
     {
@@ -1316,7 +1731,10 @@
       "formid": "005474:Vokrii - Minimalistic Perks of Skyrim.esp",
       "editorid": "VKR_Two_040_DeathOrGlory_Perk",
       "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
-      "classGrantedBy": ["berserker", "cavaleiro_negro"],
+      "classGrantedBy": [
+        "berserker",
+        "cavaleiro_negro"
+      ],
       "recordEffect": {
         "EntryPoint": "ModPowerAttackDamage",
         "Modification": "Multiply",
@@ -1324,8 +1742,51 @@
         "Priority": 153,
         "Rank": 0,
         "Conditions": [
-          { "RunOnTabIndex": 0, "Function": "GetActorValuePercent", "CompareOperator": "LessThan", "ComparisonValue": 0.50, "Flags": "0", "parameter1": "Health" },
-          { "RunOnTabIndex": 1, "Function": "IsWeaponSkillType", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "TwoHanded" }
+          {
+            "RunOnTabIndex": 0,
+            "Function": "GetActorValuePercent",
+            "CompareOperator": "LessThan",
+            "ComparisonValue": 0.5,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "Health"
+          },
+          {
+            "RunOnTabIndex": 0,
+            "Function": "GetActorValuePercent",
+            "CompareOperator": "GreaterThanOrEqualTo",
+            "ComparisonValue": 0.375,
+            "Flags": "0",
+            "RunOn": "Subject",
+            "parameter1": "Health"
+          },
+          {
+            "RunOnTabIndex": 1,
+            "Function": "HasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06D932:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 1,
+            "Function": "HasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06D931:Skyrim.esm"
+          },
+          {
+            "RunOnTabIndex": 1,
+            "Function": "HasKeyword",
+            "CompareOperator": "EqualTo",
+            "ComparisonValue": 1,
+            "Flags": "OR",
+            "RunOn": "Subject",
+            "parameter1": "06D930:Skyrim.esm"
+          }
         ]
       },
       "input": {
@@ -1333,62 +1794,85 @@
         "perkFormKey": "Vokrii - Minimalistic Perks of Skyrim.esp:005474",
         "actorValue": "Health",
         "compareOperator": "LessThan",
-        "threshold": 0.50,
+        "threshold": 0.5,
         "entryPoint": "ModPowerAttackDamage",
         "skill": "TwoHanded",
-        "skillValue": 60.0
+        "skillValue": 60
       },
       "expected": {
         "positiveMultiplier": 1.25,
-        "negativeMultiplier": 1.0,
-        "missingMultiplier": 1.0,
-        "tolerance": 1e-6
+        "negativeMultiplier": 1,
+        "missingMultiplier": 1,
+        "tolerance": 0.000001
       }
     },
     {
-      "id": "COND-09-GetActorValue-positive-negative-missing",
-      "group": "G3_CERTIFIED_CONDITIONS",
-      "kind": "condition_eval",
-      "statusReason": "NO_CLASS_PERK_IN_LOAD_ORDER",
-      "description": "Condicao certificada GetActorValue: NO_CLASS_PERK_IN_LOAD_ORDER — na busca exaustiva das perks de combate das classes (modules/class-system/config/classes-config.json e _work/exports/classes/perk-crosswalk.jsonl) contra PERK.jsonl e PERK-depth12.jsonl, nenhuma perk de classe usa a funcao de condicao GetActorValue. O record de referencia Valorous Charge (formid=0CB406:Skyrim.esm, editorid=VKR_One_050_ValorousCharge_Perk_WasCriticalCharge, winner=Vokrii - Minimalistic Perks of Skyrim.esp) possui 8 efeitos no export (Effects[0..3] sobre CalculateMyCriticalHitDamage com Modification=Multiply, Value=1.13/1.25/1.38/1.5, Priority=178/177/176/175, Rank=0 e Effects[4..7] sobre ModAttackDamage com Modification=Multiply, Value=1.13/1.25/1.38/1.5, Priority=154/153/152/151, Rank=0), todos condicionados por IsAttackType(0914E6:Skyrim.esm), IsSprinting, HasKeyword(01E713/01E714/01E711/01E712:Skyrim.esm) e GetActorValuePercent(Health) no alvo (Tab 2), sem ModPowerAttackStamina e sem GetActorValue.",
-      "origin": "PERK.jsonl e PERK-depth12.jsonl formid=0CB406:Skyrim.esm editorid=VKR_One_050_ValorousCharge_Perk_WasCriticalCharge + _work/exports/classes/perk-crosswalk.jsonl + modules/class-system/config/classes-config.json + PLANO_DAMAGE_SYSTEM.md §2 e §3 Função 5 (GetActorValue: NO_CLASS_PERK_IN_LOAD_ORDER)",
-      "expectedStatus": "PENDING",
-      "pendingPlanFunction": "Função 5 (DS-3 / DS-5): avaliador de condição GetActorValue no PerkRegistry (NO_CLASS_PERK_IN_LOAD_ORDER: nenhuma perk de combate das classes usa GetActorValue em PERK.jsonl / PERK-depth12.jsonl; o record 0CB406:Skyrim.esm possui apenas Effects[0..3] CalculateMyCriticalHitDamage Multiply 1.13/1.25/1.38/1.5 e Effects[4..7] ModAttackDamage Multiply 1.13/1.25/1.38/1.5 com GetActorValuePercent(Health))",
-      "formKey": "Skyrim.esm:0CB406",
-      "formid": "0CB406:Skyrim.esm",
-      "editorid": "VKR_One_050_ValorousCharge_Perk_WasCriticalCharge",
-      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
-      "classGrantedBy": ["assassino", "mestre_espadachim"],
-      "noClassPerkForCondition": "NO_CLASS_PERK_IN_LOAD_ORDER: nenhuma perk de combate das classes em PERK.jsonl ou PERK-depth12.jsonl usa a funcao de condicao GetActorValue. O record 0CB406:Skyrim.esm (VKR_One_050_ValorousCharge_Perk_WasCriticalCharge) contem apenas Effects[0..3] CalculateMyCriticalHitDamage Multiply 1.13/1.25/1.38/1.5 (Priority 178/177/176/175, Rank 0) e Effects[4..7] ModAttackDamage Multiply 1.13/1.25/1.38/1.5 (Priority 154/153/152/151, Rank 0), com condicoes IsAttackType(0914E6:Skyrim.esm), IsSprinting, HasKeyword(01E713/01E714/01E711/01E712:Skyrim.esm) e GetActorValuePercent(Health) no alvo (Tab 2), sem ModPowerAttackStamina e sem GetActorValue.",
-      "recordEffect": {
-        "EntryPoint": "ModAttackDamage",
-        "Modification": "Multiply",
-        "Value": 1.5,
-        "Priority": 151,
-        "Rank": 0,
-        "Conditions": [
-          { "RunOnTabIndex": 0, "Function": "IsAttackType", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "0914E6:Skyrim.esm" },
-          { "RunOnTabIndex": 0, "Function": "IsSprinting", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0" },
-          { "RunOnTabIndex": 1, "Function": "HasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "OR", "parameter1": "01E713:Skyrim.esm" },
-          { "RunOnTabIndex": 1, "Function": "HasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "OR", "parameter1": "01E714:Skyrim.esm" },
-          { "RunOnTabIndex": 1, "Function": "HasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "OR", "parameter1": "01E711:Skyrim.esm" },
-          { "RunOnTabIndex": 1, "Function": "HasKeyword", "CompareOperator": "EqualTo", "ComparisonValue": 1.0, "Flags": "0", "parameter1": "01E712:Skyrim.esm" },
-          { "RunOnTabIndex": 2, "Function": "GetActorValuePercent", "CompareOperator": "GreaterThanOrEqualTo", "ComparisonValue": 0.9, "Flags": "0", "parameter1": "Health" }
-        ]
+        "id": "COND-09-GetActorValue-positive-negative-missing",
+        "group": "G3_CERTIFIED_CONDITIONS",
+        "kind": "condition_eval",
+        "statusReason": "UNSUPPORTED_UNCERTIFIED_CONDITIONS",
+        "description": "Avaliação isolada de GetActorValue na perk de classe Alkahest (105F2B:Skyrim.esm, VKR_Alc_070_Alkahest_Perk_WasExperimenter3, winner Vokrii - Minimalistic Perks of Skyrim.esp, viper@30). Effects[0] é ModTargetDamageResistance / Multiply 0.5, Priority 125, Rank 0. Tab 2 contém exatamente HasMagicEffectKeyword(042509:Skyrim.esm) == 1, GetIsID(000007:Skyrim.esm) == 0 e GetActorValue(DamageResist) > 0, todas RunOn Subject, Flags 0, sem OR. Para a avaliação isolada: DamageResist=1 dá o multiplicador esperado 0.5; DamageResist=0 dá 1.0; sem contexto de DamageResist dá 1.0. O efeito completo fica UNSUPPORTED/PENDING por HasMagicEffectKeyword não certificada (e GetIsID ainda não aceito); o GetActorValue isolado também permanece PENDING no PerkRegistry atual, que só aceita HasKeyword e HasPerk.",
+        "origin": "_work/exports/combat-20261024/PERK.jsonl formid=105F2B:Skyrim.esm Effects[0] + _work/exports/classes/perk-crosswalk.jsonl (RESOLVED, viper@30) + PLANO_DAMAGE_SYSTEM.md §3 Função 5",
+        "expectedStatus": "PENDING",
+        "pendingPlanFunction": "Função 5: avaliar isoladamente GetActorValue(DamageResist) > 0 (probe atual permanece PENDING, PerkRegistry só aceita HasKeyword/HasPerk); o efeito completo segue UNSUPPORTED/PENDING pela condição HasMagicEffectKeyword não certificada e GetIsID não aceito.",
+        "formKey": "Skyrim.esm:105F2B",
+        "formid": "105F2B:Skyrim.esm",
+        "editorid": "VKR_Alc_070_Alkahest_Perk_WasExperimenter3",
+        "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+        "classGrantedBy": [
+          "viper"
+        ],
+        "recordEffect": {
+          "EntryPoint": "ModTargetDamageResistance",
+          "Modification": "Multiply",
+          "Value": 0.5,
+          "Priority": 125,
+          "Rank": 0,
+          "Conditions": [
+            {
+              "RunOnTabIndex": 2,
+              "Function": "HasMagicEffectKeyword",
+              "CompareOperator": "EqualTo",
+              "ComparisonValue": 1,
+              "Flags": "0",
+              "RunOn": "Subject",
+              "parameter1": "042509:Skyrim.esm"
+            },
+            {
+              "RunOnTabIndex": 2,
+              "Function": "GetIsID",
+              "CompareOperator": "EqualTo",
+              "ComparisonValue": 0,
+              "Flags": "0",
+              "RunOn": "Subject",
+              "parameter1": "000007:Skyrim.esm"
+            },
+            {
+              "RunOnTabIndex": 2,
+              "Function": "GetActorValue",
+              "CompareOperator": "GreaterThan",
+              "ComparisonValue": 0,
+              "Flags": "0",
+              "RunOn": "Subject",
+              "parameter1": "DamageResist"
+            }
+          ]
+        },
+        "input": {
+          "conditionFunction": "GetActorValue",
+          "perkFormKey": "Skyrim.esm:105F2B",
+          "actorValue": "DamageResist",
+          "compareOperator": "GreaterThan",
+          "threshold": 0,
+          "entryPoint": "ModTargetDamageResistance"
+        },
+        "expected": {
+          "positiveMultiplier": 0.5,
+          "negativeMultiplier": 1,
+          "missingMultiplier": 1,
+          "tolerance": 0.000001
+        }
       },
-      "input": {
-        "conditionFunction": "GetActorValue",
-        "perkFormKey": "Skyrim.esm:0CB406",
-        "statusReason": "NO_CLASS_PERK_IN_LOAD_ORDER",
-        "entryPoint": "ModAttackDamage"
-      },
-      "expected": {
-        "positiveMultiplier": 1.5,
-        "negativeMultiplier": 1.0,
-        "missingMultiplier": 1.0,
-        "tolerance": 1e-6
-      }
-    },
     {
       "id": "COND-10-Uncertified-Rejected-Never-Applied",
       "group": "G3_CERTIFIED_CONDITIONS",
