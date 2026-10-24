@@ -26,6 +26,9 @@ export function parseLines(text) {
 }
 
 const fmt = value => typeof value === 'number' ? (Number.isInteger(value) ? String(value) : value.toFixed(4)) : value === null || value === undefined ? '—' : String(value);
+const counterPairs = (value, prefix = '') => value && typeof value === 'object'
+  ? Object.entries(value).flatMap(([key, nested]) => counterPairs(nested, prefix ? prefix + '.' + key : key))
+  : [prefix + '=' + fmt(value)];
 const hex = value => typeof value === 'number' ? `0x${value.toString(16).toUpperCase()}` : '—';
 const table = (head, rows) => rows.length
   ? [`| ${head.join(' | ')} |`, `|${head.map(() => '---').join('|')}|`, ...rows.map(r => `| ${r.map(c => String(c).replaceAll('|', '\\|')).join(' | ')} |`)].join('\n')
@@ -109,7 +112,7 @@ export function render(file, parsed) {
 
   out.push('## 1. Integridade dos buffers', '');
   const c = a.counters?.counters;
-  out.push(c ? table(['contador', 'valor'], Object.entries(c).map(([k, v]) => [k, v && typeof v === 'object' ? Object.entries(v).map(([reason, count]) => `${reason}=${fmt(count)}`).join(', ') || '—' : fmt(v)])) : '_sem linha de contadores no arquivo_', '');
+  out.push(c ? table(['contador', 'valor'], Object.entries(c).map(([k, v]) => [k, v && typeof v === 'object' ? counterPairs(v).join(', ') || '—' : fmt(v)])) : '_sem linha de contadores no arquivo_', '');
   out.push(`Lacunas (anel sobrescrito entre leituras): ${a.gaps.length}.`, '');
   if (a.gaps.length) out.push(table(['buffer', 'de', 'até', 'perdidas', 'motivo'],
     a.gaps.map(g => [g.buffer, g.from, g.to, fmt(g.lost ?? (g.to - g.from + 1)), g.reason])), '');
@@ -188,6 +191,16 @@ export function render(file, parsed) {
   out.push(table(['recebidos', 'adotados', 'duplicados válidos', 'recusados'], [[fmt(received), fmt(accepted), fmt(duplicates),
     fmt(received === null || accepted === null || duplicates === null ? null : received - accepted - duplicates)]]), '');
   out.push(table(['motivo do informe (total do host)', 'quantidade'], Object.entries(c?.npcReportReasons ?? {})), '');
+  out.push('Por versão do informe (formato histórico sem separação fica indisponível):', '');
+  out.push(table(['versão', 'recebidos', 'adotados', 'duplicados válidos', 'recusados'], ['v1', 'v2'].map(version => {
+    const counts = c?.npcReportVersions?.[version];
+    const adopted = counts?.reasons?.ACCEPTED ?? (counts ? 0 : null);
+    const duplicate = counts?.reasons?.DUPLICATE ?? (counts ? 0 : null);
+    return [version, fmt(counts?.received), fmt(adopted), fmt(duplicate),
+      fmt(counts ? counts.received - adopted - duplicate : null)];
+  })), '');
+  out.push(table(['versão', 'motivo do informe', 'quantidade'], ['v1', 'v2'].flatMap(version =>
+    Object.entries(c?.npcReportVersions?.[version]?.reasons ?? {}).map(([reason, count]) => [version, reason, count]))), '');
   out.push('Restauração de escolha persistida: falhas ' + fmt(c?.npcRestoreFailures) + '. O ator carrega não confirmado com geração nova; estes contadores são separados dos informes recebidos.', '');
   out.push(table(['motivo da restauração recusada (total do host)', 'quantidade'], Object.entries(c?.npcRestoreFailureReasons ?? {})), '');
   out.push('Diagnósticos de não envio: recebidos ' + fmt(c?.npcUnavailable) + '. Somente motivos aceitos do hoster atual são contados abaixo; nenhuma criatura é alterada.', '');
@@ -195,8 +208,8 @@ export function render(file, parsed) {
   out.push(table(['validação do diagnóstico (total do host)', 'quantidade'], Object.entries(c?.npcUnavailableResults ?? {})), '');
   out.push(table(['seq', 'ator', 'geração', 'motivo de não envio', 'validação'],
     a.npcUnavailable.map(r => [r.sequence, r.actorDesc ?? hex(r.actor), fmt(r.generation), r.reason || '—', r.result])), '');
-  out.push(table(['seq', 'ator', 'base informada', 'nível', 'geração', 'resultado'],
-    a.npcReports.map(r => [r.sequence, r.actorDesc ?? hex(r.actor), r.base, fmt(r.level), fmt(r.generation), r.reason])), '');
+  out.push(table(['seq', 'versão', 'ator', 'base informada', 'raça informada', 'candidatos', 'nível', 'geração', 'resultado'],
+    a.npcReports.map(r => [r.sequence, fmt(r.v), r.actorDesc ?? hex(r.actor), r.base ?? '—', r.race ?? '—', fmt(r.candidates), fmt(r.level), fmt(r.generation), r.reason])), '');
   out.push(table(['evento', 'seq', 'papel', 'ator', 'confirmação', 'nível', 'provedor raça', 'provedor stats', 'vida máxima', 'cadeia adotada'],
     a.positions.map(p => [p.event.kind, p.event.sequence, p.role, hex(p.state.actor),
       p.state.observationNeeded === false ? 'NÃO REQUER' : p.state.creatureConfirmed === true ? 'CONFIRMADA' : p.state.creatureConfirmed === false ? 'NÃO CONFIRMADA' : 'INDISPONÍVEL',

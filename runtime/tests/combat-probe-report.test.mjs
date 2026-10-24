@@ -127,3 +127,16 @@ test('DS-0g-fix2: nested counter reasons render pairs and unavailable diagnostic
     'Diagnósticos de não envio: recebidos 3','| creature-ref | 7 | RESOLVED_BASE_HAS_NO_STABLE_KEY | ACCEPTED |','| 2 | 1 | 1 | 0 |'])assert(md.includes(text),text);
   const old=render('old',{rows:[],invalid:[]});assert.match(old,/Diagnósticos de não envio: recebidos —/);
 });
+
+test('DS-0g-fix4: v1 and v2 totals, reasons, race and candidate count remain separate',()=>{
+  const rows=[{kind:'counters',counters:{npcReports:8,npcReportVersions:{
+    v1:{received:3,reasons:{ACCEPTED:1,DUPLICATE:1,BASE_NOT_REACHABLE:1},reasonOverflow:0},
+    v2:{received:5,reasons:{ACCEPTED:1,AMBIGUOUS_OBSERVATION:3,NO_MATCHING_OBSERVATION:1},reasonOverflow:0}}}},
+    {kind:'npc-report',sequence:1,v:2,actor:91,base:null,race:'01320a:Skyrim.esm',candidates:2,level:2,generation:1,reason:'AMBIGUOUS_OBSERVATION'}];
+  const md=render('v2-fixture',{rows,invalid:[]});
+  for(const text of ['| v1 | 3 | 1 | 1 | 1 |','| v2 | 5 | 1 | 0 | 4 |',
+    '| v2 | AMBIGUOUS_OBSERVATION | 3 |','v2.reasons.AMBIGUOUS_OBSERVATION=3',
+    '| 1 | 2 | 0x5B | — | 01320a:Skyrim.esm | 2 | 2 | 1 | AMBIGUOUS_OBSERVATION |']) assert(md.includes(text),text);
+  assert(!md.includes('[object Object]'));
+  const old=render('historical',{rows:[],invalid:[]});assert(old.includes('| v2 | — | — | — | — |'));
+});

@@ -299,3 +299,16 @@ test('DS-0g-fix2: unavailable diagnostics retry, deduplicate checkpoints and exp
   assert.deepEqual(h.lines.filter(r=>r.kind==='npc-unavailable').map(r=>r.sequence),[1,4,5,6,7]);
   const gap=h.lines.find(r=>r.kind==='gap'&&r.buffer==='npcUnavailable');assert.equal(gap.lost,2);
 });
+
+test('DS-0g-fix4: v2 race, candidates and nested version counters survive retry unchanged',async()=>{
+  const h=harness();h.recorder.start();await h.recorder.flush();
+  const counts={v1:{received:0,reasons:{},reasonOverflow:0},v2:{received:1,reasons:{AMBIGUOUS_OBSERVATION:1},reasonOverflow:0}};
+  const original=h.probe.fn;h.probe.fn=id=>{const answer=original(id);if(id!==undefined)return answer;
+    const snapshot=JSON.parse(answer);snapshot.counters.npcReportVersions=counts;return JSON.stringify(snapshot);};
+  h.probe.push('npcReports',{v:2,actor:91,base:null,race:'01320a:Skyrim.esm',candidates:2,level:2,generation:1,reason:'AMBIGUOUS_OBSERVATION'});
+  h.writer.mode='fail';await h.poll();h.writer.mode='ok';await h.poll();await h.poll();
+  const rows=h.lines.filter(r=>r.kind==='npc-report');assert.equal(rows.length,1);
+  assert.deepEqual([rows[0].v,rows[0].race,rows[0].candidates,rows[0].base],[2,'01320a:Skyrim.esm',2,null]);
+  assert.equal(rows[0].actorDesc,'desc:91');
+  assert.deepEqual(h.lines.filter(r=>r.kind==='counters').at(-1).counters.npcReportVersions,counts);
+});

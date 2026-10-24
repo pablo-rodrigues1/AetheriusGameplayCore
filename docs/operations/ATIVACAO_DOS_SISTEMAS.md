@@ -16,6 +16,8 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 
 ## 2. Tabelas, por migration
 
+**DS-0g-fix4:** sem migration/tabela nova. A observação v2 reutiliza templateChain e private.aetheriusNpcObservation no changeform do host; acrescenta v=2/race estável e revalida no carregamento.
+
 **DS-0g-fix3 (parada):** investigação sem mudança de schema, persistência ou canal. Sem migration nova.
 
 **DS-0g-fix2:** diagnóstico de não envio usa anel/contadores em memória; nenhuma migration, tabela ou persistência nova.
@@ -89,6 +91,8 @@ npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
 **O servidor não aplica migrations sozinho.** Se faltar alguma, o Core sobe, deixa indisponíveis os sistemas que dependem do banco, e escreve no log o comando a rodar. O servidor do jogo não cai por isso.
 
 ## 4. Opções de configuração
+
+**DS-0g-fix4:** nenhuma opção nova. Recompilar host/cliente/Core em conjunto. O host novo aceita v1 e v2; distribuir primeiro o host evita rejeição v2 por binário antigo. Sonda mantém as travas DEV da seção abaixo. Esta ordem não instala nem ativa artefatos; addon isolado em aetherius-server/build/fix4-server/scam_native.node e cliente em _work/evidence/DS-0g/fix4/artifact/.
 
 **DS-0g-fix3 (parada):** nenhuma opção ou binário novo. A equivalência de getTemplate com o terminal TPLT/LVLN não foi comprovada; ver FONTES_E_DONOS §6 e _work/evidence/DS-0g/fix3/raiz-semantica-investigacao.md.
 
@@ -202,6 +206,12 @@ Fora dessa combinação, **a presença da opção, inclusive vazia ou `false`, �
 A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolvimento: ela transferiu para o sistema novo a pedra de um personagem de teste que vinha do protótipo. O servidor oficial não tem dados do protótipo e não precisa dela.
 
 ## 5. O que cada sistema faz quando ligado
+
+**DS-0g-fix4 — supersessão do bloqueio de base temporária (fix2/fix3):** com base estável, cliente mantém v1. Com base sem chave estável, lê raça efetiva e nível, envia v2 {channel,v,actor,race,level,generation}, sem root/getTemplate. Host enumera cadeias vencedoras sem pcLevel/sorteio e só adota uma única compatível por UseTraits/UseStats. Zero = NO_MATCHING_OBSERVATION, várias = AMBIGUOUS_OBSERVATION, sem desempate. Novos motivos de não envio: RACE_ABSENT e RACE_HAS_NO_STABLE_KEY. Q13: DamageSystem só observa; não muda base, não cria/remove NPC nem sorteia spawn.
+
+Roteiro do revisor/dono, ainda não executado em jogo: distribuir os artefatos identificados no relatório fix4 com os processos do jogo fechados, conferindo o mod vencedor do cliente (AETHERIUS - UI CORE no ambiente histórico). A substituição do addon em uso requer sessão autorizada de manutenção; o executor não para/reinicia servidor. No teste do dono, hospedar NPC marcado, conferir na sonda §11 v=2, raça estável, candidates=1 e ACCEPTED; observar máximos/cadeia, transferir hoster, reconectar e conferir persistência; após respawn, geração nova. Para ambiguidade, exigir AMBIGUOUS_OBSERVATION e estado não adotado. RACE_ABSENT/RACE_HAS_NO_STABLE_KEY devem chegar no canal de motivo. Captura antiga não comprova esses passos.
+
+Desfazer futura distribuição: revisor repõe os artefatos anteriores em janela autorizada; não apagar dados. Host antigo não compreende a prova v2 e pode descartar escolhas salvas ao revalidar. Retirar a sonda pelas opções já documentadas; o protocolo de observação não ganha chave de ativação. Limites, formatos e recuperação em FONTES_E_DONOS §6; nenhum servidor foi alterado em execução nesta ordem.
 
 **DS-0g-fix3 (parada):** a explicação histórica da fix2 sobre raiz não prova que nextTemplate do motor corresponda à cadeia TPLT/LVLN. V2 não implementado; diagnóstico fix2 e UNSUPPORTED da base temporária continuam vigentes. Nenhum procedimento novo de ativação.
 
@@ -534,6 +544,8 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+**DS-0g-fix4 (24/10/2026, Sol 6.1):** código v2 por raça+nível, resolução única, persistência e diagnósticos preparados para revisão. Saídas de compilação isoladas/cliente sem deploy; aceites, hashes e limitações no relatório _work/orders/DS-0g-fix4-raca-e-nivel.result.md e evidências _work/evidence/DS-0g/fix4/. Nenhum .env/settings, migration/banco, jogo/MO2, servidor ou STATE alterado; nada foi ativado a desfazer. Sessão em jogo e revisão independente pendentes.
 
 **DS-0g-fix3 (24/10/2026, Sol 6.1):** parada conforme Pedido 2 por semântica não comprovada: SKSE percorre nextTemplate/faceNPC, distinto do campo TPLT percorrido pelo host. Investigação e notas documentais somente; nenhum build/artefato novo, instalação, configuração, migration, banco ou servidor alterado. Evidência em _work/evidence/DS-0g/fix3; relatório _work/orders/DS-0g-fix3-raiz-e-raca.result.md. Nada foi ativado nesta ordem.
 
