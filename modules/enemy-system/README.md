@@ -1,6 +1,9 @@
 # AetheriusEnemySystem
 
 > [!IMPORTANT]
+> **Autoridade de spawn é deste módulo** (decisão do dono, 24/10/2026): sorteio de listas niveladas, geração, respawn e substituição de NPC pertencem ao EnemySystem, e o DamageSystem não os define. Inimigos gerenciados devem ser criados a partir de `NPC_` concreto e marcados, para que a observação de criatura do DamageSystem os ignore. Detalhes, inclusive o sorteio provisório do host que passa a ser deste módulo: [damage-system/docs/INTEGRACAO_HOST_E_AUTORIDADE_DE_SPAWN.md](../damage-system/docs/INTEGRACAO_HOST_E_AUTORIDADE_DE_SPAWN.md).
+
+> [!IMPORTANT]
 > O domínio e as regras de Enemy permanecem válidos, mas ownership, persistência, Host Ports e integração com Leveling devem seguir [a arquitetura canônica](../../docs/architecture/AETHERIUS_GAMEPLAY_CORE_ARCHITECTURE.md). Eventos de morte só se tornam econômicos quando originados do `NativeDeathPort` autorizado.
 
 Sistema server-authoritative de inimigos, encontros e dungeons para servidores Skyrim baseados em SkyMP.

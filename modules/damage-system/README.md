@@ -1,6 +1,9 @@
 # AetheriusDamageSystem
 
 > [!IMPORTANT]
+> **Autoridade de spawn:** qual inimigo aparece (sorteio de listas niveladas, geração, respawn, substituição de NPC) é do **EnemySystem**. O DamageSystem só observa a criatura que o jogo mostrou, para os números de combate, e não define spawn (decisão do dono, 24/10/2026). Antes de integrar, leia [INTEGRACAO_HOST_E_AUTORIDADE_DE_SPAWN](docs/INTEGRACAO_HOST_E_AUTORIDADE_DE_SPAWN.md): mudanças feitas no host e no cliente, decisões e pendências.
+
+> [!IMPORTANT]
 > O código e os patches deste módulo registram a implementação experimental anterior à arquitetura canônica. Para integração futura, use [AETHERIUS_GAMEPLAY_CORE_ARCHITECTURE.md](../../docs/architecture/AETHERIUS_GAMEPLAY_CORE_ARCHITECTURE.md): Damage continua owner do cálculo, mas Host Combat/Effects/Resource APIs devem ser públicas, mínimas e versionadas. Patches históricos não são o contrato final.
 
 Motor de combate nativo experimental e patches de integração para a Base Aetherius e ClassSystem. **Legacy permanece padrão; ainda não é release de produção.**
