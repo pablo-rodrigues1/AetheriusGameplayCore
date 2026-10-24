@@ -1,0 +1,12 @@
+{
+  "name": "aetherius-damage-perk-compiler",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test tests/*.test.cjs",
+    "coverage": "npm run build && node tools/generate-coverage.cjs"
+  },
+  "devDependencies": {
+    "typescript": "5.3.3"
+  }
+}
