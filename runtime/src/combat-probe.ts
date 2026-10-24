@@ -35,11 +35,11 @@ export function developmentCombatProbe(env: CoreEnvironment): CombatProbeConfig 
 // No argument: the buffers snapshot. Numeric argument: read-only enchantment resolution.
 type ProbeMp = RuntimeMp & { getAetheriusCombatProbe?: (request?: number | { recordType: number }) => unknown };
 type Row = Record<string, unknown> & { sequence: number };
-type Buffer = 'hits' | 'animations' | 'health' | 'equipment' | 'rejections' | 'npcReports';
-const buffers: readonly Buffer[] = ['hits', 'animations', 'health', 'equipment', 'rejections', 'npcReports'];
-const kinds: Record<Exclude<Buffer, 'equipment'>, string> = { hits: 'hit', animations: 'animation', health: 'health', rejections: 'rejection', npcReports: 'npc-report' };
+type Buffer = 'hits' | 'animations' | 'health' | 'equipment' | 'rejections' | 'npcReports' | 'npcUnavailable';
+const buffers: readonly Buffer[] = ['hits', 'animations', 'health', 'equipment', 'rejections', 'npcReports', 'npcUnavailable'];
+const kinds: Record<Exclude<Buffer, 'equipment'>, string> = { hits: 'hit', animations: 'animation', health: 'health', rejections: 'rejection', npcReports: 'npc-report', npcUnavailable: 'npc-unavailable' };
 const maxDescriptors = 4096;
-/** Upper bound of one batch: the host rings (1024 + 4096 + 1024 + 256 + 1024 + 256 rows),
+/** Upper bound of one batch: the host rings (1024 + 4096 + 1024 + 256 + 1024 + 256 + 256 rows),
  * one state line per tracked character and a few control lines. */
 export const COMBAT_PROBE_MAX_IN_FLIGHT_BATCHES = 1;
 
@@ -73,7 +73,7 @@ interface WriterStats {
 }
 
 export class CombatProbeRecorder {
-  private committed: Checkpoint = { started: false, last: { hits: 0, animations: 0, health: 0, equipment: 0, rejections: 0, npcReports: 0 },
+  private committed: Checkpoint = { started: false, last: { hits: 0, animations: 0, health: 0, equipment: 0, rejections: 0, npcReports: 0, npcUnavailable: 0 },
     startedAtMs: undefined, counters: '', equipment: new Map(), writer: '' };
   private inFlight: Promise<void> | undefined;
   private failing = false;

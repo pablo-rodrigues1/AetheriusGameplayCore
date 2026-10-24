@@ -35,6 +35,7 @@ export function analyze(rows) {
   const hits = rows.filter(r => r.kind === 'hit').sort((a, b) => a.timeMs - b.timeMs || a.sequence - b.sequence);
   const animations = rows.filter(r => r.kind === 'animation').sort((a, b) => a.timeMs - b.timeMs || a.sequence - b.sequence);
   const health = rows.filter(r => r.kind === 'health').sort((a, b) => a.timeMs - b.timeMs || a.sequence - b.sequence);
+  const npcUnavailable = rows.filter(r => r.kind === 'npc-unavailable');
   const npcReports = rows.filter(r => r.kind === 'npc-report');
   const rejections = rows.filter(r => r.kind === 'rejection');
   const gaps = rows.filter(r => r.kind === 'gap');
@@ -95,7 +96,7 @@ export function analyze(rows) {
     return state ? [{ event, role, state, ageMs: state.movementMatches && Number.isFinite(state.lastMovementMs)
       && event.timeMs >= state.lastMovementMs ? event.timeMs - state.lastMovementMs : null }] : [];
   }));
-  return { npcReports, rejections, refusalsByReason, refusalsByActor, events, positions, hits, animations, health, gaps, resets, counters, equipment, writer, lostByReason, unavailableHealth, families, power, drops, altered, names, hostNames, allNames };
+  return { npcUnavailable, npcReports, rejections, refusalsByReason, refusalsByActor, events, positions, hits, animations, health, gaps, resets, counters, equipment, writer, lostByReason, unavailableHealth, families, power, drops, altered, names, hostNames, allNames };
 }
 
 export function render(file, parsed) {
@@ -108,7 +109,7 @@ export function render(file, parsed) {
 
   out.push('## 1. Integridade dos buffers', '');
   const c = a.counters?.counters;
-  out.push(c ? table(['contador', 'valor'], Object.entries(c).map(([k, v]) => [k, fmt(v)])) : '_sem linha de contadores no arquivo_', '');
+  out.push(c ? table(['contador', 'valor'], Object.entries(c).map(([k, v]) => [k, v && typeof v === 'object' ? Object.entries(v).map(([reason, count]) => `${reason}=${fmt(count)}`).join(', ') || '—' : fmt(v)])) : '_sem linha de contadores no arquivo_', '');
   out.push(`Lacunas (anel sobrescrito entre leituras): ${a.gaps.length}.`, '');
   if (a.gaps.length) out.push(table(['buffer', 'de', 'até', 'perdidas', 'motivo'],
     a.gaps.map(g => [g.buffer, g.from, g.to, fmt(g.lost ?? (g.to - g.from + 1)), g.reason])), '');
@@ -189,6 +190,11 @@ export function render(file, parsed) {
   out.push(table(['motivo do informe (total do host)', 'quantidade'], Object.entries(c?.npcReportReasons ?? {})), '');
   out.push('Restauração de escolha persistida: falhas ' + fmt(c?.npcRestoreFailures) + '. O ator carrega não confirmado com geração nova; estes contadores são separados dos informes recebidos.', '');
   out.push(table(['motivo da restauração recusada (total do host)', 'quantidade'], Object.entries(c?.npcRestoreFailureReasons ?? {})), '');
+  out.push('Diagnósticos de não envio: recebidos ' + fmt(c?.npcUnavailable) + '. Somente motivos aceitos do hoster atual são contados abaixo; nenhuma criatura é alterada.', '');
+  out.push(table(['motivo de não envio aceito (total do host)', 'quantidade'], Object.entries(c?.npcUnavailableReasons ?? {})), '');
+  out.push(table(['validação do diagnóstico (total do host)', 'quantidade'], Object.entries(c?.npcUnavailableResults ?? {})), '');
+  out.push(table(['seq', 'ator', 'geração', 'motivo de não envio', 'validação'],
+    a.npcUnavailable.map(r => [r.sequence, r.actorDesc ?? hex(r.actor), fmt(r.generation), r.reason || '—', r.result])), '');
   out.push(table(['seq', 'ator', 'base informada', 'nível', 'geração', 'resultado'],
     a.npcReports.map(r => [r.sequence, r.actorDesc ?? hex(r.actor), r.base, fmt(r.level), fmt(r.generation), r.reason])), '');
   out.push(table(['evento', 'seq', 'papel', 'ator', 'confirmação', 'nível', 'provedor raça', 'provedor stats', 'vida máxima', 'cadeia adotada'],

@@ -16,6 +16,8 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 
 ## 2. Tabelas, por migration
 
+**DS-0g-fix2:** diagnóstico de não envio usa anel/contadores em memória; nenhuma migration, tabela ou persistência nova.
+
 **DS-0g:** nenhuma migration/pool/ledger novo. A escolha validada de NPC e sua geração são persistidas pelo changeform nativo existente (templateChain + propriedade privada), sem PostgreSQL.
 
 
@@ -85,6 +87,8 @@ npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
 **O servidor não aplica migrations sozinho.** Se faltar alguma, o Core sobe, deixa indisponíveis os sistemas que dependem do banco, e escreve no log o comando a rodar. O servidor do jogo não cai por isso.
 
 ## 4. Opções de configuração
+
+**DS-0g-fix2:** nenhuma opção nova. Distribuir host, cliente e bundle do Core recompilados para capturar o diagnóstico; sonda mantém as travas DEV. Base temporária não resolvida (limite de getTemplate, FONTES_E_DONOS §6).
 
 **DS-0g:** informe de criatura e auto-cálculo pertencem ao host nativo e não dependem da sonda nem de flag DEV. Exigem recompilar o host e distribuir o novo skymp5-client.js; não exigem DLL nova de Skyrim Platform. Cliente antigo não informa: NPC nivelado permanece na conta anterior, explicitamente não confirmado na sonda. Nenhuma opção foi ligada nesta entrega.
 
@@ -286,6 +290,14 @@ Golpes aceitos e recusados incluem posição/célula ou worldspace que o host te
 O Core consome `rejection` com os mesmos checkpoints e retenção da fix1. O relatório acrescenta recusas por motivo/ator, distância, idade da posição e tentativas recusadas, máximos por alvo e distingue ausência de medição no formato antigo de zero recusas. Reconhece também `attackStart_*Power*`. O host exporta `wornSlot` (marcador de vestido), e a consulta de tipo `mp.getAetheriusCombatProbe({recordType: id})` roda fora do hit: mão só para WEAP/SPEL; armadura recebe NONE; tipo indisponível recebe UNAVAILABLE. Formato antigo de sonda continua legível. Não há opção, migration, tabela nem passo de ativação novo; as travas e o desligamento acima continuam valendo. Não incluir a sonda em integrations/host.
 
 Diagnóstico e roteiro: [DIAGNOSTICO_SESSAO_DS-0](../../modules/damage-system/docs/DIAGNOSTICO_SESSAO_DS-0.md). Na próxima sessão do dono, comparar uma recusa TOO_DISTANT/DIFFERENT_CELL com os dois snapshots de posição e a última tentativa; para mortes, conferir `targetMaximumHealth`, cadeia e base do alvo; para o golpe desarmado, conferir UseTraits da cadeia do agressor. Registrar também a base/valores observados no motor do cliente: os dados só do host não provam a divergência visual. Boot/sessão nova não executados pelo Sol.
+
+### Diagnóstico de não envio (DS-0g-fix2)
+
+A nota DS-0g de falha só no log está supersedida: aetherius.npc.observation.unavailable v1 envia motivo fechado, sem exceção livre, por ator/geração/motivo. Host autentica e só registra evidência; não adota nem muda estado. Core grava npc-unavailable; relatório §11 separa recebidos/motivos aceitos/resultados da validação de informes e restaurações. npcUnavailableReasons e npcUnavailableResults aparecem como motivo=quantidade também em §1; perda do anel é explícita.
+
+Na próxima sessão do dono, conferir hoster/marcador e procurar ACTOR_NOT_LOADED, RESOLVED_BASE_ABSENT, RESOLVED_BASE_HAS_NO_STABLE_KEY, INVALID_ENGINE_LEVEL ou ENGINE_READ_FAILED em §11. Se houver zero diagnósticos, conferir cliente vencedor e elegibilidade/marcador: sem geração o canal não pode autenticar falta de marcador. Zero não prova leitura bem-sucedida. Para base temporária, getTemplate só expõe a raiz, que pode não identificar a entrada selecionada: item 2 parado, ainda UNSUPPORTED. Não instalar este build como correção certificada da criatura.
+
+Distribuição/reversão seguem DS-0g abaixo, em parada autorizada; sem configuração nem dado novo a apagar. Boot/jogo não executados pelo implementador.
 
 ### Informe de criatura e medição de cadência (DS-0g)
 
@@ -518,6 +530,8 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 ## 9. O que foi feito no ambiente local, como referência
 
 **Q10 (decisão do dono, 23/10/2026 21:00):** incluir no server-settings.json do oficial a chave `"damageMultFormulaSettings": {"multiplier": 1}`. Sem a chave, DamageMultFormula aplica o padrão 2 a NPC→jogador. A sessão DS-0d 21:08 usou 1× no local (registro `_work/evidence/H/sessao-DS-0d-20261023.md`); esta ordem não leu nem alterou settings. O outro desenvolvedor confirma/aplica a mesma chave no oficial. Não desligar a opção removendo a chave, pois isso repõe 2×.
+
+**DS-0g-fix2 (24/10/2026, Sol 6.1):** diagnóstico, relatório e testes preparados. Item 2 parado: getter de template retorna raiz, sem prova da entrada selecionada. Nenhum servidor iniciado, instalação no jogo, opção ou banco alterado. Artefato e aceites em _work/evidence/DS-0g/fix2; entrega/limitações em _work/orders/DS-0g-fix2-base-temporaria.result.md. Recompilar substitui artefatos locais de build; não há ativação nova a desfazer.
 
 **DS-0g (24/10/2026, Sol 6.1):** continuação do parcial de 23/10; host e cliente recompilados para revisão, Core e relatório gerados. O build substitui o addon em build/dist/server, mas não sobe servidor. Cliente somente em `_work/evidence/DS-0g/artifact`, sem instalação no jogo; nenhuma alteração em .env, settings, STATE, migrations ou aetherius_dev. Banco automatizado somente aetherius_test. Aceites, hashes e limitações no relatório `_work/orders/DS-0g-criatura-informada.result.md`. Não há ativação local nova a desfazer. Homologação em jogo e revisão independente permanecem com dono/Opus.
 

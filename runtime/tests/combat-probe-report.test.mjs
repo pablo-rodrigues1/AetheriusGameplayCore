@@ -114,3 +114,16 @@ test('DS-0g-fix1: persisted restore failures keep reasons separate from hoster r
   const historical = render('historical', { rows: [], invalid: [] });
   assert.match(historical, /Restauração de escolha persistida: falhas —/);
 });
+
+test('DS-0g-fix2: nested counter reasons render pairs and unavailable diagnostics stay separate',()=>{
+  const rows=[{kind:'counters',counters:{npcReports:2,npcReportReasons:{ACCEPTED:1,DUPLICATE:1},
+    npcRestoreFailures:1,npcRestoreFailureReasons:{BASE_NOT_REACHABLE:1},npcUnavailable:3,
+    npcUnavailableReasons:{RESOLVED_BASE_HAS_NO_STABLE_KEY:2},npcUnavailableResults:{ACCEPTED:2,NOT_CURRENT_HOSTER:1}}},
+    {kind:'npc-unavailable',sequence:1,actor:91,actorDesc:'creature-ref',generation:7,reason:'RESOLVED_BASE_HAS_NO_STABLE_KEY',result:'ACCEPTED',accepted:true}];
+  const a=analyze(rows);assert.equal(a.npcUnavailable.length,1);assert.equal(a.npcReports.length,0);
+  const md=render('diagnostic-fixture',{rows,invalid:[]});
+  assert(!md.includes('[object Object]'));
+  for(const text of ['ACCEPTED=1','DUPLICATE=1','BASE_NOT_REACHABLE=1','RESOLVED_BASE_HAS_NO_STABLE_KEY=2','NOT_CURRENT_HOSTER=1',
+    'Diagnósticos de não envio: recebidos 3','| creature-ref | 7 | RESOLVED_BASE_HAS_NO_STABLE_KEY | ACCEPTED |','| 2 | 1 | 1 | 0 |'])assert(md.includes(text),text);
+  const old=render('old',{rows:[],invalid:[]});assert.match(old,/Diagnósticos de não envio: recebidos —/);
+});
