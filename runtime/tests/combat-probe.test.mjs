@@ -29,7 +29,7 @@ const SUPPORTED = new Map([[77, 5], [88, 6]]);
 
 /** Host ring model: same rows/sequence semantics as CombatProbe::Ring. */
 function hostProbe(capacity = 4) {
-  const rings = { hits: [], animations: [], health: [], equipment: [], rejections: [] }, totals = { hits: 0, animations: 0, health: 0, equipment: 0, rejections: 0 };
+  const rings = { hits: [], animations: [], health: [], equipment: [], rejections: [], npcReports: [] }, totals = { hits: 0, animations: 0, health: 0, equipment: 0, rejections: 0, npcReports: 0 };
   let calls = 0; const enchantmentCalls = [];
   return {
     rings, totals, enchantmentCalls, get calls() { return calls; },
@@ -269,4 +269,19 @@ test('DS-0d: rejection checkpoints retry unchanged and overflow is explicit; arm
   const items = h.lines.filter(r=>r.source==='HOST_TRANSITION').at(-1).equipped;
   assert.deepEqual(items.map(i=>i.hand), ['NONE','LEFT']);
   assert(items.every(i=>i.worn));
+});
+
+
+test('DS-0g: NPC report checkpoint survives retry, records overflow and enriches providers', async () => {
+  const h=harness();h.recorder.start();await h.recorder.flush();
+  h.probe.push('npcReports',{actor:91,base:'23abe:Skyrim.esm',level:2,generation:1,reason:'ACCEPTED'});
+  h.probe.push('hits',{aggressor:91,target:92,source:100,aggressorState:{actor:91,base:1,traitsProvider:'23a8b:Skyrim.esm',statsProvider:'23a8b:Skyrim.esm',templateChain:['1e7a0:Skyrim.esm','23a8b:Skyrim.esm','23a8a:Skyrim.esm'],creatureConfirmed:true,level:16}});
+  h.writer.mode='fail';await h.poll();assert.equal(h.lines.filter(l=>l.kind==='npc-report').length,0);
+  h.writer.mode='ok';await h.poll();await h.poll();
+  const reports=h.lines.filter(l=>l.kind==='npc-report');assert.equal(reports.length,1);assert.equal(reports[0].actorDesc,'desc:91');
+  const state=h.lines.find(l=>l.kind==='hit').aggressorState;
+  assert.equal(state.creatureTraitsDesc,'23a8b:Skyrim.esm');assert.equal(state.creatureStatsDesc,'23a8b:Skyrim.esm');assert.equal(state.resolvedNpcDesc,'23a8a:Skyrim.esm');
+  for(let i=0;i<6;i++)h.probe.push('npcReports',{actor:91,reason:'CONFIRMED_CREATURE_CONFLICT'});
+  await h.poll();const gap=h.lines.find(l=>l.kind==='gap'&&l.buffer==='npcReports');assert.equal(gap.lost,2);
+  assert.deepEqual(h.lines.filter(l=>l.kind==='npc-report').map(r=>r.sequence),[1,4,5,6,7]);
 });

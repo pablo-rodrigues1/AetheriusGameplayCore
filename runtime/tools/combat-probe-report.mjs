@@ -35,6 +35,7 @@ export function analyze(rows) {
   const hits = rows.filter(r => r.kind === 'hit').sort((a, b) => a.timeMs - b.timeMs || a.sequence - b.sequence);
   const animations = rows.filter(r => r.kind === 'animation').sort((a, b) => a.timeMs - b.timeMs || a.sequence - b.sequence);
   const health = rows.filter(r => r.kind === 'health').sort((a, b) => a.timeMs - b.timeMs || a.sequence - b.sequence);
+  const npcReports = rows.filter(r => r.kind === 'npc-report');
   const rejections = rows.filter(r => r.kind === 'rejection');
   const gaps = rows.filter(r => r.kind === 'gap');
   const resets = rows.filter(r => r.kind === 'reset');
@@ -94,7 +95,7 @@ export function analyze(rows) {
     return state ? [{ event, role, state, ageMs: state.movementMatches && Number.isFinite(state.lastMovementMs)
       && event.timeMs >= state.lastMovementMs ? event.timeMs - state.lastMovementMs : null }] : [];
   }));
-  return { rejections, refusalsByReason, refusalsByActor, events, positions, hits, animations, health, gaps, resets, counters, equipment, writer, lostByReason, unavailableHealth, families, power, drops, altered, names, hostNames, allNames };
+  return { npcReports, rejections, refusalsByReason, refusalsByActor, events, positions, hits, animations, health, gaps, resets, counters, equipment, writer, lostByReason, unavailableHealth, families, power, drops, altered, names, hostNames, allNames };
 }
 
 export function render(file, parsed) {
@@ -171,13 +172,63 @@ export function render(file, parsed) {
       (p.state.lastAttemptPosition ?? []).map(fmt).join(', '), p.state.lastAttemptCellDesc ?? hex(p.state.lastAttemptCellOrWorld), fmt(p.state.rejectedMovements)])), '');
 
   out.push('## 10. Vida máxima por alvo', '');
-  out.push('USADO_NO_GOLPE é o denominador da conta do host. CACHED_INPUTS_CURRENT compara os insumos atuais com a última leitura de GetMaximumValues, sem resolver records; calcula a expiração de fraqueza pelo relógio atual. Mudança de insumos, contexto ausente ou excedente dos limites = UNAVAILABLE. LAST_OBSERVED (formato intermediário) não garante máximo atual. resolvedNpcDesc é o terminal da cadeia escolhida pelo host; traits e stats podem vir de outro elo.', '');
-  out.push(table(['alvo', 'evento', 'seq', 'máximo usado no golpe', 'máximo atual', 'último máximo observado', 'observado em (ms)', 'estado', 'base', 'NPC terminal', 'cadeia', 'elos omitidos'],
+  out.push('USADO_NO_GOLPE é o denominador da conta do host. CACHED_INPUTS_CURRENT compara os insumos atuais com a última leitura de GetMaximumValues, sem resolver records; calcula a expiração de fraqueza pelo relógio atual. Mudança de insumos, contexto ausente ou excedente dos limites = UNAVAILABLE. LAST_OBSERVED (formato intermediário) não garante máximo atual. A criatura mostra os provedores de raça e stats; quando ausentes no formato histórico ficam indisponíveis. resolvedNpcDesc é só o terminal histórico e não identifica a criatura.', '');
+  out.push(table(['alvo', 'evento', 'seq', 'máximo usado no golpe', 'máximo atual', 'último máximo observado', 'observado em (ms)', 'estado', 'base', 'criatura (raça / stats)', 'cadeia', 'elos omitidos'],
     a.events.map(e => [hex(e.target), e.kind, e.sequence, fmt(e.targetMaximumHealth), fmt(e.targetState?.maximumHealth), fmt(e.targetState?.lastObservedMaximum),
       fmt(e.targetState?.maximumObservedMs), e.targetState?.maximumStatus ?? 'UNAVAILABLE', e.targetState?.baseDesc ?? hex(e.targetState?.base),
-      e.targetState?.resolvedNpcDesc ?? '—', (e.targetState?.templateChain ?? []).join(' → '), fmt(e.targetState?.truncatedTemplates)])), '');
+      [e.targetState?.creatureTraitsDesc ?? e.targetState?.traitsProvider ?? '—', e.targetState?.creatureStatsDesc ?? e.targetState?.statsProvider ?? '—'].join(' / '), (e.targetState?.templateChain ?? []).join(' → '), fmt(e.targetState?.truncatedTemplates)])), '');
 
-  out.push('## 11. Amostras brutas', '');
+  out.push('## 11. Criatura e nível informados pelo hoster', '');
+  out.push('Confirmação = informe do hoster aceito contra os winners. Antes do informe o host conserva a escolha anterior, explicitamente não confirmada. Outro hoster pode ver uma criatura diferente; conflito não troca a escolha adotada.', '');
+  const reasons = c?.npcReportReasons;
+  const accepted = reasons && Number.isFinite(reasons.ACCEPTED) ? reasons.ACCEPTED : reasons ? 0 : null;
+  const duplicates = reasons && Number.isFinite(reasons.DUPLICATE) ? reasons.DUPLICATE : reasons ? 0 : null;
+  const received = Number.isFinite(c?.npcReports) ? c.npcReports : null;
+  out.push(table(['recebidos', 'adotados', 'duplicados válidos', 'recusados'], [[fmt(received), fmt(accepted), fmt(duplicates),
+    fmt(received === null || accepted === null || duplicates === null ? null : received - accepted - duplicates)]]), '');
+  out.push(table(['motivo do informe (total do host)', 'quantidade'], Object.entries(c?.npcReportReasons ?? {})), '');
+  out.push('Restauração de escolha persistida: falhas ' + fmt(c?.npcRestoreFailures) + '. O ator carrega não confirmado com geração nova; estes contadores são separados dos informes recebidos.', '');
+  out.push(table(['motivo da restauração recusada (total do host)', 'quantidade'], Object.entries(c?.npcRestoreFailureReasons ?? {})), '');
+  out.push(table(['seq', 'ator', 'base informada', 'nível', 'geração', 'resultado'],
+    a.npcReports.map(r => [r.sequence, r.actorDesc ?? hex(r.actor), r.base, fmt(r.level), fmt(r.generation), r.reason])), '');
+  out.push(table(['evento', 'seq', 'papel', 'ator', 'confirmação', 'nível', 'provedor raça', 'provedor stats', 'vida máxima', 'cadeia adotada'],
+    a.positions.map(p => [p.event.kind, p.event.sequence, p.role, hex(p.state.actor),
+      p.state.observationNeeded === false ? 'NÃO REQUER' : p.state.creatureConfirmed === true ? 'CONFIRMADA' : p.state.creatureConfirmed === false ? 'NÃO CONFIRMADA' : 'INDISPONÍVEL',
+      fmt(p.state.level), p.state.creatureTraitsDesc ?? p.state.traitsProvider ?? '—', p.state.creatureStatsDesc ?? p.state.statsProvider ?? '—',
+      fmt(p.role === 'targetState' && Number.isFinite(p.event.targetMaximumHealth) ? p.event.targetMaximumHealth : p.state.maximumHealth),
+      (p.state.templateChain ?? []).join(' → ')])), '');
+
+  out.push('## 12. Velocidade de ataque por arma e família de animação', '');
+  out.push('Só medição: CanHit e os limites SPLASH não foram alterados. Intervalo anterior = tentativa anterior deste agressor, inclusive recusada; intervalo aceito = relógio já usado pelo host. Primeira tentativa ou dado ausente fica indisponível. Últimos eventos não comprovam o tipo de ataque.', '');
+  const cadence = a.events.filter(e => e.cadence && (e.kind === 'hit' || e.reason === 'ATTACK_COOLDOWN' || e.reason?.startsWith('SPLASH_')));
+  const animationFamily = e => {
+    const name = e.aggressorAnimations?.[0]?.name;
+    if (!name) return 'INDISPONÍVEL';
+    if (/bfco/i.test(name)) return 'BFCO';
+    if (POWER_EVENT.test(name)) return 'attackPower';
+    if (/attack/i.test(name)) return 'attack';
+    return 'outros (' + name + ')';
+  };
+  const groups = new Map();
+  for (const e of cadence) {
+    const key = JSON.stringify([e.sourceDesc ?? hex(e.source), animationFamily(e)]);
+    const g = groups.get(key) ?? { accepted: 0, refused: 0, intervals: [], limits: new Set(), speeds: new Set() };
+    if (e.kind === 'hit') g.accepted++; else g.refused++;
+    if (Number.isFinite(e.cadence.sincePreviousAttemptMs)) g.intervals.push(e.cadence.sincePreviousAttemptMs);
+    if (Number.isFinite(e.cadence.limitMs)) g.limits.add(e.cadence.limitMs);
+    if (Number.isFinite(e.cadence.weaponSpeed)) g.speeds.add(e.cadence.weaponSpeed);
+    groups.set(key, g);
+  }
+  out.push(table(['arma', 'família de animação', 'aceitos', 'recusados', 'intervalo min / médio / max (ms)', 'velocidade WEAP', 'limite CanHit (ms)'],
+    [...groups].map(([key, g]) => [...JSON.parse(key), g.accepted, g.refused,
+      g.intervals.length ? [Math.min(...g.intervals), g.intervals.reduce((x,y) => x+y,0)/g.intervals.length, Math.max(...g.intervals)].map(fmt).join(' / ') : '—',
+      [...g.speeds].map(fmt).join(', ') || '—', [...g.limits].map(fmt).join(', ') || '—'])), '');
+  out.push(table(['evento', 'seq', 'agressor', 'arma', 'resultado', 'anterior (ms)', 'aceito anterior (ms)', 'velocidade', 'limite (ms)', 'últimas animações'],
+    cadence.map(e => [e.kind, e.sequence, hex(e.aggressor), e.sourceDesc ?? hex(e.source), e.reason ?? 'ACEITO',
+      fmt(e.cadence.sincePreviousAttemptMs), fmt(e.cadence.sincePreviousAcceptedMs), fmt(e.cadence.weaponSpeed), fmt(e.cadence.limitMs),
+      (e.aggressorAnimations ?? []).map(x => x.name + '@-' + x.ageMs + 'ms').join(', ')])), '');
+
+  out.push('## 13. Amostras brutas', '');
   out.push('### Golpes', '', table(['seq', 'tempo', 'agressor', 'alvo', 'fonte', 'família', 'flags', 'dano', 'antes', 'candidato', 'depois', 'bloqueio agr/alvo', 'agachado'],
     a.hits.map(h => [h.sequence, h.timeMs, hex(h.aggressor), hex(h.target), h.sourceDesc ?? hex(h.source), h.family,
       ['power', 'sneak', 'bash', 'blocked', 'clientBlocked'].filter(f => h[f]).join(',') || '—', fmt(h.damage), fmt(h.healthBefore), fmt(h.healthCandidate), fmt(h.healthAfter),

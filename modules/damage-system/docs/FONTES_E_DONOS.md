@@ -93,6 +93,30 @@ O [diagnóstico com fontes e classificação PROVADO/HIPÓTESE](DIAGNOSTICO_SESS
 
 **Supersessão da observação de animação acima:** com a sonda de desenvolvimento ligada, os eventos aceitos de NPC hospedado também são copiados, independentemente do AnimationSystem. A extensão DS-0d acrescenta recusas, posição corrente/último movimento/tentativa, hoster e máximos com estado de disponibilidade; fora da sonda o comportamento nativo continua o descrito. Skills ainda não são projetadas pelo Core; deltas de máximos C3d já são projetados (ver D4 do diagnóstico).
 
+
+### DS-0g — criatura informada e auto-cálculo (24/10/2026)
+
+Esta seção supersede o comportamento de D2 descrito acima para o código DS-0g. O host publica a propriedade de leitura aetheriusNpcObservation={generation} só para NPCs cuja cadeia contém LVLN ou cujo provedor UseStats tem PCLevelMult. O cliente hospedeiro lê getLeveledActorBase/getLevel e envia evidência pelo customPacket aetherius.npc.observation v1. ActionListener autentica o emissor pela mesma associação hosters do movimento. Não há roteamento pelo Core/gamemode nem DLL nova de Skyrim Platform.
+
+O C++ percorre deterministicamente NPC_/TPLT/LVLN vencedores: entrada com nível ≤ informado; sem CalculateFromAllLevels, só o maior nível elegível. Confere nível fixo ou limites min/max de PCLevelMult no provedor UseStats. Grafo ausente/cíclico, ambiguidade, UseAll e LVLG sem semântica certificada são recusados explicitamente. Limites: 4096 visitas, 64 elos. Base por plugin de definição e ID local; o host converte para a load order corrente. Informe aceito trava cadeia e nível até respawn; outro hoster só confirma a mesma escolha. Persistência usa templateChain e dynamicFields['private.aetheriusNpcObservation'] do changeform existente; respawn incrementa geração, remove confirmação e publica o marcador. Antes do informe válido, o nivelado conserva a cadeia e a conta anteriores. PCLevelMult sem informe conserva a conta anterior; NPC fixo não nivelado usa seu nível do record.
+
+GetBaseActorValues aplica auto-cálculo somente quando o provedor UseStats tem AutoCalcStats e o nível está disponível. Máximos = RACE.Starting + offsets ACBS + distribuição de (nível−1)×iAVDhmsLevelUp pelos pesos CLAS (Health/Magicka/Stamina); Health soma ainda (nível−1)×fNPCHealthLevelBonus. Regeneração continua racial. Skills = iAVDSkillStart + bônus RACE, mais distribuição de (nível−1)×iAVDSkillsLevelUp por CLAS. Distribuição: parte inteira por peso, excesso redistribuído entre valores não saturados e resto por peso decrescente/desempate AV decrescente; teto de skill 100 no domínio certificado. Não se usa DNAM como cache calculado de auto-calc. RACE.DATA identifica o bônus por ActorValue 6..23 (por exemplo, Sneak=15); a saída e CLAS/DNAM usam índices 0..17. Skills manuais somam valores e offsets DNAM. GetNpcSkills expõe leitura opcional; nada consome skills no dano nesta ordem. Máximos continuam base → C3d/DEV → fraqueza.
+
+| Termo | Fonte vencedora nesta load order | Identidade |
+|---|---|---|
+| pontos de atributos por nível | iAVDhmsLevelUp = 10, Skyrim.esm | 021A73:Skyrim.esm |
+| pontos de skill por nível | iAVDSkillsLevelUp = 8, Skyrim.esm | 0C790F:Skyrim.esm |
+| skill inicial | iAVDSkillStart = 10, Aetherius.esp | 000803:Aetherius.esp |
+| bônus de vida por nível | fNPCHealthLevelBonus = 5, Skyrim.esm | 023BB9:Skyrim.esm |
+| pesos de predador/urso | CLAS 3:0:3; skills OneHanded=2, Archery=2, Block=3, Sneak=3 | 0131E6 e 106AED:Skyrim.esm |
+| raça/offsets/nível/AutoCalcStats | RACE e NPC_ no provedor por família, nunca o terminal por convenção | resolvidos na cadeia adotada |
+
+Leitura tipada de EDID/DATA no header NpcObservation.h: o leitor GMST público do libespm só interpreta float, inclusive em GMST inteiro. Não foi necessário alterar libespm. Identidades acima são resolvidas dinamicamente; ausência, tipo/nome inválido ou entrada fora do domínio produz UNSUPPORTED, sem default vanilla silencioso. Pontos por nível aceitos 0..255, início 0..100; incremento de skill >255 é UNSUPPORTED (não simula overflow de byte). Outros ajustes de executável/DLL no auto-cálculo não estão certificados.
+
+Fontes da semântica: [reconstrução original de DistributeAutoCalcPoints](https://gist.github.com/dado3212/1929ddc3f778c36da0fbc8b4abc31a87) (LE 1.9.32, algoritmo e ordem; não é fonte Bethesda) e [investigação original do autor](https://blog.alexbeals.com/posts/how-skyrims-npc-skill-leveling-works); [implementação e auditoria de conversão de NPCs](https://github.com/bryantmh/tes4skyrim/blob/master/docs/reference/record_mapping.md) documenta a separação ACBS/RACE/GMST de DNAM. Schema binário: [TES5Edit](https://github.com/TES5Edit/TES5Edit/blob/dev-4.1.5/Core/wbDefinitionsTES5.pas), ACBS/CNAM/DNAM, CLAS.DATA e RACE.DATA; schema de campos: referência Mutagen. Winners e contas manuais em _work/evidence/DS-0g. Essa prova de código/records não substitui comparação com o motor SE em jogo.
+
+Riscos de Q11 revista permanecem: hoster alterado pode declarar a opção mais fraca permitida; clientes que não hospedam podem ver outro sorteio. A validação limita os candidatos e o nível, sem atestar qual renderização cada cliente vê. A sonda identifica explicitamente confirmação, nível, geração, provedores UseTraits/UseStats, cadeia e máximo. Informes recebidos/aceitos/duplicados/recusados têm contadores por motivo e anel de 256 amostras. Cadência mede tentativas anteriores por agressor (inclui recusadas), último golpe aceito, WEAP.speed, limite de CanHit e duas animações; não altera CanHit nem SPLASH. A leitura/serialização da sonda continua fora do hit.
+
 ## 7. Dono de cada família
 
 A coluna Owner usa só os quatro valores do AGENTS §4: `AETHERIUS_SERVER`, `NATIVE_SERVER`, `NATIVE_CLIENT` e `DISABLED`. Pela regra do plano de integração (§2), o que não é calculado pelo servidor fica `NATIVE_CLIENT`: o motor do cliente calcula, e o servidor não finge que validou. No dano físico, isso significa que o efeito **não muda o dano aplicado pelo servidor**. Capacidade, pendência e trava de promoção ficam na coluna Capacidade e condição.

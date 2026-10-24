@@ -81,3 +81,36 @@ test('DS-0d: refusals, position age, observed vs exact maximum, creature power a
   const old = render(fixture, parseLines(await readFile(fixture, 'utf8')));
   assert.match(old, /medição indisponível; não significa zero recusas/);
 });
+
+
+test('DS-0g: confirmation, actual providers and weapon/animation cadence retain refusals', () => {
+  const state={actor:1,observationNeeded:true,creatureConfirmed:true,level:16,traitsProvider:'23a8b:Skyrim.esm',statsProvider:'23a8b:Skyrim.esm',templateChain:['1e7a0:Skyrim.esm','23a8b:Skyrim.esm','23a8a:Skyrim.esm']};
+  const cadence={sincePreviousAttemptMs:250,sincePreviousAcceptedMs:400,weaponSpeed:0.7,limitMs:864.2857};
+  const rows=[{kind:'counters',counters:{npcReports:3,npcReportReasons:{ACCEPTED:1,CONFIRMED_CREATURE_CONFLICT:2}}},
+    {kind:'npc-report',sequence:1,actor:1,base:'23a8b:Skyrim.esm',level:16,generation:1,reason:'ACCEPTED'},
+    {kind:'hit',sequence:1,timeMs:1000,aggressor:1,target:2,sourceDesc:'Greatsword.esp:123',targetMaximumHealth:400,aggressorState:state,targetState:{...state,actor:2,creatureConfirmed:false},cadence,aggressorAnimations:[{name:'BFCO_Attack',ageMs:10}]},
+    {kind:'rejection',sequence:1,timeMs:1250,aggressor:1,target:2,sourceDesc:'Greatsword.esp:123',reason:'ATTACK_COOLDOWN',cadence,aggressorState:state,aggressorAnimations:[{name:'BFCO_Attack',ageMs:20}]},
+    {kind:'rejection',sequence:2,timeMs:1260,aggressor:1,target:3,sourceDesc:'Greatsword.esp:123',reason:'SPLASH_TARGET_LIMIT',cadence,aggressorAnimations:[{name:'attackStart',ageMs:20}]}];
+  const a=analyze(rows);assert.equal(a.npcReports.length,1);
+  const md=render('DS-0g-fixture',{rows,invalid:[]});
+  for(const value of ['CONFIRMADA','NÃO CONFIRMADA','23a8b:Skyrim.esm','BFCO','ATTACK_COOLDOWN','SPLASH_TARGET_LIMIT','864.2857'])assert(md.includes(value),value);
+  assert.match(md,/Greatsword\.esp:123 \| BFCO \| 1 \| 1/);
+  const old=render('old',{rows:[{kind:'hit',sequence:1,timeMs:1,aggressor:1,target:2}],invalid:[]});assert.match(old,/indisponíveis/);
+});
+
+
+test('DS-0g-fix1: persisted restore failures keep reasons separate from hoster reports', () => {
+  const rows = [{ kind: 'counters', counters: {
+    npcReports: 2, npcReportReasons: { ACCEPTED: 1, DUPLICATE: 1 },
+    npcRestoreFailures: 3, npcRestoreFailureReasons: {
+      BASE_NOT_REACHABLE: 1, INVALID_PERSISTED_NPC_OBSERVATION: 1, BASE_PLUGIN_ABSENT: 1
+    }
+  }}];
+  const md = render('restore-failures', { rows, invalid: [] });
+  assert.match(md, /Restauração de escolha persistida: falhas 3/);
+  assert.match(md, /\| 2 \| 1 \| 1 \| 0 \|/);
+  for (const reason of ['BASE_NOT_REACHABLE', 'INVALID_PERSISTED_NPC_OBSERVATION', 'BASE_PLUGIN_ABSENT'])
+    assert(md.includes('| ' + reason + ' | 1 |'), reason);
+  const historical = render('historical', { rows: [], invalid: [] });
+  assert.match(historical, /Restauração de escolha persistida: falhas —/);
+});

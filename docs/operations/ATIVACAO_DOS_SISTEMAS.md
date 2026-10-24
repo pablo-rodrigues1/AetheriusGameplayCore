@@ -16,6 +16,9 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 
 ## 2. Tabelas, por migration
 
+**DS-0g:** nenhuma migration/pool/ledger novo. A escolha validada de NPC e sua geração são persistidas pelo changeform nativo existente (templateChain + propriedade privada), sem PostgreSQL.
+
+
 **DS-0b/fix1:** sonda exclusiva de desenvolvimento; nenhuma migration, tabela, pool ou ledger. A retenção fica nos anéis fixos do host e em um único lote JSONL no Core; a sonda não acessa banco.
 
 **C3d-fix1:** migration `0009_gc_attribute_allocation.sql`, com distribuição por CharacterKey e revisão, sem saldo armazenado. Usa PRIMARY KEY e NOT NULL, sem CHECK conforme a política fixa. Não negativos/múltiplos de 5 são garantidos pelo único comando writer; leitura inválida declara `ATTRIBUTE_ALLOCATION_INVALID`, conserva a linha e suprime bônus. A 0008 da B5b permanece intacta. A 0009 foi aplicada pelo runner somente em schemas descartáveis de aetherius_test. O bloqueio do relatório parcial C3d está supersedido por esta retomada.
@@ -82,6 +85,9 @@ npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
 **O servidor não aplica migrations sozinho.** Se faltar alguma, o Core sobe, deixa indisponíveis os sistemas que dependem do banco, e escreve no log o comando a rodar. O servidor do jogo não cai por isso.
 
 ## 4. Opções de configuração
+
+**DS-0g:** informe de criatura e auto-cálculo pertencem ao host nativo e não dependem da sonda nem de flag DEV. Exigem recompilar o host e distribuir o novo skymp5-client.js; não exigem DLL nova de Skyrim Platform. Cliente antigo não informa: NPC nivelado permanece na conta anterior, explicitamente não confirmado na sonda. Nenhuma opção foi ligada nesta entrega.
+
 
 **C3d-fix1:** nenhuma opção nova. Classes em active/canary exigem também a 0009. Propriedade nativa normal `aetheriusAttributeBonuses`: records + bônus, entrega após commit/vínculo/pronto, limpeza no desvínculo/shutdown. O host oficial precisa ser recompilado com ela; ausente, `UNSUPPORTED` explícito sem propriedade customizada. DEV-A1 aceito permanece absoluto sem somar bônus. O boot da varredura avisa que a troca zera progressão, e ela recusa XP/distribuição gravados com `SWEEP_WOULD_RESET_PROGRESS`, sem mutação. Não levar opções DEV ao oficial.
 
@@ -280,6 +286,18 @@ Golpes aceitos e recusados incluem posição/célula ou worldspace que o host te
 O Core consome `rejection` com os mesmos checkpoints e retenção da fix1. O relatório acrescenta recusas por motivo/ator, distância, idade da posição e tentativas recusadas, máximos por alvo e distingue ausência de medição no formato antigo de zero recusas. Reconhece também `attackStart_*Power*`. O host exporta `wornSlot` (marcador de vestido), e a consulta de tipo `mp.getAetheriusCombatProbe({recordType: id})` roda fora do hit: mão só para WEAP/SPEL; armadura recebe NONE; tipo indisponível recebe UNAVAILABLE. Formato antigo de sonda continua legível. Não há opção, migration, tabela nem passo de ativação novo; as travas e o desligamento acima continuam valendo. Não incluir a sonda em integrations/host.
 
 Diagnóstico e roteiro: [DIAGNOSTICO_SESSAO_DS-0](../../modules/damage-system/docs/DIAGNOSTICO_SESSAO_DS-0.md). Na próxima sessão do dono, comparar uma recusa TOO_DISTANT/DIFFERENT_CELL com os dois snapshots de posição e a última tentativa; para mortes, conferir `targetMaximumHealth`, cadeia e base do alvo; para o golpe desarmado, conferir UseTraits da cadeia do agressor. Registrar também a base/valores observados no motor do cliente: os dados só do host não provam a divergência visual. Boot/sessão nova não executados pelo Sol.
+
+### Informe de criatura e medição de cadência (DS-0g)
+
+O host solicita o informe aos NPCs elegíveis por aetheriusNpcObservation.generation. O serviço NpcObservationService do novo cliente observa somente refs hospedados e carregados, deduplica base/nível/geração e repete após unload/respawn/troca de hospedagem. Não usa clone nem EvaluateLeveledNpc. Falha de leitura é registrada no log de desenvolvimento e não produz informe. O C++ valida contra os winners, adota uma vez por geração e persiste pelo changeform; hoster novo não substitui escolha confirmada. Detalhes, fontes dos GMSTs e limites UNSUPPORTED em [FONTES_E_DONOS §6](../../modules/damage-system/docs/FONTES_E_DONOS.md#6-o-que-o-host-oferece-como-evidência).
+
+A sonda mantém as travas DEV da seção 4 e acrescenta npc-report (anel 256), motivos/contadores e confirmação/nível/geração/provedores por ator. O relatório mostra a criatura por UseTraits/UseStats, cadeia e máximo, e cadência por arma/família de animação: tentativa anterior do mesmo agressor, último golpe aceito, velocidade, limite calculado e últimas animações, inclusive ATTACK_COOLDOWN/SPLASH_*. Primeiro intervalo ausente é null. CanHit, SPLASH e fórmula de dano permanecem como estavam.
+
+Aceite sem socket: build/server/cpp/Release/aetherius-shadow-test.exe --npc-observation <manifesto-aetherius-loadorder.json>, seguido de --combat-probe, --dev-attributes, --npc e modo padrão. Fixtures temporárias vão para TEMP/TMP, fora de evidence. Para o relatório: node runtime/tools/combat-probe-report.mjs <sonda.jsonl> --out <relatorio.md>.
+
+Roteiro em jogo (dono, NÃO EXECUTADO nesta entrega): enfrentar um ref de lista nivelada, conferir base/nível no motor e informe ACCEPTED, provedores e máximo no relatório; repetir após reconexão/restart autorizado, transferir hoster e conferir DUPLICATE ou conflito sem troca de criatura; matar/respawnar e conferir nova geração e adoção; atacar com cada arma em golpes normais/BFCO para comparar aceitos/recusados. O risco aceito de outros clientes verem outro sorteio permanece. Nenhuma medição nova do Skyrim é alegada pelos testes sem socket.
+
+Para distribuir: outro desenvolvedor recompila o host e o cliente desta ordem e confere o SHA-256 registrado na evidência; só o bundle TypeScript novo é necessário no cliente. O pacote integrations/host não foi atualizado nesta ordem (contrato fixo). Atualizar esse pacote requer a ordem de integração correspondente. A sonda continua exclusiva de desenvolvimento. Rollback é repor os binários/bundle anteriores em uma parada autorizada, preservando changeforms; confirmação privada fica sem consumidor no host anterior. Não apagar dados para desligar a sonda.
 
 ### Pedras guardiãs (`standing-stones`)
 
@@ -498,6 +516,11 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+**Q10 (decisão do dono, 23/10/2026 21:00):** incluir no server-settings.json do oficial a chave `"damageMultFormulaSettings": {"multiplier": 1}`. Sem a chave, DamageMultFormula aplica o padrão 2 a NPC→jogador. A sessão DS-0d 21:08 usou 1× no local (registro `_work/evidence/H/sessao-DS-0d-20261023.md`); esta ordem não leu nem alterou settings. O outro desenvolvedor confirma/aplica a mesma chave no oficial. Não desligar a opção removendo a chave, pois isso repõe 2×.
+
+**DS-0g (24/10/2026, Sol 6.1):** continuação do parcial de 23/10; host e cliente recompilados para revisão, Core e relatório gerados. O build substitui o addon em build/dist/server, mas não sobe servidor. Cliente somente em `_work/evidence/DS-0g/artifact`, sem instalação no jogo; nenhuma alteração em .env, settings, STATE, migrations ou aetherius_dev. Banco automatizado somente aetherius_test. Aceites, hashes e limitações no relatório `_work/orders/DS-0g-criatura-informada.result.md`. Não há ativação local nova a desfazer. Homologação em jogo e revisão independente permanecem com dono/Opus.
+
 
 **DS-0b-fix1 (23/10/2026, Sol 6.1):** retomada da correção parcial dos snapshots de 17:31. Lote de escrita retido até confirmação, uma escrita em voo, perdas de anel com motivo e transições A→B→A preservadas. Build e typecheck do Core passaram; suíte focada 36/36. A suíte completa do runtime falhou na trava do banco de teste; nenhuma credencial foi lida. Builds C++ não concluíram neste ambiente (CMake/Visual Studio e MSBuild FileTracker); testes nativos da correção não executados. Saídas em `_work/evidence/DS-0b/fix1/` e relatório `DS-0b-fix1-sonda.result.md`. Nenhum servidor iniciado, configuração alterada ou migration executada nesta correção. Bundle do Core gerado; sem ativação nova a desfazer. A evidência histórica de boot da DS-0b não valida a fix1. **Conferência do orquestrador (23/10, 17:50):** build do `skymp5-server` e do `aetherius-shadow-test` sem erros; testes nativos `--combat-probe` 60 verificações, `--dev-attributes` 69, `--npc` 531, modo padrão 140, todos passaram; suíte completa do runtime com o banco de teste 336+12+16+21, sem falhas; boot local com a sonda ligada: 0 falhas, linhas `start`, `counters` (com os contadores de equipamento) e `writer` gravadas. Saídas em `_work/evidence/DS-0b/fix1/opus/`.
 
