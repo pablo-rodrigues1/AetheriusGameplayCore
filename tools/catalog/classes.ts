@@ -10,6 +10,74 @@ interface Field { path:string; value?:string; note?:string }
 interface Row { formid:string; type:string; editorid:string; winner:string; fields:Field[] }
 interface Candidate { formid:string; chainRank:number; skill:string; editorid:string; winner:string }
 interface Crosswalk { label:string; rank:number|null; status:string; candidates:Candidate[] }
+
+export const CLASS_SKILL_NAMES = [
+  'OneHanded','TwoHanded','Marksman','Block','Smithing','HeavyArmor','LightArmor','Pickpocket','Lockpicking',
+  'Sneak','Alchemy','Speechcraft','Alteration','Conjuration','Destruction','Illusion','Restoration','Enchanting'
+] as const;
+export type ClassSkillName = typeof CLASS_SKILL_NAMES[number];
+export type ClassSkillValues = Readonly<Record<ClassSkillName,number>>;
+
+/** Exact Portuguese labels found in classes-config.json, mapped to stable ActorValue names. */
+export const CLASS_SKILL_LABEL_TO_ACTOR_VALUE: Readonly<Record<string,ClassSkillName>> = Object.freeze({
+  'Alteração':'Alteration',
+  'Armadura Leve':'LightArmor',
+  'Ilusão':'Illusion',
+  'Furtividade':'Sneak',
+  'Restauração':'Restoration',
+  'Uma-Mão':'OneHanded',
+  'Arquearia':'Marksman',
+  'Duas-Mãos':'TwoHanded',
+  'Armadura Pesada':'HeavyArmor',
+  'Bloqueio':'Block',
+  'Conjuração':'Conjuration',
+  'Destruição':'Destruction'
+});
+
+const normalizedSkillLabels = new Map<string,ClassSkillName>(Object.entries(CLASS_SKILL_LABEL_TO_ACTOR_VALUE)
+  .map(([label,actorValue])=>[label.toLowerCase(),actorValue] as const));
+function emptyClassSkills(value=0):Record<ClassSkillName,number> {
+  return Object.fromEntries(CLASS_SKILL_NAMES.map(name=>[name,value])) as Record<ClassSkillName,number>;
+}
+function skillValue(raw:string,source:string):number {
+  if(!/^\d+$/.test(raw))throw new Error(`CLASS_SKILL_VALUE_INVALID: ${JSON.stringify(source)}`);
+  const value=Number(raw);
+  if(!Number.isSafeInteger(value))throw new Error(`CLASS_SKILL_VALUE_INVALID: ${JSON.stringify(source)}`);
+  return value;
+}
+/** Parse one official Portuguese stage string. Missing names stay absent for cumulative application. */
+export function parseClassSkillText(text:string):Partial<Record<ClassSkillName,number>> {
+  if(typeof text!=='string')throw new Error(`CLASS_SKILL_TEXT_INVALID: ${JSON.stringify(text)}`);
+  const source=text.trim();
+  if(!source)return {};
+  const all=/^Todas\s+(\d+)$/i.exec(source);
+  if(all){const value=skillValue(all[1]!,text);return emptyClassSkills(value);}
+  const parsed:Partial<Record<ClassSkillName,number>>={};
+  for(const rawPart of source.split(',')){
+    const part=rawPart.trim(),match=/^(.+?)\s+(\d+)$/.exec(part);
+    if(!match)throw new Error(`CLASS_SKILL_ENTRY_INVALID: ${JSON.stringify(text)}`);
+    const label=match[1]!.trim(),actorValue=normalizedSkillLabels.get(label.toLowerCase());
+    if(!actorValue)throw new Error(`CLASS_SKILL_NAME_UNKNOWN: ${JSON.stringify(label)} in ${JSON.stringify(text)}`);
+    if(Object.hasOwn(parsed,actorValue))throw new Error(`CLASS_SKILL_DUPLICATE: ${JSON.stringify(label)} in ${JSON.stringify(text)}`);
+    parsed[actorValue]=skillValue(match[2]!,text);
+  }
+  return parsed;
+}
+/** Apply the Q14 cumulative rule in source order; a blank stage changes nothing. */
+export function accumulateClassSkillStages(stages:readonly {readonly skills:string}[]):readonly ClassSkillValues[] {
+  let current=emptyClassSkills();
+  return stages.map(stage=>{
+    const updates=parseClassSkillText(stage.skills),next={...current};
+    for(const name of CLASS_SKILL_NAMES)if(updates[name]!==undefined)next[name]=updates[name]!;
+    current=next;
+    return Object.freeze({...current});
+  });
+}
+
+type CatalogClassDefinition = Omit<ClassDefinition,'stages'> & {
+  readonly stages:readonly (ClassDefinition['stages'][number] & {readonly skills:ClassSkillValues})[]
+};
+
 const value=(r:Row,p:string)=>r.fields.find(f=>f.path===p)?.value;
 function exported(file:string) {
   const lines=readFileSync(file,'utf8').replace(/^\uFEFF/,'').trim().split(/\r?\n/).map(l=>JSON.parse(l));
@@ -62,12 +130,14 @@ export function buildClasses(exportsDir:string,configPath:string,fingerprints:re
     const record={stableFormKey,recordType:'PERK' as const,definingPlugin:p.filename,pluginKind:p.isLight?'LIGHT' as const:'FULL' as const,winnerPlugin:r.winner,data};
     records.set(stableFormKey,{...record,signature:recordSignature(record,p)});return stableFormKey;
   }
-  const config=JSON.parse(readFileSync(configPath,'utf8')) as Record<string,{id:string;stages:{level:number;perks:string[]}[]}>;
+  const config=JSON.parse(readFileSync(configPath,'utf8')) as Record<string,{id:string;stages:{level:number;perks:string[];skills:string}[]}>;
   const unresolved=new Set(['Anímage (1)','Anímage (2)','Anímage (3)','Heavy Armor Mestre','One-Hand Mastery','Rune Mestre']);
-  const classes:ClassDefinition[]=Object.entries(config).sort(([a],[b])=>a.localeCompare(b,'en')).map(([id,c])=>{
+  const classes:CatalogClassDefinition[]=Object.entries(config).sort(([a],[b])=>a.localeCompare(b,'en')).map(([id,c])=>{
     if(c.id!==id||c.stages.map(s=>s.level).join(',')!=='1,5,10,15,20,25,30,35,40')throw Error('CLASS_CONFIG_INVALID');
+    if(c.stages.some(s=>typeof s.skills!=='string'))throw new Error(`CLASS_STAGE_SKILLS_MISSING: ${id}`);
+    const cumulativeSkills=accumulateClassSkillStages(c.stages);
     const prior=new Set<StableFormKey>(),divergences:string[]=[];
-    const stages=c.stages.map(s=>({level:s.level,perks:s.perks.map(label=>{
+    const stages=c.stages.map((s,index)=>({level:s.level,skills:cumulativeSkills[index]!,perks:s.perks.map(label=>{
       const x=crosswalk.get(label),candidate=x?.candidates[0],r=candidate?rows.get(candidate.formid.toLowerCase()):undefined;
       const chain=candidate?chains.get(candidate.formid.toLowerCase()):undefined;
       let reason=unresolved.has(label)?'UNRESOLVED_LABEL_OWNER_CONFIRMATION_REQUIRED':x?.status!=='RESOLVED'||x.candidates.length!==1?'CROSSWALK_NOT_RESOLVED':
