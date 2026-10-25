@@ -31,6 +31,23 @@ const ports = [];
 let sequence=300;
 const table = name => `"${schema}".${name}`;
 const deferred = () => { let resolve; const promise=new Promise(r => { resolve=r; }); return { promise, resolve }; };
+function observedPool(pool, failures) {
+  const record = error => {
+    const code=error?.code??'UNKNOWN';
+    const message=String(error?.message??error).replaceAll(databaseUrl,'[database URL omitted]');
+    failures.push(`${code}: ${message}`);
+  };
+  return {
+    async query(...args) { try { return await pool.query(...args); } catch(error) { record(error); throw error; } },
+    async connect() {
+      let client;
+      try { client=await pool.connect(); } catch(error) { record(error); throw error; }
+      return { release: error=>client.release(error), async query(...args) {
+        try { return await client.query(...args); } catch(error) { record(error); throw error; }
+      } };
+    },
+  };
+}
 function setup({ shift=1000, portPool=pool, ready=true }={}) {
   const profile=++sequence;
   let current = { characterKey:`profile:${profile}`, profileKey:`profile:${profile}`, actorRef:{ actorId:profile+1000 }, epoch:'epoch-one' };
@@ -198,18 +215,41 @@ test('no client ACK is emitted, missing DB/host is explicit; malformed read fail
 });
 test('runtime context shares port, applies only active/canary; shutdown aborts held contexts', async t => {
   t.mock.timers.enable({apis:['setTimeout','setInterval']});
+  const pgErrors=[];
+  const runtimePool=observedPool(pool,pgErrors);
   for (const mode of ['audit','shadow','canary','active']) {
-    let ctx;
+    const contextStarted=deferred();
     const mp=fakeHost({catalogAvailable:true});
-    const runtime=createGameplayCore({mp,pg:{init:()=>pool},env:{GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_MODE_PROBE:mode},log:logger()});
-    runtime.register({id:'probe',start:c=>{ctx=c;}}); await runtime.initialize();
+    const runtime=createGameplayCore({mp,pg:{init:()=>runtimePool},env:{GAMEPLAY_CORE_DATABASE_SCHEMA:schema,GAMEPLAY_CORE_MODE_PROBE:mode},log:logger()});
+    runtime.register({id:'probe',observeUnavailable:true,start:c=>contextStarted.resolve(c)});
+    const initializing=runtime.initialize();
     try {
-      assert(ctx.projection); assert.equal(ctx.projection.capability().status,'PARTIAL');
-      const binding=runtime.identity.lookup({actorId:91}).value;
+      const started=await Promise.race([
+        contextStarted.promise.then(context=>({context})),
+        initializing.then(()=>({initializedWithoutContext:true}))
+      ]);
+      assert('context' in started,`probe start was skipped: ${JSON.stringify(runtime.capabilityReport())}`);
+      const ctx=started.context;
+      await initializing;
+      const report=runtime.capabilityReport();
+      assert.equal(report.database.status,'SUPPORTED',
+        `runtime database unavailable: ${report.database.missing?.join('; ')??'no missing details'}; PostgreSQL errors: ${pgErrors.join(' | ')||'none captured'}`);
+      assert(ctx.projection);
+      assert.equal(ctx.projection.capability().status,'PARTIAL');
+      const bindingResult=runtime.identity.lookup({actorId:91});
+      assert.equal(bindingResult.status,'SUPPORTED');
+      const binding=bindingResult.value;
+      assert.equal(ctx.canMutate(binding),mode==='active');
       const result=await ctx.projection.publish(intent(binding,[]));
-      assert.equal(result.status,mode==='active' ? 'SUPPORTED' : 'UNSUPPORTED');
-      assert.equal(result.status==='SUPPORTED' ? result.value.state : result.reason,mode==='active' ? 'PENDING' : 'FEATURE_MODE_OR_BINDING_REFUSED');
-      await runtime.shutdown(); assert.equal((await ctx.projection.publish(intent(binding,[]))).status,'UNSUPPORTED');
+      if(mode!=='active') {
+        assert.equal(result.status,'UNSUPPORTED');
+        assert.equal(result.reason,'FEATURE_MODE_OR_BINDING_REFUSED');
+      } else {
+        assert.equal(result.status,'SUPPORTED');
+        assert.equal(result.value.state,'PENDING');
+      }
+      await runtime.shutdown();
+      assert.equal((await ctx.projection.publish(intent(binding,[]))).status,'UNSUPPORTED');
     } finally {await runtime.shutdown();}
   }
 });

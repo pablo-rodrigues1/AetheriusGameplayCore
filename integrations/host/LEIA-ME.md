@@ -2,14 +2,16 @@
 
 # Pacote do host — mudanças do GameplayCore no `aetherius-server`
 
-> **Pacote gerado em 12/10/2026**, depois da ordem C3d, com `make-package.mjs`. Core no commit `c50c735`.
+> **Pacote gerado em 25/10/2026**, depois da ordem DS-5a, com `make-package.mjs`. Base do host conforme `manifest.json`: `6181abf1774c31a4e93206f71b784af5b13f10ae`.
+>
+> **Nota de supersessão (25/10/2026):** esta data e a base do host substituem o cabeçalho histórico de 12/10/2026 e `340449fae21bb4404439cad0814e60759f944857`. `manifest.json` é a fonte atual para a geração do pacote.
 
 Este pacote leva para o `aetherius-server` oficial as mudanças que o GameplayCore precisa no host. Elas foram feitas num clone local, sem commit, sobre o commit base abaixo. O guia de instalação completo, com banco, catálogo, configuração e cliente, é [`../INSTALL.md`](../INSTALL.md). Este arquivo explica só o pacote do host: o que cada mudança faz, para quem precisar resolver conflito sabendo a intenção.
 
 | | |
 |---|---|
 | Repositório | `https://github.com/AetheriusRP/aetherius-server.git` |
-| Commit base | `340449fae21bb4404439cad0814e60759f944857` ("Painel da Staff: Moderação, Administração, Auditoria e catálogo de itens") |
+| Commit base | `6181abf1774c31a4e93206f71b784af5b13f10ae` |
 | Conteúdo | `changes.patch` (um patch git com tudo, arquivos novos incluídos), `files\` (cada arquivo tocado, inteiro, no estado final), `manifest.json` (hash e funcionalidade de cada arquivo) |
 | Fim de linha | o patch e as cópias em `files\` usam LF, a forma em que o repositório guarda os arquivos; os SHA-256 do manifest são dessa forma |
 
