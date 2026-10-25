@@ -247,3 +247,165 @@ test("the complete export replaces all truncated records by formid and preserves
   assert.equal(formKeyToStable("01abcd:example.esp"), "01ABCD:example.esp");
   console.log("completed records=" + loaded.replaced.length + "; count includes 0C1E91 Execute");
 });
+
+const racesCatalog = JSON.parse(fs.readFileSync(path.join(root, "AetheriusGameplayCore/catalog/races.json"), "utf8"));
+const stonesCatalog = JSON.parse(fs.readFileSync(path.join(root, "AetheriusGameplayCore/catalog/standing-stones.json"), "utf8"));
+
+function recordFromCatalog(catalog, stableFormKey) {
+  const entry = catalog.records.find((item) => item.stableFormKey === stableFormKey);
+  assert.ok(entry, "catalog record missing for " + stableFormKey);
+  const pipe = stableFormKey.indexOf("|");
+  const plugin = stableFormKey.slice(0, pipe);
+  const hex = stableFormKey.slice(pipe + 1);
+  const formid = hex + ":" + plugin;
+  const rawFields = entry.data.fields || {};
+  const fields = Object.entries(rawFields).map(([path, value]) => ({ path, value: String(value) }));
+  return {
+    formid,
+    winner: entry.winnerPlugin || plugin,
+    fields,
+  };
+}
+
+test("RACE and STANDING_STONE perks from catalogs compile with preserved origin and expected combat rules", () => {
+  // 1. STANDING_STONE: Warrior doomstone perk (00080D:Mundus.esp)
+  const warriorRecord = recordFromCatalog(stonesCatalog, "mundus.esp|00080D");
+  const warriorOrigin = { sourceKind: "STANDING_STONE", sourceKey: "mundus.esp|00080D" };
+  const compiledWarrior = compilePerk(warriorRecord, warriorOrigin);
+  assert.equal(compiledWarrior.perk, "00080D:mundus.esp");
+  assert.equal(compiledWarrior.winner, "Mundus.esp");
+  assert.deepEqual(compiledWarrior.origin, warriorOrigin);
+  assert.equal(compiledWarrior.rules.length, 2);
+
+  const warriorIncoming = compiledWarrior.rules.find((r) => r.effectIndex === 0);
+  assert.ok(warriorIncoming);
+  assert.equal(warriorIncoming.entryPoint, "ModIncomingDamage");
+  assert.equal(warriorIncoming.modification, "Multiply");
+  assert.equal(warriorIncoming.value, 0.9);
+  assert.equal(warriorIncoming.priority, 2);
+  assert.equal(warriorIncoming.rank, 0);
+  assert.equal(warriorIncoming.status, "SUPPORTED");
+  assert.deepEqual(warriorIncoming.origin, warriorOrigin);
+  assert.equal(ruleMatches(warriorIncoming, {}), true);
+
+  const warriorSpell = compiledWarrior.rules.find((r) => r.effectIndex === 1);
+  assert.ok(warriorSpell);
+  assert.equal(warriorSpell.entryPoint, "ModIncomingSpellMagnitude");
+  assert.equal(warriorSpell.status, "UNSUPPORTED");
+  assert.match(warriorSpell.reason, /out-of-scope entry point ModIncomingSpellMagnitude/);
+  assert.deepEqual(warriorSpell.origin, warriorOrigin);
+
+  // 2. STANDING_STONE: Lover doomstone perk (000808:Mundus.esp)
+  const loverRecord = recordFromCatalog(stonesCatalog, "mundus.esp|000808");
+  const loverOrigin = { sourceKind: "STANDING_STONE", sourceKey: "mundus.esp|000808" };
+  const compiledLover = compilePerk(loverRecord, loverOrigin);
+  assert.equal(compiledLover.perk, "000808:mundus.esp");
+  assert.deepEqual(compiledLover.origin, loverOrigin);
+  const loverIncoming0 = compiledLover.rules.find((r) => r.effectIndex === 0);
+  assert.ok(loverIncoming0);
+  assert.equal(loverIncoming0.entryPoint, "ModIncomingDamage");
+  assert.equal(loverIncoming0.modification, "Multiply");
+  assert.equal(loverIncoming0.value, 1.25);
+  assert.equal(loverIncoming0.priority, 4);
+  assert.equal(loverIncoming0.status, "UNSUPPORTED");
+  assert.deepEqual(loverIncoming0.origin, loverOrigin);
+
+  // 3. RACE: Nord racial perk (000805:Aetherius.esp)
+  const nordRecord = recordFromCatalog(racesCatalog, "aetherius.esp|000805");
+  const nordOrigin = { sourceKind: "RACE", sourceKey: "skyrim.esm|013746" };
+  const compiledNord = compilePerk(nordRecord, nordOrigin);
+  assert.equal(compiledNord.perk, "000805:aetherius.esp");
+  assert.deepEqual(compiledNord.origin, nordOrigin);
+  assert.equal(compiledNord.rules.length, 4);
+  for (const rule of compiledNord.rules) {
+    assert.deepEqual(rule.origin, nordOrigin);
+  }
+  const nordIncoming0 = compiledNord.rules.find((r) => r.effectIndex === 0);
+  assert.ok(nordIncoming0);
+  assert.equal(nordIncoming0.entryPoint, "ModIncomingDamage");
+  assert.equal(nordIncoming0.modification, "Multiply");
+  assert.equal(nordIncoming0.value, 0.75);
+  assert.equal(nordIncoming0.priority, 4);
+
+  // 4. ModSneakAttackMult perks: Wood Elf (aetherius.esp|000827) and Shadow (mundus.esp|000812)
+  const woodElfRecord = recordFromCatalog(racesCatalog, "aetherius.esp|000827");
+  const woodElfOrigin = { sourceKind: "RACE", sourceKey: "skyrim.esm|013749" };
+  const compiledWoodElf = compilePerk(woodElfRecord, woodElfOrigin);
+  assert.deepEqual(compiledWoodElf.origin, woodElfOrigin);
+  const woodElfSneak = compiledWoodElf.rules.find((r) => r.effectIndex === 0);
+  assert.ok(woodElfSneak);
+  assert.equal(woodElfSneak.entryPoint, "ModSneakAttackMult");
+  assert.equal(woodElfSneak.value, 1.25);
+  assert.deepEqual(woodElfSneak.origin, woodElfOrigin);
+
+  const shadowRecord = recordFromCatalog(stonesCatalog, "mundus.esp|000812");
+  const shadowOrigin = { sourceKind: "STANDING_STONE", sourceKey: "mundus.esp|000812" };
+  const compiledShadow = compilePerk(shadowRecord, shadowOrigin);
+  assert.deepEqual(compiledShadow.origin, shadowOrigin);
+  const shadowSneak = compiledShadow.rules.find((r) => r.effectIndex === 0);
+  assert.ok(shadowSneak);
+  assert.equal(shadowSneak.entryPoint, "ModSneakAttackMult");
+  assert.equal(shadowSneak.value, 1.25);
+  assert.deepEqual(shadowSneak.origin, shadowOrigin);
+});
+
+test("RACE and STANDING_STONE perks with uncertified conditions are marked UNSUPPORTED with origin preserved", () => {
+  const warrior = recordFromCatalog(stonesCatalog, "mundus.esp|00080D");
+  const uncertifiedRecord = {
+    ...warrior,
+    fields: [
+      ...warrior.fields.filter((f) => !f.path.startsWith("Effects[0].Conditions")),
+      { path: "Effects[0].Conditions[0].RunOnTabIndex", value: "0" },
+      { path: "Effects[0].Conditions[0].Conditions[0].Data.Function", value: "GetDistance" },
+      { path: "Effects[0].Conditions[0].Conditions[0].Data.RunOnType", value: "Subject" },
+      { path: "Effects[0].Conditions[0].Conditions[0].CompareOperator", value: "LessThan" },
+      { path: "Effects[0].Conditions[0].Conditions[0].ComparisonValue", value: "500" },
+    ],
+  };
+
+  const stoneOrigin = { sourceKind: "STANDING_STONE", sourceKey: "mundus.esp|00080D" };
+  const compiledStone = compilePerk(uncertifiedRecord, stoneOrigin);
+  assert.deepEqual(compiledStone.origin, stoneOrigin);
+  const stoneRule = compiledStone.rules.find((r) => r.effectIndex === 0);
+  assert.ok(stoneRule);
+  assert.equal(stoneRule.status, "UNSUPPORTED");
+  assert.match(stoneRule.reason, /unsupported condition GetDistance/);
+  assert.deepEqual(stoneRule.origin, stoneOrigin);
+  assert.equal(ruleMatches(stoneRule, { subject: {} }), false);
+
+  const raceOrigin = { sourceKind: "RACE", sourceKey: "skyrim.esm|013746" };
+  const compiledRace = compilePerk(uncertifiedRecord, raceOrigin);
+  assert.deepEqual(compiledRace.origin, raceOrigin);
+  const raceRule = compiledRace.rules.find((r) => r.effectIndex === 0);
+  assert.ok(raceRule);
+  assert.equal(raceRule.status, "UNSUPPORTED");
+  assert.match(raceRule.reason, /unsupported condition GetDistance/);
+  assert.deepEqual(raceRule.origin, raceOrigin);
+  assert.equal(ruleMatches(raceRule, { subject: {} }), false);
+});
+
+test("GrantOrigin validation accepts CLASS, RACE, and STANDING_STONE and enforces origin fields", () => {
+  const warrior = recordFromCatalog(stonesCatalog, "mundus.esp|00080D");
+
+  // Valid origins for all three kinds
+  assert.doesNotThrow(() => compilePerk(warrior, { sourceKind: "CLASS", sourceKey: "Warrior@1", classId: "Warrior", level: 1 }));
+  assert.doesNotThrow(() => compilePerk(warrior, { sourceKind: "RACE", sourceKey: "skyrim.esm|013746" }));
+  assert.doesNotThrow(() => compilePerk(warrior, { sourceKind: "STANDING_STONE", sourceKey: "mundus.esp|00080D" }));
+
+  // Missing / empty sourceKey
+  assert.throws(() => compilePerk(warrior, { sourceKind: "RACE", sourceKey: "" }), /invalid grant origin/);
+  assert.throws(() => compilePerk(warrior, { sourceKind: "STANDING_STONE", sourceKey: "" }), /invalid grant origin/);
+  assert.throws(() => compilePerk(warrior, { sourceKind: "CLASS", sourceKey: "", classId: "Warrior", level: 1 }), /invalid grant origin/);
+
+  // CLASS requires classId and valid level
+  assert.throws(() => compilePerk(warrior, { sourceKind: "CLASS", sourceKey: "Warrior@1", classId: "", level: 1 }), /invalid grant origin/);
+  assert.throws(() => compilePerk(warrior, { sourceKind: "CLASS", sourceKey: "Warrior@1", classId: "Warrior", level: 0 }), /invalid grant origin/);
+  assert.throws(() => compilePerk(warrior, { sourceKind: "CLASS", sourceKey: "Warrior@1", classId: "Warrior", level: -1 }), /invalid grant origin/);
+  assert.throws(() => compilePerk(warrior, { sourceKind: "CLASS", sourceKey: "Warrior@1", classId: "Warrior", level: 1.5 }), /invalid grant origin/);
+  assert.throws(() => compilePerk(warrior, { sourceKind: "CLASS", sourceKey: "Warrior@1", classId: "Warrior" }), /invalid grant origin/);
+
+  // Unsupported sourceKind
+  assert.throws(() => compilePerk(warrior, { sourceKind: "RELIGION", sourceKey: "talos" }), /invalid grant origin/);
+  assert.throws(() => compilePerk(warrior, { sourceKind: "QUEST", sourceKey: "quest1" }), /invalid grant origin/);
+  assert.throws(() => compilePerk(warrior, null), /invalid grant origin/);
+});

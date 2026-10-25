@@ -1,4 +1,4 @@
-import { compilePerk, type FlatField } from '../../modules/damage-system/compiler/dist/compiler.js';
+import { compilePerk, type FlatField, type GrantOrigin } from '../../modules/damage-system/compiler/dist/compiler.js';
 import type {
   CharacterKey, CombatProfileEffectValue, CombatProfilePerk, CombatProfilePerkSet,
   CombatProfileProjection, CombatProfileSourceRevisions, CombatProfileTemplateCategory,
@@ -152,13 +152,21 @@ function compilePlayerPerks(grants:readonly Grant[],classFacts:ClassCombatProfil
   const items:CombatProfilePerk[]=[];
   for (const grant of grants) {
     if (grant.kind!=='perk') continue;
-    if (grant.source.kind!=='CLASS') {
+    if (grant.source.kind!=='CLASS' && grant.source.kind!=='RACE' && grant.source.kind!=='STANDING_STONE') {
       items.push(unsupportedPerk(grant,'DS3_COMPILER_SOURCE_KIND_UNSUPPORTED'));
       continue;
     }
-    if (!classFacts?.classId || grant.source.key!==classFacts.classId || !validClassLevel(classFacts.level)) {
-      items.push(unsupportedPerk(grant,'CLASS_GRANT_ORIGIN_UNAVAILABLE'));
-      continue;
+    let origin:GrantOrigin;
+    if (grant.source.kind==='CLASS') {
+      if (!classFacts?.classId || grant.source.key!==classFacts.classId || !validClassLevel(classFacts.level)) {
+        items.push(unsupportedPerk(grant,'CLASS_GRANT_ORIGIN_UNAVAILABLE'));
+        continue;
+      }
+      origin = {sourceKind:'CLASS',sourceKey:grant.source.key,classId:classFacts.classId,level:classFacts.level};
+    } else if (grant.source.kind==='RACE') {
+      origin = {sourceKind:'RACE',sourceKey:grant.source.key};
+    } else {
+      origin = {sourceKind:'STANDING_STONE',sourceKey:grant.source.key};
     }
     let record:CatalogEntry|undefined;
     try { record=lookup(grant.definition.stableFormKey); } catch { /* missing catalog is explicit below */ }
@@ -177,9 +185,7 @@ function compilePlayerPerks(grants:readonly Grant[],classFacts:ClassCombatProfil
     const fields:FlatField[]=Object.entries(rawFields).map(([path,value])=>({path,value:value as string}));
     try {
       const compiled=compilePerk({formid:keyToPerkFormId(grant.definition.stableFormKey),
-        winner:record.winnerPlugin,fields},{
-        sourceKind:'CLASS',sourceKey:grant.source.key,classId:classFacts.classId,level:classFacts.level
-      });
+        winner:record.winnerPlugin,fields},origin);
       const bad=compiled.rules.filter(rule=>rule.status!=='SUPPORTED');
       const reason=bad.length?bad.map(rule=>rule.reason??'DS3_RULE_UNSUPPORTED').filter((x,i,a)=>a.indexOf(x)===i).join('; '):null;
       items.push(Object.freeze({sourceKind:grant.source.kind,sourceKey:grant.source.key,

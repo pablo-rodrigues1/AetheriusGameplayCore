@@ -38,12 +38,25 @@ export interface PerkRecord {
   fields: FlatField[];
 }
 
-export interface GrantOrigin {
-  sourceKind: "CLASS";
-  sourceKey: string;
-  classId: string;
-  level: number;
-}
+export type GrantOrigin =
+  | {
+      sourceKind: "CLASS";
+      sourceKey: string;
+      classId: string;
+      level: number;
+    }
+  | {
+      sourceKind: "RACE";
+      sourceKey: string;
+      classId?: never;
+      level?: never;
+    }
+  | {
+      sourceKind: "STANDING_STONE";
+      sourceKey: string;
+      classId?: never;
+      level?: never;
+    };
 
 export interface CompiledCondition {
   function: ConditionFunction;
@@ -272,13 +285,16 @@ export function compilePerk(record: PerkRecord, origin: GrantOrigin): CompiledPe
   }
   if (
     !origin ||
-    origin.sourceKind !== "CLASS" ||
     !origin.sourceKey ||
-    !origin.classId ||
-    !Number.isInteger(origin.level) ||
-    origin.level < 1
+    (origin.sourceKind !== "CLASS" &&
+      origin.sourceKind !== "RACE" &&
+      origin.sourceKind !== "STANDING_STONE") ||
+    (origin.sourceKind === "CLASS" &&
+      (!origin.classId ||
+        !Number.isInteger(origin.level) ||
+        origin.level < 1))
   ) {
-    throw new Error("invalid class grant origin");
+    throw new Error("invalid grant origin");
   }
 
   const rules: CompiledRule[] = [];
