@@ -1,5 +1,7 @@
 # Gerador e adapter do catálogo
 
+> Atualização DS-2d: use a seção DS-2d ao fim deste arquivo para Template e effects; as limitações históricas correspondentes estão supersedidas.
+
 Atualização C2: `PERK.jsonl` é uma entrada obrigatória adicional, com manifesto e
 epoch conferidos. SPEL → MGEF → PerkToApply é seguido nos dois domínios. Os PERK
 alcançados conservam os valores dos campos exportados e notas de entry points e
@@ -198,3 +200,70 @@ Porta e pasta explícitas, sem padrão e sem parar o servidor existente. Ainda e
 Opus fora do sandbox; nenhuma validação nativa ou em jogo é alegada nesta fix1.
 Não há migration, opção de configuração, instalação ou ativação nova. Templates
 WEAP/ARMO permanecem parados, sem nova tentativa de inferir semântica.
+
+## DS-2d — gerar Template e effects
+
+Esta seção supersede as notas anteriores que mantinham Template WEAP/ARMO
+parado e ENCH ausente. Q15a do dono fixa a herança; não se presume semântica
+do executável além dessa decisão. NPC/CLAS e os demais domínios não são regravados.
+
+Da raiz do workspace:
+
+~~~powershell
+node --experimental-strip-types AetheriusGameplayCore/tools/catalog/effects.ts _work/exports/combat-20261024 aetherius-server/build/dist/server/data/aetherius-loadorder.json AetheriusGameplayCore/catalog _work/evidence/DS-2d
+node --experimental-strip-types AetheriusGameplayCore/tools/catalog/verify.ts .
+cd AetheriusGameplayCore
+npm run typecheck --workspace @aetherius/catalog-tools
+npm run build --workspace @aetherius/catalog-tools
+npm test --workspace @aetherius/catalog-tools
+npm run typecheck --workspace @aetherius/runtime
+npm run build --workspace @aetherius/runtime
+node --test runtime/tests/combat.test.mjs
+~~~
+
+O CLI effects.ts gera SOMENTE combat.json e effects.json, com os relatórios
+completos combat-unsupported.json / effects-unsupported.json no quarto argumento
+obrigatório. Combat continua aceitando build.ts ... combat. Não usar npcs.ts para
+gerar esta ordem: seu CLI também regravaria npcs.json, fora da escrita DS-2d.
+A geração combat exige WEAP/ARMO/AMMO/RACE/KYWD; effects exige MGEF/ENCH/ALCH/PERK,
+com contagens, epoch e tipos conferidos. ENCH/ALCH depth 4 e MGEF depth 3 são os
+artefatos da ordem. PERK fornece as entradas Q8, buscadas por FormID do plugin de
+definição, nunca nome nem número de linha. Confira hashes contra MANIFESTO.txt.
+
+Contrato e regra exata de recorte em catalog/README.md, EFFECT_RULES/physicalEffectRule,
+WEAPON_COMBAT_FIELDS/ARMOR_COMBAT_FIELDS e EFFECT_FIELDS/CARRIER_EFFECT_COLUMNS.
+O filtro começa nos carriers, não inclui todo MGEF de magia que modifica armadura.
+A ausência de ligação a ENCH/ALCH não é prova de inexistência de outra fonte;
+a seleção é o escopo desta ordem. Não interpretar os counts de fora como efeitos
+ativos ou semanticamente implementados. Arrays posicionais reduzem o volume,
+unsupported agrega por motivo e mantém a lista completa fora do bundle.
+
+O runtime/build.mjs embute effects; loadDomain o aceita e o laço genérico de boot
+o registra. Nenhuma configuração, migration ou sistema novo precisa ser ativado.
+As assinaturas das definições herdadas incorporam valores efetivos/proveniência;
+manifesto invertido não muda a geração. Os testes conferem todos os itens com
+template e todos os efeitos selecionados contra o export pelo FormID; cadeias,
+ciclos, ausência/tipo errado, flags desconhecidas e magnitude ausente usam fixtures
+apenas em _work/evidence/DS-2d. Reordenação no contrato duplo não é teste nativo.
+
+Aceite completo do runtime, com a URL de teste sem imprimir:
+
+~~~powershell
+node _work/evidence/DS-2d/run-runtime-tests.mjs
+~~~
+
+Esse launcher aceita somente aetherius_test, seleciona AETHERIUS_TEST_DATABASE_URL
+de _work/db.env, define GAMEPLAY_CORE_TEST_EXPORTS=_work/exports e sanitiza a saída.
+Não usa banco dev. npm test é executado integralmente, sem enfraquecer o script.
+measure-initialize.mjs registra require()/três initialize() no harness existente,
+sem servidor nativo; tamanhos antes/depois e saídas ficam na mesma evidência.
+
+Ensaio nativo, EXCLUSIVO do Opus e não executado pelo implementador:
+
+~~~powershell
+node --experimental-strip-types AetheriusGameplayCore/tools/catalog/real-host.ts . _work/evidence/DS-2d/real-host-opus <porta-udp-livre>
+~~~
+
+O roteiro compara os seis domínios e exige mudança de ID de equipamento com
+template e de efeitos, além dos probes anteriores. Porta e pasta explícitas;
+nunca para o servidor do dono. Nenhuma instalação no jogo ou MO2 é feita aqui.

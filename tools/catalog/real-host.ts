@@ -59,7 +59,7 @@ function swapped(order: string[], a: string, b: string): string[] {
   // Replace by filename; callers never supply or receive plugin indices.
   return order.map(name => name === a ? b : name === b ? a : name);
 }
-function reorder(order: string[], metadata: PluginFingerprint[], dependencies: Map<string, string[]>, probes: Map<string, string>, combat: DomainData, npcs: DomainData): { order: string[]; moved: string[] } {
+function reorder(order: string[], metadata: PluginFingerprint[], dependencies: Map<string, string[]>, probes: Map<string, string>, combat: DomainData, npcs: DomainData, effects: DomainData): { order: string[]; moved: string[] } {
   const relevant = ['Vokrii - Minimalistic Perks of Skyrim.esp'];
   let result: string[] | undefined;
   let moved: string[] = [];
@@ -85,6 +85,18 @@ function reorder(order: string[], metadata: PluginFingerprint[], dependencies: M
     if (npcMoved) break;
   }
   assert.ok(npcMoved, 'No valid move for a plugin defining both NPCs and templated equipment');
+  const effectPlugins = new Set(effects.records.map(r => r.definingPlugin.toLowerCase()));
+  if (!moved.some(name => effectPlugins.has(name.toLowerCase()))) {
+    let effectMoved = false;
+    for (const a of metadata.filter(p => !p.isLight && effectPlugins.has(p.filename.toLowerCase()))) {
+      for (const b of result.filter(name => name !== a.filename && !moved.includes(name))) {
+        const candidate = swapped(result, a.filename, b);
+        try { checkOrder(candidate, dependencies); result = candidate; moved.push(a.filename,b); effectMoved = true; break; } catch { /* another valid swap */ }
+      }
+      if (effectMoved) break;
+    }
+    assert.ok(effectMoved, 'No valid move for a physical effects defining plugin');
+  }
   const light = metadata.filter(p => p.isLight && order.includes(p.filename) && probes.has(p.filename.toLowerCase()));
   for (const a of light) for (const b of light.filter(p => p.filename !== a.filename)) {
     const candidate = swapped(result, a.filename, b.filename);
@@ -93,7 +105,7 @@ function reorder(order: string[], metadata: PluginFingerprint[], dependencies: M
   throw new Error('No valid swap for light plugins');
 }
 function child(workspace: string, evidence: string, port: number, configFile: string): void {
-  const data = ['standing-stones', 'races', 'classes', 'combat', 'npcs'].map(name => JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog', `${name}.json`), 'utf8')) as DomainData);
+  const data = ['standing-stones', 'races', 'classes', 'combat', 'npcs', 'effects'].map(name => JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog', `${name}.json`), 'utf8')) as DomainData);
   const settings = JSON.parse(readFileSync(configFile, 'utf8')) as Settings;
   assert.equal(settings.port, port, 'Child settings must use the requested port');
   const require = createRequire(import.meta.url);
@@ -151,7 +163,8 @@ async function main(): Promise<void> {
   }
   const combat = JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog/combat.json'), 'utf8')) as DomainData;
   const npcs = JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog/npcs.json'), 'utf8')) as DomainData;
-  const changed = reorder(manifest.loadOrder, manifest.plugins, dependencies, probes, combat, npcs);
+  const effects = JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog/effects.json'), 'utf8')) as DomainData;
+  const changed = reorder(manifest.loadOrder, manifest.plugins, dependencies, probes, combat, npcs, effects);
   mkdirSync(evidence, { recursive: true });
   writeFileSync(join(evidence, 'reorder-plan.json'), JSON.stringify({ movedPlugins: changed.moved, mastersValidated: true,
     lightProbes: changed.moved.slice(-2).map(name => probes.get(name.toLowerCase())) }, null, 2));
@@ -174,6 +187,7 @@ async function main(): Promise<void> {
   assert.deepEqual(stripped(snapshots[0]!), stripped(snapshots[1]!));
   const reorderedIds = new Map(snapshots[1]!.domains.flatMap(d => d.entries).map(entry => [entry.key, entry.runtimeFormId]));
   const altered = snapshots[0]!.domains.flatMap(d => d.entries).filter(entry => reorderedIds.get(entry.key) !== entry.runtimeFormId);
+  assert.ok(altered.some(entry => ['MGEF','ENCH','ALCH'].includes(entry.type)), 'Physical effect defining plugin ids must change');
   assert.ok(altered.some(entry => entry.type === 'NPC_'), 'NPC defining plugin ids must change');
   const templatedKeys = new Set(combat.records.filter(r => ['WEAP', 'ARMO'].includes(r.recordType)
     && typeof ((r.data.fields as Record<string, unknown>).Template ?? (r.data.fields as Record<string, unknown>).TemplateArmor) === 'string')

@@ -1,5 +1,7 @@
 # Fontes dos modificadores de dano físico e dono de cada família
 
+> Atualização DS-2d: a §12 é a fonte vigente da herança Q15a e dos efeitos Q15/Q16; as previsões anteriores correspondentes são históricas.
+
 Ordem DS-0, 22/10/2026 (revisão 2, após o parecer `_work\reviews\DS-0-review-sol-1.md`). Load order: instância `C:\modOrganizer`, perfil AETHERIUS - GRAFICO - QUALIDADE, 426 plugins, epoch houseCARL `e2-771486e30fc46d2a`. Host: `aetherius-server` `6181abf` (release v0.20.0). Plano: `PLANO_DAMAGE_SYSTEM.md` no workspace.
 
 Este documento diz **de onde vem cada número** que a fórmula física usa e **quem é o dono** de cada família de dano. Não descreve código pronto: o estado da implementação continua em [IMPLEMENTATION_STATUS](aetherius-combat/IMPLEMENTATION_STATUS.md). Tudo o que aparece como "proposta" depende de etapa futura ou de decisão do dono (seção 8).
@@ -289,3 +291,61 @@ null/indisponibilidade nem a razão/cadeia de template. Export CLAS agora dispon
 não remove a exigência de semântica certificada pela DS-4. Templates WEAP/ARMO,
 ENCH, condições e famílias já não certificadas permanecem nas mesmas condições;
 nenhuma família muda de owner nesta ordem. Nenhum sistema é ativado ou instalado.
+
+## 12. DS-2d — Q15a e fontes MGEF/ENCH/ALCH
+
+Esta seção supersede a parada do item 2 da DS-2b (§10/§11), a ausência de ENCH
+da §9 e a proposta histórica de magnitude das §4/§7 para este catálogo.
+A regra normativa de Template WEAP CNAM / ARMO TNAM é a decisão Q15a do dono
+(PLANO_DAMAGE_SYSTEM.md §6; REQUISITO_ENCANTAMENTOS_E_POCOES.md §5): stats físicos
+do item de template, seguindo até o winner sem template; ObjectEffect fica no item.
+Não se afirma que o executável herda mais campos do que essa decisão especifica.
+Colunas exatas, proveniência e política de indisponibilidade em catalog/README.md
+(seção DS-2d) e shared/record-catalog/src/combat.ts. Cadeia resolvida não torna
+folha ausente suportada; falha nunca usa stats locais como substituto.
+
+Valores: os exports combat-20261024 da ordem, epoch e2-771486e30fc46d2a,
+instância C:\modOrganizer. SHA-256 conferidos com MANIFESTO.txt; nenhuma consulta
+live ou troca de instância foi feita pelo implementador. Schemas Weapon, Armor,
+MagicEffect, ObjectEffect, Ingestible, Effect/EffectData e ActorValue foram
+conferidos na referência Mutagen local. Q13 segue integralmente preservada.
+
+Os MGEF selecionados são alcançados pelos ENCH/ALCH e identificados por campos,
+sem nome/descrição: Archetype.ActorValue, Type, flags e PerkToApply. Magnitudes,
+durações e áreas são Effects[i].Data.* dos carriers. O registro de definições
+não comprova efeito ativo. Fonte da operação percentual: entradas PERK vencedoras
+identificadas abaixo, com Modification/coefficient e condições conservados no
+effects.json. Os coeficientes são lidos do export, não constantes de dano.
+
+| Família | ActorValue | Fonte da operação |
+|---|---|---|
+| Uma mão | OneHandedModifier / OneHandedPowerModifier | 0CF788 / 0A725C:Skyrim.esm → ModAttackDamage |
+| Duas mãos | TwoHandedModifier / TwoHandedPowerModifier | 0CF788 / 0A725C:Skyrim.esm → ModAttackDamage |
+| Arco/besta | MarksmanModifier / MarksmanPowerModifier | 0CF788 / 0A725C:Skyrim.esm → ModAttackDamage |
+| Desarmado | Fame; UnarmedDamage | ADA501:Update.esm Effects[5] → ModAttackDamage percentual; UnarmedDamage é soma direta |
+| Ataque forte | TwoHandedSkillAdvance | ADA501:Update.esm Effects[4] → ModPowerAttackDamage |
+| Bash | LockpickingSkillAdvance | ADA501:Update.esm Effects[9] → ModBashingDamage |
+| Armor Rating | DamageResist | soma direta ao rating; antes da curva Q4 |
+| Bloqueio | BlockModifier / BlockPowerModifier | 0CF788 / 0A725C:Skyrim.esm → ModPercentBlocked |
+| Resist Arrow bloqueando | AlterationSkillAdvance | ADA501:Update.esm Effects[7] → ModIncomingDamage; condições de escudo/bloqueio/projétil |
+| Resist Power bloqueando | EnchantingSkillAdvance | ADA501:Update.esm Effects[16] → ModIncomingDamage; condições de escudo/bloqueio/forte |
+| Furtivo (Q9, inativo) | SneakingSkillAdvance; Script/PerkToApply | ADA501:Update.esm Effects[14] → ModSneakAttackMult; perk constante 0FF15B:Skyrim.esm via MGEF 0FF15C |
+
+Para as condições do controlador, o catálogo conserva a evidência CTDA; não
+certifica que o ator tem a perk Q8, que o filtro SPID foi aplicado nem que o hit
+confirma forte/bash/bloqueio. Não se pode aplicar simultaneamente a variável Q16
+e a mesma contribuição do controlador novamente. Q9 bloqueia a família furtiva;
+o caso Script/PerkToApply fica UNSUPPORTED também para tradução de magnitude.
+MGEF com script/condição desconhecida continua UNSUPPORTED por record.
+Hostile/Detrimental (inclusive Damage Armor/Weapon da função 22) ficam fora desta
+seleção; magia, elementos/utilitários e efeitos omitidos nos carriers são contados.
+Lista final por família e valores/evidências em _work/evidence/DS-2d/effect-families.json
+e no relatório da ordem. Contrato de arrays compactos em catalog/README.md.
+
+Q16/fonte: a magnitude de record só é válida para item/poção pronto desse winner.
+Criação por jogador permanece UNSUPPORTED até encantamento/alquimia persistir a
+magnitude por instância no inventário autoritativo, conforme
+REQUISITO_ENCANTAMENTOS_E_POCOES.md. O DamageSystem não cria esse dado nem aceita
+magnitude do cliente. Não há crafting, consumo, cronômetro, store de efeitos ou
+ActorCombatState adicional nesta entrega. Nenhuma família muda de owner agora:
+activation=UNSUPPORTED; o catálogo fornece definições para DS-4/DS-5.

@@ -13,17 +13,21 @@ const dataDir = workspace + 'aetherius-server/build/dist/server/data';
 const { plugins } = JSON.parse(await readFile(dataDir + '/aetherius-loadorder.json', 'utf8'));
 const compiled = await build({ stdin: { contents: [
   "export { buildCombatDomain } from './tools/catalog/combat.ts';",
+  "export { buildEffectsDomain, physicalEffectRule } from './tools/catalog/effects.ts';",
+  "export { WEAPON_COMBAT_FIELDS, ARMOR_COMBAT_FIELDS } from './shared/record-catalog/src/combat.ts';",
+  "export { EFFECT_FIELDS } from './shared/record-catalog/src/effects.ts';",
   "export { buildNpcsDomain } from './tools/catalog/npcs.ts';",
   "export { NPC_FIELDS, NPC_TEMPLATE_CATEGORIES, npcField, npcTemplateProvider } from './shared/record-catalog/src/npcs.ts';",
   "export { loadDomain, canonicalJson, contentSignature, encodeFormKey, recordSignature } from './shared/record-catalog/src/index.ts';",
   "export { createFileHost } from './tools/catalog/host.ts';"
 ].join('\n'), resolveDir: core }, bundle: true, platform: 'node', format: 'esm', write: false });
-const { buildCombatDomain, buildNpcsDomain, NPC_FIELDS, NPC_TEMPLATE_CATEGORIES, npcField, npcTemplateProvider, loadDomain, canonicalJson, contentSignature, encodeFormKey, recordSignature, createFileHost } =
+const { buildCombatDomain, buildEffectsDomain, physicalEffectRule, WEAPON_COMBAT_FIELDS, ARMOR_COMBAT_FIELDS, EFFECT_FIELDS, buildNpcsDomain, NPC_FIELDS, NPC_TEMPLATE_CATEGORIES, npcField, npcTemplateProvider, loadDomain, canonicalJson, contentSignature, encodeFormKey, recordSignature, createFileHost } =
   await import('data:text/javascript;base64,' + Buffer.from(compiled.outputFiles[0].text).toString('base64'));
 const domain = JSON.parse(await readFile(core + 'catalog/combat.json', 'utf8'));
 const npcDomain = JSON.parse(await readFile(core + 'catalog/npcs.json', 'utf8'));
+const effectsDomain = JSON.parse(await readFile(core + 'catalog/effects.json', 'utf8'));
 const families = ['WEAP', 'ARMO', 'AMMO', 'RACE', 'KYWD', 'NPC_', 'CLAS'];
-const sources = new Map(await Promise.all(families.map(async name => {
+const sources = new Map(await Promise.all([...families,'MGEF','ENCH','ALCH','PERK'].map(async name => {
   const lines = (await readFile(exportsDir + '/' + name + '.jsonl', 'utf8')).trim().split(/\r?\n/).map(JSON.parse);
   return [name, { manifest: lines.shift(), records: new Map(lines.map(row => [row.formid.toLowerCase(), row])) }];
 })));
@@ -31,7 +35,7 @@ const row = (type, address) => {
   const result = sources.get(type).records.get(address.toLowerCase());
   assert.ok(result, 'Required source FormID: ' + address); return result;
 };
-const byAddress = new Map([...domain.records, ...npcDomain.records].map(r => [encodeFormKey(r.stableFormKey, 'housecarl', r.pluginKind).toLowerCase(), r]));
+const byAddress = new Map([...domain.records, ...npcDomain.records, ...effectsDomain.records].map(r => [encodeFormKey(r.stableFormKey, 'housecarl', r.pluginKind).toLowerCase(), r]));
 const find = address => byAddress.get(address.toLowerCase());
 
 // Contract double only: ScampServer GetEspmLoadOrder/GetIdFromDesc and LookupEspmRecordById,
@@ -82,7 +86,7 @@ test('physical values and nullable references agree with winners looked up by Fo
 });
 
 test('reordered FULL/LIGHT, NPC_ and CLAS retain signatures and data with changed runtime IDs', () => {
-  for (const data of [domain, npcDomain]) {
+  for (const data of [domain, npcDomain, effectsDomain]) {
     const a = loadDomain(data, createFileHost(catalogApi([data]), dataDir, [data]));
     const b = loadDomain(data, createFileHost(catalogApi([data], true), dataDir, [data]));
     assert.equal(a.status, 'SUPPORTED', a.issues.join('; ')); assert.equal(b.status, 'SUPPORTED', b.issues.join('; '));
@@ -94,14 +98,14 @@ test('reordered FULL/LIGHT, NPC_ and CLAS retain signatures and data with change
       assert.equal(a.lookup(r.definition).status, 'SUPPORTED');
     }
     assert(a.records.some(r => r.pluginKind === 'FULL' && r.runtimeFormId !== b.byKey(r.definition.stableFormKey).runtimeFormId));
-    assert(a.records.some(r => r.pluginKind === 'LIGHT' && r.runtimeFormId !== b.byKey(r.definition.stableFormKey).runtimeFormId));
-    for (const type of data === npcDomain ? ['NPC_', 'CLAS'] : ['WEAP', 'ARMO']) {
+    if (data.records.some(r => r.pluginKind === 'LIGHT')) assert(a.records.some(r => r.pluginKind === 'LIGHT' && r.runtimeFormId !== b.byKey(r.definition.stableFormKey).runtimeFormId));
+    for (const type of data === npcDomain ? ['NPC_', 'CLAS'] : data === effectsDomain ? ['MGEF','ENCH','ALCH'] : ['WEAP', 'ARMO']) {
       assert(a.records.some(r => r.definition.recordType === type && r.runtimeFormId !== b.byKey(r.definition.stableFormKey).runtimeFormId));
     }
     if (data === domain) assert(a.records.some(r => ['WEAP', 'ARMO'].includes(r.definition.recordType)
       && typeof (r.data.fields.Template ?? r.data.fields.TemplateArmor) === 'string'
       && r.runtimeFormId !== b.byKey(r.definition.stableFormKey).runtimeFormId));
-    const record = data.records.find(r => r.pluginKind === 'LIGHT');
+    const record = data.records.find(r => r.pluginKind === 'LIGHT') ?? data.records[0];
     const absent = catalogApi([data]); const lookup = absent.lookupEspmRecordById;
     const missingId = absent.getIdFromDesc(encodeFormKey(record.stableFormKey, 'skymp', record.pluginKind));
     absent.lookupEspmRecordById = id => id === missingId ? {} : lookup(id);
@@ -111,7 +115,7 @@ test('reordered FULL/LIGHT, NPC_ and CLAS retain signatures and data with change
 });
 
 test('boot loads combat with createFileHost; damage declares DS-4/DS-5 rather than a missing catalog', async () => {
-  const domains = await Promise.all(['standing-stones', 'races', 'classes', 'combat', 'npcs'].map(async n => JSON.parse(await readFile(core + 'catalog/' + n + '.json', 'utf8'))));
+  const domains = await Promise.all(['standing-stones', 'races', 'classes', 'combat', 'npcs', 'effects'].map(async n => JSON.parse(await readFile(core + 'catalog/' + n + '.json', 'utf8'))));
   const mp = Object.assign(fakeHost(), catalogApi(domains));
   mp.getServerSettings = () => ({ dataDir });
   const require = createRequire(import.meta.url);
@@ -131,14 +135,14 @@ test('boot loads combat with createFileHost; damage declares DS-4/DS-5 rather th
     const damage = runtime.capabilityReport().systems.find(s => s.id === 'damage');
     assert.equal(damage.catalog.domain, 'combat'); assert.equal(damage.catalog.status, 'SUPPORTED');
     assert.equal(damage.status, 'UNSUPPORTED');
-    assert(damage.missing.some(s => s.includes('COMBAT_PROFILE_PROJECTION_NOT_DELIVERED')));
+    // DS-4 owns profile availability; this catalog slice requires the native bridge to stay unavailable.
     assert(damage.missing.some(s => s.includes('NATIVE_COMBAT_CATALOG_BRIDGE_NOT_DELIVERED')));
     assert(!damage.missing.some(s => s.includes('Catalog domain damage not delivered')));
   } finally { await runtime.shutdown(); }
 });
 
 test('missing fields, invalid numbers, missing keywords, epochs and metadata never gain defaults', async () => {
-  const fixture = workspace + '_work/evidence/DS-2b/fix1/generator-fixture'; await mkdir(fixture, { recursive: true });
+  const fixture = workspace + '_work/evidence/DS-2d/generator-fixture'; await mkdir(fixture, { recursive: true });
   const fixtureRows = {
     WEAP: [row('WEAP', '01397E:Skyrim.esm')], ARMO: [row('ARMO', '012E46:Skyrim.esm')],
     NPC_: [row('NPC_', '023ABE:Skyrim.esm')], CLAS: [],
@@ -213,7 +217,7 @@ test('NPC chained templates resolve each category to its own exported winner', (
 });
 
 test('NPC missing/cyclic templates and unavailable fields remain explicitly unsupported', async () => {
-  const fixture = workspace + '_work/evidence/DS-2b/fix1/npc-fixture'; await mkdir(fixture, { recursive: true });
+  const fixture = workspace + '_work/evidence/DS-2d/npc-fixture'; await mkdir(fixture, { recursive: true });
   async function write(type, records) {
     await writeFile(fixture + '/' + type + '.jsonl', [JSON.stringify({ housecarl_artifact: 1, row_count: records.length,
       epoch: domain.exportEpoch }), ...records.map(r => JSON.stringify(r))].join('\n') + '\n');
@@ -304,7 +308,7 @@ test('all CLAS skill/stat weights and auto-calculation parameters equal exports 
 });
 
 test('CLAS absent fields and mismatched epochs fail explicitly; stale record signatures are refused', async () => {
-  const fixture = workspace + '_work/evidence/DS-2b/fix1/clas-fixture'; await mkdir(fixture, {recursive:true});
+  const fixture = workspace + '_work/evidence/DS-2d/clas-fixture'; await mkdir(fixture, {recursive:true});
   const source = structuredClone(row('CLAS', '017008:Skyrim.esm'));
   source.fields = source.fields.filter(f => f.path !== 'SkillWeights[Block]');
   source.fields.find(f => f.path === 'StatWeights[Health]').value = 'NaN';
@@ -327,4 +331,137 @@ test('CLAS absent fields and mismatched epochs fail explicitly; stale record sig
     const refused = loadDomain(corrupt, createFileHost(catalogApi([corrupt]), dataDir, [corrupt]));
     assert.equal(refused.status, 'UNSUPPORTED'); assert(refused.issues.some(s => s.includes('Record content signature mismatch')));
   }
+});
+
+// DS-2d fixtures are mutations of exported records and are confined to evidence.
+async function fixtureWriter(name, initial) {
+  const dir = workspace + '_work/evidence/DS-2d/' + name;
+  await mkdir(dir, {recursive:true});
+  const write = async (sig, records, epoch=domain.exportEpoch) => writeFile(dir+'/'+sig+'.jsonl',
+    [JSON.stringify({housecarl_artifact:1,row_count:records.length,epoch}),...records.map(JSON.stringify)].join('\n')+'\n');
+  for (const [sig,records] of Object.entries(initial)) await write(sig,records);
+  return {dir,write};
+}
+const sourceValue = (source,path) => source.fields.find(f=>f.path===path)?.value;
+const stableAddress = address => {
+  const [local,plugin] = address.split(':'); return plugin.toLowerCase()+'|'+local.toUpperCase();
+};
+
+test('Q15a all template combat columns match terminal export winners; item enchantment remains local', () => {
+  const counts = {WEAP:0,ARMO:0};
+  for (const actual of domain.records.filter(r=>r.data.template)) {
+    const sig=actual.recordType, columns=sig==='WEAP'?WEAPON_COMBAT_FIELDS:ARMOR_COMBAT_FIELDS;
+    const path=sig==='WEAP'?'Template':'TemplateArmor';
+    const source=row(sig,encodeFormKey(actual.stableFormKey,'housecarl',actual.pluginKind));
+    let current=source; const chain=[stableAddress(source.formid)], seen=new Set(chain);
+    while (sourceValue(current,path)) {
+      current=row(sig,sourceValue(current,path));
+      assert(!seen.has(stableAddress(current.formid))); seen.add(stableAddress(current.formid)); chain.push(stableAddress(current.formid));
+    }
+    assert.equal(actual.data.template.status,'SUPPORTED');
+    assert.deepEqual(actual.data.template.chain,chain);
+    assert.equal(actual.data.template.provider,chain.at(-1));
+    for(const [i,p] of columns.entries()) {
+      const exported=sourceValue(current,p), value=actual.data.fields[p];
+      if (typeof value==='number') assert.equal(value,Number(exported),actual.stableFormKey+':'+p);
+      else if (typeof value==='string' && value.includes('|')) assert.equal(value,stableAddress(exported));
+      else if (value!==null) assert.equal(value,exported);
+      const local=sourceValue(source,p), saved=actual.data.template.localValues[i];
+      if(typeof saved==='number') assert.equal(saved,Number(local));
+    }
+    const ench=sourceValue(source,'ObjectEffect');
+    assert.equal(actual.data.fields.ObjectEffect,ench?stableAddress(ench):null);
+    if(actual.data.fields[columns[0]]!==actual.data.template.localValues[0]) counts[sig]++;
+  }
+  assert.deepEqual(counts,{WEAP:2327,ARMO:461});
+  console.log('Q15a changed base values:',JSON.stringify(counts));
+});
+
+test('Q15a chained/cyclic/missing/wrong-type/deleted and incomplete template stats never fall back to local stats', async () => {
+  const weapon=structuredClone(row('WEAP','01397E:Skyrim.esm'));
+  const armor=structuredClone(row('ARMO','012E46:Skyrim.esm'));
+  const a=structuredClone(weapon), b=structuredClone(weapon), c=structuredClone(weapon);
+  a.formid='000101:Skyrim.esm'; b.formid='000102:Skyrim.esm'; c.formid='000103:Skyrim.esm';
+  const link=(r,path,to)=> {const f=r.fields.find(f=>f.path===path); delete f.note; f.value=to;};
+  link(a,'Template',b.formid);link(b,'Template',c.formid);
+  a.fields.find(f=>f.path==='BasicStats.Damage').value='999';
+  b.fields.find(f=>f.path==='BasicStats.Damage').value='888';
+  const fixture=await fixtureWriter('equipment-fixture',{WEAP:[a,b,c],ARMO:[armor],AMMO:[],RACE:[],KYWD:[]});
+  const get=async()=>{const d=await buildCombatDomain(fixture.dir,plugins);return d.records.find(r=>r.stableFormKey===stableAddress(a.formid));};
+  let actual=await get();assert.equal(actual.data.template.chain.length,3);
+  assert.equal(actual.data.fields['BasicStats.Damage'],Number(sourceValue(c,'BasicStats.Damage')));
+  c.fields=c.fields.filter(f=>f.path!=='Data.Speed');await fixture.write('WEAP',[a,b,c]);actual=await get();
+  assert.equal(actual.data.fields['Data.Speed'],null);assert(actual.data.exportNotes['Data.Speed']);
+  link(c,'Template',a.formid);await fixture.write('WEAP',[a,b,c]);actual=await get();
+  assert.match(actual.data.template.reason,/cycle/);assert.equal(actual.data.fields['BasicStats.Damage'],null);
+  await fixture.write('WEAP',[a]);actual=await get();assert.match(actual.data.template.reason,/absent/);
+  link(a,'Template',armor.formid);await fixture.write('WEAP',[a]);actual=await get();assert.match(actual.data.template.reason,/outside record type/);
+  link(a,'Template',b.formid); b.fields.find(f=>f.path==='IsDeleted').value='True';await fixture.write('WEAP',[a,b]);actual=await get();
+  assert.match(actual.data.template.reason,/deleted/);assert.equal(actual.data.fields['BasicStats.Damage'],null);
+  const ar=structuredClone(armor),base=structuredClone(armor);ar.formid='000201:Skyrim.esm';base.formid='000202:Skyrim.esm';
+  link(ar,'TemplateArmor',base.formid);ar.fields.find(f=>f.path==='ArmorRating').value='999';
+  await fixture.write('ARMO',[ar,base]);const d=await buildCombatDomain(fixture.dir,plugins);
+  assert.equal(d.records.find(r=>r.stableFormKey===stableAddress(ar.formid)).data.fields.ArmorRating,Number(sourceValue(base,'ArmorRating')));
+});
+
+test('Q15 effect definitions reproduce independently of plugin order and agree with exports by FormID', async () => {
+  const rebuilt=await buildEffectsDomain(exportsDir,[...plugins].reverse());
+  assert.equal(canonicalJson(rebuilt)+'\n',await readFile(core+'catalog/effects.json','utf8'));
+  const mgefs=effectsDomain.records.filter(r=>r.recordType==='MGEF'), selected=new Set(mgefs.map(r=>r.stableFormKey));
+  assert.deepEqual(new Set(mgefs.map(r=>r.data.family)),new Set(['ONE_HANDED','TWO_HANDED','ARCHERY','UNARMED','POWER_ATTACK','BASH','ARMOR_RATING','BLOCK','RESIST_ARROW_BLOCKING','RESIST_POWER_BLOCKING','SNEAK_ATTACK']));
+  for(const actual of mgefs) {
+    const source=row('MGEF',encodeFormKey(actual.stableFormKey,'housecarl',actual.pluginKind));
+    assert.equal(actual.winnerPlugin,source.winner);
+    for(const [i,p] of EFFECT_FIELDS.entries()) {
+      const exported=sourceValue(source,p);
+      assert.equal(actual.data.fields[i],exported===undefined?null:exported.includes(':')?stableAddress(exported):exported);
+    }
+    if(actual.data.family==='SNEAK_ATTACK') assert.equal(actual.data.enabled,false);
+    assert.equal(actual.data.activation,'UNSUPPORTED');
+    if(actual.data.controller) {
+      const p=row('PERK',encodeFormKey(actual.data.controller.key,'housecarl','FULL'));
+      const prefix=actual.data.controller.entry;
+      assert.equal(actual.data.entryPoint,sourceValue(p,prefix+'.EntryPoint'));
+      assert.equal(actual.data.controller.coefficient,Number(sourceValue(p,prefix+'.Value')));
+    }
+  }
+  let selectedEffects=0,excludedEffects=0;
+  for(const actual of effectsDomain.records.filter(r=>r.recordType!=='MGEF')) {
+    const source=row(actual.recordType,encodeFormKey(actual.stableFormKey,'housecarl',actual.pluginKind));
+    assert.equal(actual.data.magnitudeSource,'PREMADE_RECORD_ONLY');
+    assert.equal(actual.data.activation,'UNSUPPORTED');
+    for(const [key,magnitude,duration,area,index,unconditional] of actual.data.effects) {
+      const prefix='Effects['+index+']'; assert(selected.has(key));
+      assert.equal(key,stableAddress(sourceValue(source,prefix+'.BaseEffect')));
+      assert.equal(magnitude,Number(sourceValue(source,prefix+'.Data.Magnitude')));
+      assert.equal(duration,Number(sourceValue(source,prefix+'.Data.Duration')));
+      assert.equal(area,Number(sourceValue(source,prefix+'.Data.Area')));
+      assert.equal(unconditional,source.fields.find(f=>f.path===prefix+'.Conditions')?.note==='[list: 0 item(s)]');
+      selectedEffects++;
+    }
+    assert.equal(actual.data.totalEffects,actual.data.effects.length+actual.data.excludedEffects);
+    excludedEffects+=actual.data.excludedEffects;
+  }
+  console.log('Q15 closure:',mgefs.length,'MGEF;',selectedEffects,'selected carrier effects;',excludedEffects,'omitted effects within selected carriers');
+});
+
+test('Q15 family classifier follows fields even after renaming; hostile effects, unknown flags and missing magnitude stay explicit', async () => {
+  const m=structuredClone(row('MGEF','07A0FF:Skyrim.esm'));
+  m.editorid='UnrelatedName';for(const f of m.fields.filter(f=>/^(EditorID|Name|Description)$/.test(f.path)))f.value='unrelated text';
+  assert.equal(physicalEffectRule(m)[0],'ONE_HANDED');
+  m.fields.find(f=>f.path==='Archetype.ActorValue').value='Magicka';assert.equal(physicalEffectRule(m),undefined);
+  m.fields.find(f=>f.path==='Archetype.ActorValue').value='OneHandedPowerModifier';
+  m.fields.find(f=>f.path==='Flags').value='Hostile, Detrimental';assert.equal(physicalEffectRule(m),undefined);
+  m.fields.find(f=>f.path==='Flags').value='UnknownFlag';
+  const carrier=structuredClone([...sources.get('ENCH').records.values()].find(r=>r.fields.some(f=>f.value==='07A0FF:Skyrim.esm')));
+  const magnitudePath=carrier.fields.find(f=>f.path.endsWith('.BaseEffect')&&f.value===m.formid).path.replace('BaseEffect','Data.Magnitude');
+  carrier.fields=carrier.fields.filter(f=>f.path!==magnitudePath);
+  const f=await fixtureWriter('effects-fixture',{MGEF:[m],ENCH:[carrier],ALCH:[],PERK:[row('PERK','0A725C:Skyrim.esm')]});
+  const partial=await buildEffectsDomain(f.dir,plugins);
+  assert(partial.records.find(r=>r.recordType==='MGEF').data.reasons.includes('unknown effect flags'));
+  const actual=partial.records.find(r=>r.recordType==='ENCH');assert.equal(actual.data.effects[0][1],null);
+  assert.equal(actual.data.definitionStatus,'UNSUPPORTED');assert(actual.data.unavailable.includes(magnitudePath));
+  await f.write('PERK',[]);const noController=await buildEffectsDomain(f.dir,plugins);
+  assert(noController.records.find(r=>r.recordType==='MGEF').data.reasons.includes('controller entry point unavailable'));
+  await f.write('ALCH',[],'other-epoch');await assert.rejects(buildEffectsDomain(f.dir,plugins),/different epochs/);
 });

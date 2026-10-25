@@ -1,5 +1,7 @@
 # Dados gerados — B2
 
+> Atualização DS-2d: Template WEAP/ARMO e efeitos ENCH/ALCH/MGEF têm contrato vigente na seção DS-2d ao fim deste arquivo; as notas antigas sobre essas pendências são históricas.
+
 `standing-stones.json`: 13 ativadores, 15 definições SPEL e seus MGEF.
 Os grants saem de `records[].data.spells` dos ACTI. A definição de corrida do
 Corcel (`mundus.esp|000818`) está em `unsupported`, sem vínculo inventado.
@@ -174,3 +176,81 @@ de indisponibilidade e provedores continuam nos records. A lista completa
 {status,stableFormKey,reason} de cada ocorrência é escrita exclusivamente nos
 relatórios combat-unsupported.json e npcs-unsupported.json do diretório explícito
 de geração; não entra em BUILD_DOMAINS. Comandos em tools/catalog/README.md.
+
+## DS-2d — Template efetivo e efeitos físicos (Q15a/Q15/Q16)
+
+Esta seção supersede as pendências de Template/TemplateArmor e ENCH nas seções
+DS-2/DS-2b acima. AttackRace e RACE.Attacks continuam nas condições anteriores.
+Fonte normativa da herança: decisão Q15a do dono, PLANO_DAMAGE_SYSTEM.md §6 e
+REQUISITO_ENCANTAMENTOS_E_POCOES.md §5; não é alegação sobre engenharia reversa
+do executável. Valores vêm exclusivamente dos winners do export combat-20261024,
+mesmo epoch e2-771486e30fc46d2a. Os hashes constam de MANIFESTO.txt.
+
+Em combat, data.fields passa a conter os valores efetivos das colunas
+WEAPON_COMBAT_FIELDS / ARMOR_COMBAT_FIELDS, publicadas em
+shared/record-catalog/src/combat.ts. São os stats físicos expostos pelo domínio:
+dano/rating, velocidade/alcance/ranges/stagger, crítico (inclusive Effect),
+tipo/skill/flags da arma, tipo/slots/flags da armadura e EquipmentType. Toda a
+unidade vem do primeiro WEAP/ARMO da cadeia sem template. Identidade, IsDeleted,
+MajorFlags, Keywords, Race e ObjectEffect permanecem locais; ObjectEffect nunca
+é copiado do template. Campos de apresentação/economia não são incorporados.
+
+Equipamento com template tem data.template={status,provider,chain,reason,localValues}.
+chain inclui o próprio item e o provedor terminal; localValues é uma linha nas
+colunas correspondentes do schema. Os valores herdados estão em data.fields,
+sem duplicá-los em outro objeto. Ciclo, alvo ausente ou de outro tipo, winner
+apagado/ilegível e link ilegível resultam em UNSUPPORTED: as colunas herdáveis
+ficam null, com motivo, sem usar o valor local como substituto. Folha ausente no
+provedor continua null/exportNotes, mesmo quando a travessia tem status SUPPORTED.
+Esse status certifica a travessia, não a disponibilidade de todas as folhas.
+Assinaturas são recalculadas sobre os valores efetivos e a evidência da cadeia.
+
+Na geração desta ordem: 6.456 WEAP com template, 2.327 danos diferentes do local;
+7.809 ARMO com template, 461 ratings diferentes do local. Alteração em pelo menos
+uma coluna: 4.256 WEAP e 786 ARMO. Zero cadeias do export ficaram sem provedor.
+Os casos adversariais são cobertos em testes por mutação de fixtures do export.
+
+O domínio effects contém apenas a cadeia MGEF ← ENCH/ALCH do filtro Q15:
+37 MGEF, 111 ENCH e 44 ALCH, 167 efeitos selecionados nos carriers. Outros 44
+efeitos dentro desses carriers são contados, sem carregar dados mágicos/utilitários.
+Também são contadas as definições fora da seleção: 5.464 MGEF, 1.383 ENCH e 480 ALCH.
+Nenhum record de PERK novo entra no domínio: as entradas dos controladores Q8
+são evidência referenciada, lida do PERK vencedor. Registro não concede a perk.
+
+A seleção é reproduzível em tools/catalog/effects.ts: vínculo Effects[i].BaseEffect
+em ENCH/ALCH; MGEF sem flags Hostile/Detrimental; tabela de Archetype.ActorValue
+para família. Archetype.Type/SecondActorValue/flags/scripts/condições são conservados
+e limitam definitionStatus. Exceção explícita: Script + PerkToApply com entry point
+ModSneakAttackMult é registrado como PERK_CONSTANT, inativo/UNSUPPORTED, pois a
+magnitude do carrier não é o multiplicador constante dessa perk. Name, EditorID
+e Description nunca participam da decisão. Damage Armor/Weapon hostis ficam fora
+da seleção (função 22 futura); magia, elementos e utilitários ficam contados fora.
+
+MGEF usa data.layout=1 e data.fields nas colunas EFFECT_FIELDS em
+shared/record-catalog/src/effects.ts: IsDeleted, Archetype.Type/ActorValue,
+SecondActorValue/Weight, Flags, CastType, TargetType, MagicSkill e PerkToApply.
+Valores escalares conservam a grafia do export; referências são StableFormKey.
+data.family/unit/entryPoint descrevem a operação. data.controller contém a chave
+da perk, entrada, coeficiente/Modification e árvore de condições do winner.
+As duplicatas numéricas FormLinkOrIndex.Index são omitidas; links ficam estáveis.
+UnarmedDamage e DamageResist usam ADD; os AVs modificadores usam PERCENT conforme
+MultiplyOnePlusAVMult do controlador. Famílias de bloqueio/forte/bash exigem a
+confirmação correspondente no futuro consumidor; as condições não são avaliadas
+aqui. Furtivo tem enabled=false pela Q9. Scripts, condições não certificadas,
+flags desconhecidas e campos ausentes mantêm definitionStatus=UNSUPPORTED.
+
+ENCH/ALCH usa data.effects com tuplas CARRIER_EFFECT_COLUMNS:
+[MGEF, magnitude, duração em segundos, área, índice original do efeito, semCondições].
+O índice é uma coluna do record, nunca posição de plugin. Os números são as folhas
+Effects[i].Data.* do winner, não descrições. Dados ausentes/ilegíveis ficam null e
+unavailable, com motivo; lista incompleta e condições desconhecidas não ganham
+default. totalEffects/excludedEffects permitem conferir o recorte do carrier.
+ENCH fora de ConstantEffect/Self não certifica ativação de equipamento vestido.
+
+Q16: magnitudeSource=PREMADE_RECORD_ONLY nos carriers. Itens/poções criados por
+jogador continuam UNSUPPORTED até o domínio responsável persistir magnitude
+por instância no inventário autoritativo. activation=UNSUPPORTED em todos esses
+records: são definições offline; não há efeito ativo, consumo, duração em runtime,
+store novo, mudança de ownership, concessão, fórmula ou instalação nesta ordem.
+O consumidor da DS-4/DS-5 deverá respeitar as limitações e o requisito Q16.
+Q13 permanece: não há seleção, criação, troca de base ou respawn de inimigo.

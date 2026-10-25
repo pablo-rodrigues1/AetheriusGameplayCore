@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { WEAPON_COMBAT_FIELDS, ARMOR_COMBAT_FIELDS } from '../../shared/record-catalog/src/combat.ts';
 import { readExport, summarizeUnsupported } from './exports.ts';
 import type { ExportRow } from './exports.ts';
 import { decodeFormKey, encodeFormKey } from '../../shared/record-catalog/src/codecs.ts';
@@ -28,7 +29,7 @@ const compare = (a: string, b: string) => a.localeCompare(b, 'en');
 const addressPattern = /^[\da-f]{6}:[^:]+\.(esm|esp|esl)$/i;
 
 /** All physical winners, including nonplayable equipment. No name filters.
- * Leaves remain local; inheritance and effect semantics remain uncertified. */
+ * Q15a resolves equipment combat stats; effects remain definitions, never active buffs. */
 export async function buildCombatDomain(exportsDir: string, fingerprints: readonly PluginFingerprint[], report?: UnsupportedLink[]): Promise<DomainData> {
   const files = await Promise.all(Object.keys(families).map(name => readExport(join(exportsDir, name + '.jsonl'))));
   const epoch = files[0]!.manifest.epoch;
@@ -103,10 +104,10 @@ export async function buildCombatDomain(exportsDir: string, fingerprints: readon
       for (const p of numeric[row.type] ?? []) fields[p] = leaf(p, 'number');
       for (const p of scalar[row.type] ?? []) fields[p] = leaf(p, 'string');
       for (const p of references[row.type] ?? []) fields[p] = leaf(p, 'reference');
-      for (const p of ['Template', 'TemplateArmor', 'AttackRace']) if (typeof fields[p] === 'string') {
+      for (const p of ['AttackRace']) if (typeof fields[p] === 'string') {
         issue(stableFormKey, p + ': inheritance semantics not certified; local fields are not an inherited calculation');
       }
-      if (typeof fields.ObjectEffect === 'string') issue(stableFormKey, 'ObjectEffect: reference only; ENCH effects not exported/certified');
+      if (typeof fields.ObjectEffect === 'string') issue(stableFormKey, 'ObjectEffect: reference only; consult effects domain; no active magnitude certified');
       if (typeof fields['Critical.Effect'] === 'string') issue(stableFormKey, 'Critical.Effect: reference only; SPEL semantics not certified');
     }
     let keywords: JsonValue = null;
@@ -139,6 +140,42 @@ export async function buildCombatDomain(exportsDir: string, fingerprints: readon
   }
   for (const sig of ['WEAP', 'ARMO', 'AMMO', 'RACE'] as const) {
     for (const row of indexes.get(sig)!.values()) roots.push(put(row, sig));
+  }
+  // Resolve from immutable local winners; iteration order cannot affect a chain.
+  const localRecords = new Map(records);
+  for (const record of localRecords.values()) if (record.recordType === 'WEAP' || record.recordType === 'ARMO') {
+    const path = record.recordType === 'WEAP' ? 'Template' : 'TemplateArmor';
+    const columns = record.recordType === 'WEAP' ? WEAPON_COMBAT_FIELDS : ARMOR_COMBAT_FIELDS;
+    const local = record.data.fields as JsonObject;
+    // Ordinary equipment is byte-compatible with previous catalog definitions.
+    if (local[path] === null && !Object.hasOwn(record.data.exportNotes as object, path)) continue;
+    const chain: StableFormKey[] = [], seen = new Set<StableFormKey>();
+    let current = record, reason: string | null = null;
+    while (true) {
+      if (seen.has(current.stableFormKey)) { reason = 'cycle in equipment template chain'; break; }
+      seen.add(current.stableFormKey); chain.push(current.stableFormKey);
+      const fields = current.data.fields as JsonObject;
+      if (fields.IsDeleted !== false) { reason = 'deleted or unavailable equipment template winner'; break; }
+      if (fields[path] === null && !Object.hasOwn(current.data.exportNotes as object, path)) break;
+      if (typeof fields[path] !== 'string') { reason = 'equipment template link unavailable'; break; }
+      const next = localRecords.get(fields[path] as StableFormKey);
+      if (!next || next.recordType !== record.recordType) { reason = 'equipment template absent or outside record type domain'; break; }
+      current = next;
+    }
+    const fields: Record<string, JsonValue> = { ...local }, exportNotes: Record<string, JsonValue> = { ...(record.data.exportNotes as JsonObject) };
+    for (const column of columns) {
+      fields[column] = reason ? null : (current.data.fields as JsonObject)[column]!;
+      delete exportNotes[column];
+      const note = (current.data.exportNotes as JsonObject)[column];
+      if (reason || note !== undefined) exportNotes[column] = reason ?? note!;
+    }
+    if (reason) issue(record.stableFormKey, 'Template: ' + reason);
+    const data: JsonObject = { ...record.data, fields, exportNotes, template: {
+      status: reason ? 'UNSUPPORTED' : 'SUPPORTED', provider: reason ? null : current.stableFormKey,
+      chain, reason, localValues: columns.map(column => local[column]!)
+    } };
+    const updated = { ...record, data };
+    records.set(record.stableFormKey, { ...updated, signature: recordSignature(updated, depend(record.definingPlugin)) });
   }
   for (const stable of [...reached].sort(compare)) {
     const defining = depend(stable.split('|')[0]!);
