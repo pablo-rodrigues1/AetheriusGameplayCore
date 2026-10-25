@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "preview": false,
-  "generatedAt": "2026-10-25T20:28:10.894Z",
+  "generatedAt": "2026-10-25T22:25:38.104Z",
   "generatedBy": "integrations/host/make-package.mjs",
   "format": "patch git unificado (arquivos novos incluidos) mais copia integral dos arquivos no estado final",
   "lineEndings": "LF em changes.patch e em files/; sha256 e size calculados sobre o conteudo com CRLF convertido em LF",
@@ -13,8 +13,8 @@
   },
   "patch": {
     "path": "changes.patch",
-    "bytes": 310534,
-    "sha256": "d8f4d46c67b4abafc22009906803c7038bbcdeaaae496c2c2f74e36c11eb74aa"
+    "bytes": 356590,
+    "sha256": "ad62636998ce7e7aedb68364ebb77a942a0c7afe657fa3c93df0fadb5a8c1d2f"
   },
   "excluded": [
     "build/",
@@ -110,6 +110,15 @@
       "requiresNativeBuild": false,
       "defaultState": "preservado",
       "officialServer": "conferir baseline de UI do mantenedor"
+    },
+    "damage-ds5b": {
+      "title": "Perks CLASS compiladas, condições, crítico e confirmação de forte; recorte shadow",
+      "orders": [
+        "DS-5b"
+      ],
+      "requiresNativeBuild": true,
+      "defaultState": "off; families ausente",
+      "officialServer": "shadow apenas; bash e prioridade não comutativa UNSUPPORTED; active exige DS-7"
     }
   },
   "featuresWithoutHostFiles": {
@@ -118,7 +127,7 @@
   },
   "counts": {
     "modified": 17,
-    "added": 14,
+    "added": 18,
     "removed": 0
   },
   "unclassified": [],
@@ -164,10 +173,11 @@
       "features": [
         "damage-shadow",
         "weapon-poison",
-        "damage-ds5a"
+        "damage-ds5a",
+        "damage-ds5b"
       ],
-      "size": 70587,
-      "sha256": "ed44b33a9d4fe02315a9aac3f9d2a617af695dd7cfbeee5a0faf6242e56e9e6c"
+      "size": 70636,
+      "sha256": "f787174c71ffe7e28c74d5c18dc5fe5b46712b13872521895e2b79b0a6cbc8db"
     },
     {
       "path": "server/cpp/addon/property_bindings/PropertyBindingFactory.cpp",
@@ -188,10 +198,11 @@
         "fix-1010",
         "weapon-poison",
         "dev-attributes",
-        "attribute-bonus"
+        "attribute-bonus",
+        "damage-ds5b"
       ],
-      "size": 70607,
-      "sha256": "52e984cd8c92913fca40c292de7db71cf26b6f231e8621e2b9ec389e5dcdb637"
+      "size": 70752,
+      "sha256": "a4c2ac507a4b98c3049d191c5952f9979e1759bc86151a1a4f01107cd7ada5e9"
     },
     {
       "path": "server/cpp/server_guest_lib/ActionListener.h",
@@ -273,10 +284,11 @@
       "features": [
         "weapon-poison",
         "dev-attributes",
-        "attribute-bonus"
+        "attribute-bonus",
+        "damage-ds5b"
       ],
-      "size": 12433,
-      "sha256": "04bc0228c2899e7e544e4ae12089810f82d729e477fe9d59895d44793f779988"
+      "size": 12922,
+      "sha256": "1b8dffeaf86563c9abf41b733faa0fcce76787bf9010b50131c580e4d4748d7f"
     },
     {
       "path": "server/cpp/server_guest_lib/MpObjectReference.cpp",
@@ -293,10 +305,11 @@
       "features": [
         "damage-shadow",
         "weapon-poison",
-        "damage-ds5a"
+        "damage-ds5a",
+        "damage-ds5b"
       ],
-      "size": 9563,
-      "sha256": "50c50a85f6b0414cae291827c66a00168adcc6bda19919b8b5e215f7615a6934"
+      "size": 10810,
+      "sha256": "c436e3fc5bcc4d0e5726fe9937e209245c7a2646c5f1015bd708443db744c676"
     },
     {
       "path": "server/gameplay/class-system/ui/js/embedded-data.js",
@@ -316,10 +329,11 @@
         "fix-1010",
         "dev-attributes",
         "attribute-bonus",
-        "damage-ds5a"
+        "damage-ds5a",
+        "damage-ds5b"
       ],
-      "size": 17278,
-      "sha256": "691294924fe59acdbc91a63fda2144b97f68a242eaf91033820f6f423ba5e557"
+      "size": 17400,
+      "sha256": "3bf696bf03969e8de5c44bc5731a2c7b1a1f6f20c08e1a8b1a58a9f510c5557c"
     },
     {
       "path": "unit/CMakeLists.txt",
@@ -334,10 +348,11 @@
       "path": "server/cpp/addon/property_bindings/CombatProfileBinding.h",
       "status": "added",
       "features": [
-        "damage-ds5a"
+        "damage-ds5a",
+        "damage-ds5b"
       ],
-      "size": 3145,
-      "sha256": "d83a68026f4c8dca68f047b9e48729d41220be011ab3ffea2ebbf5647bfb63b9"
+      "size": 3570,
+      "sha256": "6e0d8b0c2819d7bb05e050edfe8abf5b470ee32aab9ef26fbe40493941c5d4d1"
     },
     {
       "path": "server/cpp/server_guest_lib/aetherius_combat/CombatProbe.h",
@@ -358,31 +373,61 @@
       "sha256": "f9ea2899f3ae30bf62482e19e8b9c9aef861a944bee5fe8fa82ddb94e4243a43"
     },
     {
+      "path": "server/cpp/server_guest_lib/aetherius_combat/ds5a/AttackEvidence.h",
+      "status": "added",
+      "features": [
+        "damage-ds5b"
+      ],
+      "size": 1619,
+      "sha256": "d19f9966e15a93da5bddb3ea2015a8ec47741420f88ccadaff1b540867d0c9ee"
+    },
+    {
       "path": "server/cpp/server_guest_lib/aetherius_combat/ds5a/Bridge.h",
       "status": "added",
       "features": [
-        "damage-ds5a"
+        "damage-ds5a",
+        "damage-ds5b"
       ],
-      "size": 8141,
-      "sha256": "d9245b2ca9853c03723abd578de1dc1d10fe6636884d84aeede9d3ee0c263659"
+      "size": 8942,
+      "sha256": "a9efca6a675928188d88f858ce05ea4fbf536bf91c856696f54e73aab98f1a44"
     },
     {
       "path": "server/cpp/server_guest_lib/aetherius_combat/ds5a/Host.h",
       "status": "added",
       "features": [
-        "damage-ds5a"
+        "damage-ds5a",
+        "damage-ds5b"
       ],
-      "size": 10342,
-      "sha256": "2e501de118ed504e02efc20f8664aa87519508595b920514b5d6527b617d89af"
+      "size": 15278,
+      "sha256": "5b9fddb137ed3060fade4b73b07fcfbb45f78c86d53371d0a49f40f581430b43"
+    },
+    {
+      "path": "server/cpp/server_guest_lib/aetherius_combat/ds5a/NativeRecords.h",
+      "status": "added",
+      "features": [
+        "damage-ds5b"
+      ],
+      "size": 2364,
+      "sha256": "73aabc4f8d11b004e3c08b7607c0244c8c467834310a7a71d5aae5c6cd814fef"
     },
     {
       "path": "server/cpp/server_guest_lib/aetherius_combat/ds5a/Physical.h",
       "status": "added",
       "features": [
-        "damage-ds5a"
+        "damage-ds5a",
+        "damage-ds5b"
       ],
-      "size": 4281,
-      "sha256": "caaa49f6389daa7020ce20bd0e171859ce1ca513dda926a657bb351d66860d98"
+      "size": 6711,
+      "sha256": "ba9600bacdc19a3dbf414cddcdc1fb3451958b67bc86861cd6453a683952e6f0"
+    },
+    {
+      "path": "server/cpp/server_guest_lib/aetherius_combat/ds5a/Rules.h",
+      "status": "added",
+      "features": [
+        "damage-ds5b"
+      ],
+      "size": 13203,
+      "sha256": "e6943625b527948753fd69cdd3b2a1449d9603c86f19274fd46a5ce0065e18d6"
     },
     {
       "path": "unit/CombatProbeTest.h",
@@ -401,6 +446,15 @@
       ],
       "size": 13478,
       "sha256": "82bc611352cc7a7ca34a18114c438bb449d992ee3995b63d37e804294f237e2f"
+    },
+    {
+      "path": "unit/Ds5bTest.h",
+      "status": "added",
+      "features": [
+        "damage-ds5b"
+      ],
+      "size": 15675,
+      "sha256": "c4e592791e8eb058b570eb9abbf97e1162d3488ff3447b0196c911f0081a4c86"
     },
     {
       "path": "unit/NpcAreaContainerDiffTest.h",

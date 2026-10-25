@@ -257,6 +257,7 @@ void Run(const std::filesystem::path& manifestPath) {
 
 #include "NpcEquipmentTest.h" // DS-0k real host respawn and namespace regression.
 #include "Ds5aTest.h"
+#include "Ds5bTest.h"
 #include "NpcEntryInventoryTest.h"
 #include "NpcAreaContainerDiffTest.h" // DS-0k-fix1 entry wire/override investigation.
 
@@ -267,6 +268,7 @@ void Run(const std::filesystem::path& manifestPath) {
 #ifdef AETHERIUS_SHADOW_STANDALONE
 int main(int argc, char** argv) {
   try {
+    if (argc == 4 && std::string(argv[1]) == "--ds5b") { RunDs5bTests(argv[2],argv[3]); return 0; }
     if (argc == 3 && std::string(argv[1]) == "--ds5a") { RunDs5aTests(argv[2]); return 0; }
     if (argc == 4 && std::string(argv[1]) == "--npc-entry-area-items") {
 #ifdef _MSC_VER

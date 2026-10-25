@@ -16,6 +16,8 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 
 ## 2. Tabelas, por migration
 
+**DS-5b:** DS-5b usa o mesmo addon/pacote DS-5a, com perks CLASS compiladas e confirmação de forte; sem migration ou dependência nova. Fonte atual: FONTES_E_DONOS §15.
+
 DS-5a (25/10): nenhuma migration/tabela nova. Catálogo nativo e snapshots de perfil são projeções em memória; usa as fontes já existentes, sem pool, ledger ou store novo.
 
 **DS-2:** catálogo combat estático, sem migration, tabela, pool ou ledger novo. A reconciliação lê arquivos de plugins somente no boot. Testes automatizados de persistência usam apenas aetherius_test.
@@ -98,6 +100,8 @@ npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
 **O servidor não aplica migrations sozinho.** Se faltar alguma, o Core sobe, deixa indisponíveis os sistemas que dependem do banco, e escreve no log o comando a rodar. O servidor do jogo não cai por isso.
 
 ## 4. Opções de configuração
+
+**DS-5b:** DS-5b não cria opção: families ausente = off; shadow apenas para observar. active continua bloqueado por DS-7. Nenhuma configuração local foi alterada.
 
 DS-5a: no server-settings.json do host, aetheriusCombat.families tem melee,
 ranged e unarmed, cada uma off|shadow|active (ausente = off). Para avaliação,
@@ -233,6 +237,8 @@ Fora dessa combinação, **a presença da opção, inclusive vazia ou `false`, �
 A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolvimento: ela transferiu para o sistema novo a pedra de um personagem de teste que vinha do protótipo. O servidor oficial não tem dados do protótipo e não precisa dela.
 
 ## 5. O que cada sistema faz quando ligado
+
+**DS-5b:** Para observar DS-5b, o revisor segue o roteiro DS-5a em porta/pasta isoladas e lê getAetheriusCombatShadow: rules/provenance, powerConfirmed, criticalChancePercent, rngState/roll/draws, q16Contribution=0 e motivos UNSUPPORTED. Em jogo o dono confere nomes reais de animação e a janela 1500 ms. Bash/furtivo e grupos não comutativos não estão certificados; não promover para active.
 
 DS-5a: Core entrega o catálogo preparado no boot por setAetheriusCombatCatalog;
 o binding aetheriusCombatProfile converte uma vez por revisão, invisível aos
@@ -622,6 +628,8 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+**DS-5b:** DS-5b (25/10, Sol 6.1): build isolado em build/ds5b-server pelo atalho C:/Code/AetheriusSkyMP/aetherius-server. Nenhum servidor iniciado/parado, instalação no jogo/MO2, .env/settings/STATE ou banco alterado. Sem ativação a desfazer; evidências e limitações no relatório DS-5b.
 
 DS-5a, 25/10: somente build isolado em aetherius-server/build/ds5a-server pelo
 caminho sem espaços C:/Code/AetheriusSkyMP/aetherius-server. Nenhum addon instalado,

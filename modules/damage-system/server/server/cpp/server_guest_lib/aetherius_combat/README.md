@@ -166,3 +166,22 @@ instructions do not describe this host spike; this file and the A6-S3 report do.
 Evidence and delivery report live in the workspace's `_work/evidence/A6-S3/`
 and `_work/orders/A6-S3-formula-dano-shadow.result.md`. No game session or
 production cutover is certified by automated acceptance.
+
+## DS-5b — extensão do candidato shadow
+
+`ds5a/Rules.h` converte o compiled CLASS por revisão e avalia as nove condições DS-3;
+`Physical.h::FinishPerks` aplica os entry points físicos, crítico separado e caps;
+`NativeRecords.h::HydrateNative` carrega tipos/CRDT/template e GMST de forte no boot;
+`AttackEvidence.h` mantém a confirmação limitada por ator, hoster e geração.
+`ActionListener::OnUpdateAnimation` só registra após a autorização existente.
+
+Perks UNSUPPORTED inteiras, origens não CLASS, Q15/Q16, furtivo, fórmula de bash e
+combinações de operações não comutativas sem prova de ordem são recusados explicitamente.
+Forte exige flag e animação exata recente (1500 ms); evento desconhecido é convencional.
+RNG do servidor tem estado/draw no trace; chance sem provider certificado fica zero.
+Nenhuma mudança de ownership aplicado, opção nova ou cutover. active exige DS-7.
+
+Aceites sem sockets: aetherius-shadow-test --ds5b <manifest> <DS5B_GOLDEN_RULES.json>,
+--ds5a e as suítes existentes. Corpus/runner dourado e espelho estão no Core.
+Detalhes, fontes e limitações em modules/damage-system/docs/FONTES_E_DONOS.md §15;
+evidências em _work/evidence/DS-5b. Build autorizado somente build/ds5b-server.

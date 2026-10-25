@@ -36,10 +36,12 @@ struct Record {
   bool supported=false, ranged=false, clothing=false;
   double base=0, damageResist=0;
   Skill skill=Skill::None;
+  Value criticalBase,itemType;
   std::vector<StableFormKey> keywords;
 };
 struct Catalog {
   Scaling scaling;
+  Value powerBonus;
   std::map<uint32_t,Record> records;
   std::map<StableFormKey,uint32_t> ids;
 };
@@ -48,7 +50,8 @@ struct Catalog {
 class Bridge {
 public:
   using Resolver=std::function<uint32_t(const StableFormKey&)>;
-  explicit Bridge(Resolver resolver):resolve(std::move(resolver)) {}
+  using Hydrator=std::function<void(Catalog&)>;
+  explicit Bridge(Resolver resolver,Hydrator hydrate={}):resolve(std::move(resolver)),hydrate(std::move(hydrate)) {}
   bool SetCatalog(const std::string& text) {
     if(catalog && text==catalogText)return true;
     if(catalog)return false; // accepted table is immutable for this host boot
@@ -90,6 +93,7 @@ public:
         }
         next->ids.emplace(key,id);next->records.emplace(id,std::move(rec));
       }
+      if(hydrate)hydrate(*next);
       catalog=next;catalogText=text;catalogReason=Reason::None;return true;
     }catch(...){catalogReason=Reason::CatalogInvalid;return false;}
   }
@@ -105,7 +109,7 @@ public:
     if(requestCount<requests.size())requests[requestCount++]=id;
   }
   Json TakeRequests() { Json out=Json::array();for(size_t i=0;i<requestCount;++i)out.push_back(requests[i]);requestCount=0;return out; }
-  bool Publish(uint32_t id,const std::shared_ptr<void>& actor,uint64_t revision,const std::string& text,uint64_t generation=0) {
+  bool Publish(uint32_t id,const std::shared_ptr<void>& actor,uint64_t revision,const std::string& text,uint64_t generation=0,const StableFormKey* identity=nullptr) {
     Sweep();
     if(text=="null"){profiles.erase(id);return true;}
     auto i=profiles.find(id);
@@ -126,6 +130,17 @@ public:
       const auto kind=j.at("subject").at("kind");
       if(kind!="PLAYER"&&kind!="NPC")throw std::invalid_argument("profile subject");
       p.player=kind=="PLAYER";
+      if(identity)p.identity=*identity;
+      else if(j.at("subject").contains("stableFormKey")&&j.at("subject").at("stableFormKey").is_string())p.identity=Key(j.at("subject").at("stableFormKey"));
+      p.perks=ds5b::ConvertPerks(j);
+      if(j.contains("attributes")) {
+        unsigned index=0;
+        for(const auto* name:{"health","magicka","stamina"}) {
+          const auto& attribute=j.at("attributes").at(name);
+          if(attribute.at("status")=="SUPPORTED")p.maxima[index]={true,Numeric(attribute.at("value"))};
+          ++index;
+        }
+      }
       const auto& race=j.at("race");
       if(race.at("status")=="SUPPORTED")p.race=resolve(Key(race.at("value")));
       for(unsigned s=0;s<SkillNames.size();++s) {
@@ -157,6 +172,7 @@ public:
   Reason catalogReason=Reason::CatalogAbsent;
 private:
   Resolver resolve;
+  Hydrator hydrate;
   std::string catalogText;
   std::map<uint32_t,Entry> profiles;
   std::array<uint32_t,2048> requests{};

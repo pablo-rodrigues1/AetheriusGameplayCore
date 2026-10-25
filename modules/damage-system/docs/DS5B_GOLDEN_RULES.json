@@ -1,0 +1,4929 @@
+{
+  "sources": [
+    {
+      "path": "_work/exports/combat-20261024/PERK.jsonl",
+      "sha256": "d725251b6ffaf10303f9e097e691eca8e689b03f567dc2de0e314eaa058202ae"
+    },
+    {
+      "path": "_work/exports/combat-20261024/PERK-effects-completos.jsonl",
+      "sha256": "ffe270fb4ba5b2c737e7a942a1f812e6624211d0af71aa7a5a7f01b91b02e86e"
+    }
+  ],
+  "perks": {
+    "0BABE4:Skyrim.esm": {
+      "perk": "0BABE4:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasPerk"
+          ],
+          "perk": "0BABE4:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "CalculateWeaponDamage",
+          "modification": "MultiplyOnePlusAVMult",
+          "value": 0.01,
+          "actorValue": "OneHanded",
+          "priority": 200,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "079343:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E714:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E712:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        },
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasPerk"
+          ],
+          "perk": "0BABE4:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "CalculateMyCriticalHitDamage",
+          "modification": "MultiplyOnePlusAVMult",
+          "value": 0.05,
+          "actorValue": "OneHanded",
+          "priority": 195,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "079343:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E714:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E712:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 1
+        }
+      ]
+    },
+    "0BABE8:Skyrim.esm": {
+      "perk": "0BABE8:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasPerk"
+          ],
+          "perk": "0BABE8:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModAttackDamage",
+          "modification": "MultiplyOnePlusAVMult",
+          "value": 0.01,
+          "actorValue": "TwoHanded",
+          "priority": 200,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "079346:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D932:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D931:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D930:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        },
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasPerk"
+          ],
+          "perk": "0BABE8:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "CalculateMyCriticalHitDamage",
+          "modification": "MultiplyOnePlusAVMult",
+          "value": 0.05,
+          "actorValue": "TwoHanded",
+          "priority": 190,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "079346:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D932:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D931:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D930:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 1
+        }
+      ]
+    },
+    "0BABED:Skyrim.esm": {
+      "perk": "0BABED:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasPerk"
+          ],
+          "perk": "0BABED:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "CalculateWeaponDamage",
+          "modification": "MultiplyOnePlusAVMult",
+          "value": 0.01,
+          "actorValue": "Archery",
+          "priority": 200,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "07934A:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E715:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        },
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasPerk"
+          ],
+          "perk": "0BABED:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "CalculateMyCriticalHitDamage",
+          "modification": "MultiplyOnePlusAVMult",
+          "value": 0.05,
+          "actorValue": "Archery",
+          "priority": 195,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "07934A:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E715:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 1
+        }
+      ]
+    },
+    "0BCCAE:Skyrim.esm": {
+      "perk": "0BCCAE:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "HasPerk"
+          ],
+          "perk": "0BCCAE:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModPercentBlocked",
+          "modification": "MultiplyOnePlusAVMult",
+          "value": 0.005,
+          "actorValue": "Block",
+          "priority": 200,
+          "rank": 0,
+          "tabCount": 1,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "079355:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        }
+      ]
+    },
+    "0BCD2A:Skyrim.esm": {
+      "perk": "0BCD2A:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasPerk"
+          ],
+          "perk": "0BCD2A:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModArmorRating",
+          "modification": "MultiplyOnePlusAVMult",
+          "value": 0.01,
+          "actorValue": "HeavyArmor",
+          "priority": 200,
+          "rank": 0,
+          "tabCount": 2,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "07935E:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06BBD2:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "0965B2:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        }
+      ]
+    },
+    "0BE123:Skyrim.esm": {
+      "perk": "0BE123:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasPerk"
+          ],
+          "perk": "0BE123:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModArmorRating",
+          "modification": "MultiplyOnePlusAVMult",
+          "value": 0.01,
+          "actorValue": "LightArmor",
+          "priority": 200,
+          "rank": 0,
+          "tabCount": 2,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "079376:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06BBD3:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "0965B2:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        }
+      ]
+    },
+    "0363D5:Vokrii - Minimalistic Perks of Skyrim.esp": {
+      "perk": "0363D5:Vokrii - Minimalistic Perks of Skyrim.esp",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition GetHeadingAngle at Effects[0].Conditions[2].Conditions[1]; unsupported condition GetHeadingAngle at Effects[0].Conditions[2].Conditions[2]",
+          "conditionFunctions": [
+            "GetHeadingAngle",
+            "GetIsID",
+            "HasKeyword"
+          ],
+          "perk": "0363D5:Vokrii - Minimalistic Perks of Skyrim.esp",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "CalculateMyCriticalHitDamage",
+          "modification": "Multiply",
+          "value": 1.25,
+          "priority": 211,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "GetIsID",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "000007:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetIsID",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "000007:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition GetHeadingAngle at Effects[1].Conditions[2].Conditions[1]; unsupported condition GetHeadingAngle at Effects[1].Conditions[2].Conditions[2]",
+          "conditionFunctions": [
+            "GetHeadingAngle",
+            "GetIsID",
+            "HasKeyword"
+          ],
+          "perk": "0363D5:Vokrii - Minimalistic Perks of Skyrim.esp",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "CalculateWeaponDamage",
+          "modification": "Multiply",
+          "value": 1.25,
+          "priority": 210,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "GetIsID",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "000007:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetIsID",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "000007:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 1
+        }
+      ]
+    },
+    "0CB406:Skyrim.esm": {
+      "perk": "0CB406:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsAttackType at Effects[0].Conditions[0].Conditions[0]; unsupported condition IsSprinting at Effects[0].Conditions[0].Conditions[1]",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasKeyword",
+            "IsAttackType",
+            "IsSprinting"
+          ],
+          "perk": "0CB406:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "CalculateMyCriticalHitDamage",
+          "modification": "Multiply",
+          "value": 1.13,
+          "priority": 178,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": []
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E714:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E712:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0.5,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThanOrEqualTo",
+                    "comparisonValue": 0.625,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsAttackType at Effects[1].Conditions[0].Conditions[0]; unsupported condition IsSprinting at Effects[1].Conditions[0].Conditions[1]",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasKeyword",
+            "IsAttackType",
+            "IsSprinting"
+          ],
+          "perk": "0CB406:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "CalculateMyCriticalHitDamage",
+          "modification": "Multiply",
+          "value": 1.25,
+          "priority": 177,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": []
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E714:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E712:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0.625,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThanOrEqualTo",
+                    "comparisonValue": 0.75,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 1
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsAttackType at Effects[2].Conditions[0].Conditions[0]; unsupported condition IsSprinting at Effects[2].Conditions[0].Conditions[1]",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasKeyword",
+            "IsAttackType",
+            "IsSprinting"
+          ],
+          "perk": "0CB406:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "CalculateMyCriticalHitDamage",
+          "modification": "Multiply",
+          "value": 1.38,
+          "priority": 176,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": []
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E714:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E712:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0.75,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThanOrEqualTo",
+                    "comparisonValue": 0.875,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 2
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsAttackType at Effects[3].Conditions[0].Conditions[0]; unsupported condition IsSprinting at Effects[3].Conditions[0].Conditions[1]",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasKeyword",
+            "IsAttackType",
+            "IsSprinting"
+          ],
+          "perk": "0CB406:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "CalculateMyCriticalHitDamage",
+          "modification": "Multiply",
+          "value": 1.5,
+          "priority": 175,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": []
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E714:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E712:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0.875,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 3
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsAttackType at Effects[4].Conditions[0].Conditions[0]; unsupported condition IsSprinting at Effects[4].Conditions[0].Conditions[1]",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasKeyword",
+            "IsAttackType",
+            "IsSprinting"
+          ],
+          "perk": "0CB406:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModAttackDamage",
+          "modification": "Multiply",
+          "value": 1.13,
+          "priority": 154,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": []
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E714:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E712:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0.5,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThanOrEqualTo",
+                    "comparisonValue": 0.625,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 4
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsAttackType at Effects[5].Conditions[0].Conditions[0]; unsupported condition IsSprinting at Effects[5].Conditions[0].Conditions[1]",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasKeyword",
+            "IsAttackType",
+            "IsSprinting"
+          ],
+          "perk": "0CB406:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModAttackDamage",
+          "modification": "Multiply",
+          "value": 1.25,
+          "priority": 153,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": []
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E714:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E712:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0.625,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThanOrEqualTo",
+                    "comparisonValue": 0.75,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 5
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsAttackType at Effects[6].Conditions[0].Conditions[0]; unsupported condition IsSprinting at Effects[6].Conditions[0].Conditions[1]",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasKeyword",
+            "IsAttackType",
+            "IsSprinting"
+          ],
+          "perk": "0CB406:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModAttackDamage",
+          "modification": "Multiply",
+          "value": 1.38,
+          "priority": 152,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": []
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E714:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E712:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0.75,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThanOrEqualTo",
+                    "comparisonValue": 0.875,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 6
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsAttackType at Effects[7].Conditions[0].Conditions[0]; unsupported condition IsSprinting at Effects[7].Conditions[0].Conditions[1]",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasKeyword",
+            "IsAttackType",
+            "IsSprinting"
+          ],
+          "perk": "0CB406:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModAttackDamage",
+          "modification": "Multiply",
+          "value": 1.5,
+          "priority": 151,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": []
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E714:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E712:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0.875,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 7
+        }
+      ]
+    },
+    "03AF81:Skyrim.esm": {
+      "perk": "03AF81:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "HasKeyword"
+          ],
+          "perk": "03AF81:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModPowerAttackDamage",
+          "modification": "MultiplyOnePlusAVMult",
+          "value": 0.001,
+          "actorValue": "Stamina",
+          "priority": 120,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E714:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E712:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        }
+      ]
+    },
+    "058211:Skyrim.esm": {
+      "perk": "058211:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "HasKeyword"
+          ],
+          "perk": "058211:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModSneakAttackMult",
+          "modification": "Multiply",
+          "value": 2.5,
+          "priority": 180,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E713:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        }
+      ]
+    },
+    "0C1E91:Skyrim.esm": {
+      "perk": "0C1E91:Skyrim.esm",
+      "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition HasMagicEffect at Effects[0].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 190,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "05F56F:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition HasMagicEffect at Effects[1].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 189,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "05F56F:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 1
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[2].Conditions[0].Conditions[0]; unsupported condition IsAttackType at Effects[2].Conditions[0].Conditions[4]; unsupported condition IsAttackType at Effects[2].Conditions[0].Conditions[6]; unsupported condition HasMagicEffect at Effects[2].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk",
+            "IsAttackType",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 170,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "4F335F:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "4F3360:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 2
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[3].Conditions[0].Conditions[0]; unsupported condition IsAttackType at Effects[3].Conditions[0].Conditions[4]; unsupported condition IsAttackType at Effects[3].Conditions[0].Conditions[6]; unsupported condition HasMagicEffect at Effects[3].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk",
+            "IsAttackType",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 169,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "4F335F:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "4F3360:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 3
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[4].Conditions[0].Conditions[0]; unsupported condition IsAttackType at Effects[4].Conditions[0].Conditions[4]; unsupported condition IsAttackType at Effects[4].Conditions[0].Conditions[6]; unsupported condition HasMagicEffect at Effects[4].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk",
+            "IsAttackType",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 168,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "4F335F:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "4F3360:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 4
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[5].Conditions[0].Conditions[0]; unsupported condition IsAttackType at Effects[5].Conditions[0].Conditions[4]; unsupported condition IsAttackType at Effects[5].Conditions[0].Conditions[6]; unsupported condition HasMagicEffect at Effects[5].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk",
+            "IsAttackType",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 167,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "4F335F:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "4F3360:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 5
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[6].Conditions[0].Conditions[0]; unsupported condition IsAttackType at Effects[6].Conditions[0].Conditions[2]; unsupported condition HasMagicEffect at Effects[6].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk",
+            "IsAttackType",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 165,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "4F335F:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 6
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[7].Conditions[0].Conditions[0]; unsupported condition IsAttackType at Effects[7].Conditions[0].Conditions[2]; unsupported condition HasMagicEffect at Effects[7].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk",
+            "IsAttackType",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 164,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "4F335F:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 7
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[8].Conditions[0].Conditions[0]; unsupported condition IsAttackType at Effects[8].Conditions[0].Conditions[2]; unsupported condition HasMagicEffect at Effects[8].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk",
+            "IsAttackType",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 163,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "4F335F:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 8
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[9].Conditions[0].Conditions[0]; unsupported condition IsAttackType at Effects[9].Conditions[0].Conditions[2]; unsupported condition HasMagicEffect at Effects[9].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk",
+            "IsAttackType",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 162,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "4F335F:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 9
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[10].Conditions[0].Conditions[0]; unsupported condition IsAttackType at Effects[10].Conditions[0].Conditions[2]; unsupported condition HasMagicEffect at Effects[10].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk",
+            "IsAttackType",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 160,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "4F3360:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 10
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[11].Conditions[0].Conditions[0]; unsupported condition IsAttackType at Effects[11].Conditions[0].Conditions[2]; unsupported condition HasMagicEffect at Effects[11].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk",
+            "IsAttackType",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 159,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "4F3360:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 11
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[12].Conditions[0].Conditions[0]; unsupported condition IsAttackType at Effects[12].Conditions[0].Conditions[2]; unsupported condition HasMagicEffect at Effects[12].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk",
+            "IsAttackType",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 158,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "4F3360:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 12
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[13].Conditions[0].Conditions[0]; unsupported condition IsAttackType at Effects[13].Conditions[0].Conditions[2]; unsupported condition HasMagicEffect at Effects[13].Conditions[2].Conditions[0]; out-of-scope entry point ApplyCombatHitSpell; missing Modification; invalid Value",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "HasPerk",
+            "IsAttackType",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "ApplyCombatHitSpell",
+          "modification": "",
+          "value": null,
+          "priority": 157,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "03AFA6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "4F3360:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "0C1E90:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 13
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[14].Conditions[0].Conditions[0]; unsupported condition HasMagicEffect at Effects[14].Conditions[2].Conditions[0]",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "CalculateMyCriticalHitChance",
+          "modification": "Add",
+          "value": 100,
+          "priority": 100,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": []
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 14
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[15].Conditions[0].Conditions[0]; unsupported condition HasMagicEffect at Effects[15].Conditions[2].Conditions[0]",
+          "conditionFunctions": [
+            "HasKeyword",
+            "HasMagicEffect",
+            "IsPowerAttacking"
+          ],
+          "perk": "0C1E91:Skyrim.esm",
+          "winner": "Vokrii - Apply Spell Conditions Fix.esp",
+          "entryPoint": "CalculateMyCriticalHitDamage",
+          "modification": "Multiply",
+          "value": 10,
+          "priority": 99,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": []
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E711:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 15
+        }
+      ]
+    },
+    "2C1037:Vokrii - Minimalistic Perks of Skyrim.esp": {
+      "perk": "2C1037:Vokrii - Minimalistic Perks of Skyrim.esp",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasPerk",
+            "WornHasKeyword"
+          ],
+          "perk": "2C1037:Vokrii - Minimalistic Perks of Skyrim.esp",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModIncomingDamage",
+          "modification": "Multiply",
+          "value": 0.8,
+          "priority": 200,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "06BBD3:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0ED:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EC:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EF:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EE:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "008028:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThanOrEqualTo",
+                    "comparisonValue": 0.125,
+                    "actorValue": "Stamina",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        },
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasPerk",
+            "WornHasKeyword"
+          ],
+          "perk": "2C1037:Vokrii - Minimalistic Perks of Skyrim.esp",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModIncomingDamage",
+          "modification": "Multiply",
+          "value": 0.85,
+          "priority": 199,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "06BBD3:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0ED:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EC:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EF:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EE:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "008028:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0.125,
+                    "actorValue": "Stamina",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThanOrEqualTo",
+                    "comparisonValue": 0.25,
+                    "actorValue": "Stamina",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 1
+        },
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasPerk",
+            "WornHasKeyword"
+          ],
+          "perk": "2C1037:Vokrii - Minimalistic Perks of Skyrim.esp",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModIncomingDamage",
+          "modification": "Multiply",
+          "value": 0.9,
+          "priority": 198,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "06BBD3:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0ED:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EC:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EF:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EE:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "008028:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0.25,
+                    "actorValue": "Stamina",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThanOrEqualTo",
+                    "comparisonValue": 0.375,
+                    "actorValue": "Stamina",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 2
+        },
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasPerk",
+            "WornHasKeyword"
+          ],
+          "perk": "2C1037:Vokrii - Minimalistic Perks of Skyrim.esp",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModIncomingDamage",
+          "modification": "Multiply",
+          "value": 0.95,
+          "priority": 197,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "06BBD3:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0ED:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EC:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EF:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EE:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "008028:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0.375,
+                    "actorValue": "Stamina",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThanOrEqualTo",
+                    "comparisonValue": 0.5,
+                    "actorValue": "Stamina",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 3
+        }
+      ]
+    },
+    "105F2B:Skyrim.esm": {
+      "perk": "105F2B:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition HasMagicEffectKeyword at Effects[0].Conditions[0].Conditions[0]",
+          "conditionFunctions": [
+            "GetActorValue",
+            "GetIsID",
+            "HasMagicEffectKeyword"
+          ],
+          "perk": "105F2B:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModTargetDamageResistance",
+          "modification": "Multiply",
+          "value": 0.5,
+          "priority": 125,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetIsID",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "000007:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetActorValue",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0,
+                    "actorValue": "DamageResist",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        }
+      ]
+    },
+    "058F6F:Skyrim.esm": {
+      "perk": "058F6F:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "HasPerk",
+            "WornHasKeyword"
+          ],
+          "perk": "058F6F:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModArmorRating",
+          "modification": "Multiply",
+          "value": 1.15,
+          "priority": 190,
+          "rank": 0,
+          "tabCount": 2,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "06BBD3:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EC:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0ED:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EF:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EE:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "008028:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        }
+      ]
+    },
+    "107832:Skyrim.esm": {
+      "perk": "107832:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "WornApparelHasKeywordCount"
+          ],
+          "perk": "107832:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModArmorRating",
+          "modification": "Multiply",
+          "value": 1.15,
+          "priority": 155,
+          "rank": 0,
+          "tabCount": 2,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "WornApparelHasKeywordCount",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 3,
+                    "parameter": "06BBD4:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "WornApparelHasKeywordCount",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 3,
+                    "parameter": "06BBD5:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "WornApparelHasKeywordCount",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 3,
+                    "parameter": "06BBD7:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "WornApparelHasKeywordCount",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 3,
+                    "parameter": "06BBE2:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "WornApparelHasKeywordCount",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 3,
+                    "parameter": "06BBE5:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "WornApparelHasKeywordCount",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 3,
+                    "parameter": "06BBE3:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "WornApparelHasKeywordCount",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 3,
+                    "parameter": "06BBE4:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "WornApparelHasKeywordCount",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 3,
+                    "parameter": "06BBE6:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "WornApparelHasKeywordCount",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 3,
+                    "parameter": "06BBE7:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "WornApparelHasKeywordCount",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 3,
+                    "parameter": "06BBD8:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "WornApparelHasKeywordCount",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 3,
+                    "parameter": "0009C0:Update.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        }
+      ]
+    },
+    "106256:Skyrim.esm": {
+      "perk": "106256:Skyrim.esm",
+      "winner": "Vokrii - ADXP Patch.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "GetEquippedItemType"
+          ],
+          "perk": "106256:Skyrim.esm",
+          "winner": "Vokrii - ADXP Patch.esp",
+          "entryPoint": "ModAttackDamage",
+          "modification": "Multiply",
+          "value": 1.1,
+          "priority": 0,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "GetEquippedItemType",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0,
+                    "actorValue": "Left",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetEquippedItemType",
+                    "compare": "LessThanOrEqualTo",
+                    "comparisonValue": 4,
+                    "actorValue": "Left",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetEquippedItemType",
+                    "compare": "GreaterThan",
+                    "comparisonValue": 0,
+                    "actorValue": "Right",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetEquippedItemType",
+                    "compare": "LessThanOrEqualTo",
+                    "comparisonValue": 4,
+                    "actorValue": "Right",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        }
+      ]
+    },
+    "058210:Skyrim.esm": {
+      "perk": "058210:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "IsWeaponSkillType"
+          ],
+          "perk": "058210:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModSneakAttackMult",
+          "modification": "Multiply",
+          "value": 2,
+          "priority": 190,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "IsWeaponSkillType",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "actorValue": "OneHanded",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        }
+      ]
+    },
+    "005474:Vokrii - Minimalistic Perks of Skyrim.esp": {
+      "perk": "005474:Vokrii - Minimalistic Perks of Skyrim.esp",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasKeyword"
+          ],
+          "perk": "005474:Vokrii - Minimalistic Perks of Skyrim.esp",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModPowerAttackDamage",
+          "modification": "Multiply",
+          "value": 1.25,
+          "priority": 153,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThan",
+                    "comparisonValue": 0.5,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 0.375,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D932:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D931:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D930:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        },
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasKeyword"
+          ],
+          "perk": "005474:Vokrii - Minimalistic Perks of Skyrim.esp",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModPowerAttackDamage",
+          "modification": "Multiply",
+          "value": 1.5,
+          "priority": 152,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThan",
+                    "comparisonValue": 0.375,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 0.25,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D932:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D931:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D930:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 1
+        },
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasKeyword"
+          ],
+          "perk": "005474:Vokrii - Minimalistic Perks of Skyrim.esp",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModPowerAttackDamage",
+          "modification": "Multiply",
+          "value": 1.75,
+          "priority": 151,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThan",
+                    "comparisonValue": 0.25,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "GreaterThanOrEqualTo",
+                    "comparisonValue": 0.125,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D932:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D931:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D930:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 2
+        },
+        {
+          "status": "SUPPORTED",
+          "conditionFunctions": [
+            "GetActorValuePercent",
+            "HasKeyword"
+          ],
+          "perk": "005474:Vokrii - Minimalistic Perks of Skyrim.esp",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModPowerAttackDamage",
+          "modification": "Multiply",
+          "value": 2,
+          "priority": 150,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "GetActorValuePercent",
+                    "compare": "LessThan",
+                    "comparisonValue": 0.125,
+                    "actorValue": "Health",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D932:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D931:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06D930:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": true
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 3
+        }
+      ]
+    },
+    "105F1C:Skyrim.esm": {
+      "perk": "105F1C:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition GetDistance at Effects[0].Conditions[2].Conditions[1]",
+          "conditionFunctions": [
+            "GetDistance",
+            "GetIsID",
+            "HasKeyword",
+            "HasPerk"
+          ],
+          "perk": "105F1C:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModAttackDamage",
+          "modification": "Multiply",
+          "value": 1.2,
+          "priority": 190,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "105F1E:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E715:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetIsID",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "000007:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition GetDistance at Effects[1].Conditions[2].Conditions[1]; unsupported condition GetDistance at Effects[1].Conditions[2].Conditions[2]",
+          "conditionFunctions": [
+            "GetDistance",
+            "GetIsID",
+            "HasKeyword",
+            "HasPerk"
+          ],
+          "perk": "105F1C:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModAttackDamage",
+          "modification": "Multiply",
+          "value": 1.15,
+          "priority": 189,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "105F1E:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E715:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetIsID",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "000007:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 1
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition GetDistance at Effects[2].Conditions[2].Conditions[1]; unsupported condition GetDistance at Effects[2].Conditions[2].Conditions[2]",
+          "conditionFunctions": [
+            "GetDistance",
+            "GetIsID",
+            "HasKeyword",
+            "HasPerk"
+          ],
+          "perk": "105F1C:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModAttackDamage",
+          "modification": "Multiply",
+          "value": 1.1,
+          "priority": 188,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "105F1E:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E715:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetIsID",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "000007:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 2
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition GetDistance at Effects[3].Conditions[2].Conditions[1]; unsupported condition GetDistance at Effects[3].Conditions[2].Conditions[2]",
+          "conditionFunctions": [
+            "GetDistance",
+            "GetIsID",
+            "HasKeyword",
+            "HasPerk"
+          ],
+          "perk": "105F1C:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModAttackDamage",
+          "modification": "Multiply",
+          "value": 1.05,
+          "priority": 187,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "105F1E:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E715:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 1,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "GetIsID",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "000007:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 3
+        }
+      ]
+    },
+    "058F6C:Skyrim.esm": {
+      "perk": "058F6C:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsPowerAttacking at Effects[0].Conditions[1].Conditions[0]; unsupported condition IsAttackType at Effects[0].Conditions[1].Conditions[1]",
+          "conditionFunctions": [
+            "HasPerk",
+            "IsAttackType",
+            "IsPowerAttacking",
+            "WornHasKeyword"
+          ],
+          "perk": "058F6C:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModIncomingDamage",
+          "modification": "Multiply",
+          "value": 0.75,
+          "priority": 200,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 0,
+                    "parameter": "06BBD3:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0ED:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EC:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EF:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ],
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "06C0EE:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": true
+                  },
+                  {
+                    "function": "HasPerk",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "008028:Vokrii - Minimalistic Perks of Skyrim.esp",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            },
+            {
+              "tabIndex": 1,
+              "clauses": []
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        }
+      ]
+    },
+    "058F68:Skyrim.esm": {
+      "perk": "058F68:Skyrim.esm",
+      "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+      "origin": {
+        "sourceKind": "CLASS",
+        "sourceKey": "golden-test",
+        "classId": "golden-test",
+        "level": 40
+      },
+      "rules": [
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsBlocking at Effects[0].Conditions[0].Conditions[0]; unsupported condition IsAttackType at Effects[0].Conditions[1].Conditions[0]",
+          "conditionFunctions": [
+            "HasKeyword",
+            "IsAttackType",
+            "IsBlocking"
+          ],
+          "perk": "058F68:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModIncomingDamage",
+          "modification": "Multiply",
+          "value": 0.5,
+          "priority": 191,
+          "rank": 0,
+          "tabCount": 3,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": []
+            },
+            {
+              "tabIndex": 1,
+              "clauses": []
+            },
+            {
+              "tabIndex": 2,
+              "clauses": [
+                [
+                  {
+                    "function": "HasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "01E715:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 2,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 0
+        },
+        {
+          "status": "UNSUPPORTED",
+          "reason": "unsupported condition IsBlocking at Effects[1].Conditions[0].Conditions[1]; out-of-scope entry point ModShieldDefectArrowChance",
+          "conditionFunctions": [
+            "IsBlocking",
+            "WornHasKeyword"
+          ],
+          "perk": "058F68:Skyrim.esm",
+          "winner": "Vokrii - Minimalistic Perks of Skyrim.esp",
+          "entryPoint": "ModShieldDefectArrowChance",
+          "modification": "Set",
+          "value": 100,
+          "priority": 190,
+          "rank": 0,
+          "tabCount": 1,
+          "conditions": [
+            {
+              "tabIndex": 0,
+              "clauses": [
+                [
+                  {
+                    "function": "WornHasKeyword",
+                    "compare": "EqualTo",
+                    "comparisonValue": 1,
+                    "parameter": "0965B2:Skyrim.esm",
+                    "runOn": "Subject",
+                    "runOnTabIndex": 0,
+                    "orNext": false
+                  }
+                ]
+              ]
+            }
+          ],
+          "origin": {
+            "sourceKind": "CLASS",
+            "sourceKey": "golden-test",
+            "classId": "golden-test",
+            "level": 40
+          },
+          "effectIndex": 1
+        }
+      ]
+    }
+  }
+}

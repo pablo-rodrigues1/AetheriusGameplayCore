@@ -1,5 +1,6 @@
 #pragma once
 #include "AnimationData.h"
+#include "aetherius_combat/ds5a/AttackEvidence.h"
 #include "Appearance.h"
 #include "Equipment.h"
 #include "GetBaseActorValues.h"
@@ -219,6 +220,11 @@ public:
 
   void SetLastAnimEvent(const std::optional<AnimationData>& animationData);
   std::optional<AnimationData> GetLastAnimEvent() const;
+  // DS-5b: only accepted ingress records this, including hosted NPCs.
+  void RecordCombatAnimation(const AnimationData& data,uint32_t hoster) {
+    combatAttackEvidence.Record(data.animEventName,hoster,GetNpcGeneration(),std::chrono::steady_clock::now());
+  }
+  const aetherius::combat::ds5b::AttackEvidence& GetCombatAttackEvidence() const { return combatAttackEvidence; }
 
 private:
   struct Impl;
@@ -236,6 +242,7 @@ public:
   uint32_t GetPoisonResult() const { return aetheriusPoisonResult; }
   uint32_t GetPoisonUnsupported() const { return aetheriusPoisonUnsupported; }
 private:
+  aetherius::combat::ds5b::AttackEvidence combatAttackEvidence;
   bool npcObservationNeeded = false, npcConfirmed = false;
   bool npcObservationRestoreWarned = false;
   uint16_t npcLevel = 0;

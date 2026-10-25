@@ -454,3 +454,101 @@ obrigatórios (recusa 7777, diretório não vazio e build/dist), addon, data-dir
 actor-base, target-base e weapon como argumentos. Ele usa host compilado real,
 transporte bot nativo e base NPC do export, sem mock de fórmula. Não foi executado
 pelo implementador; não constitui prova em jogo.
+
+## 15. DS-5b — perks compiladas e confirmação de ataque (25/10/2026)
+
+Esta seção supersede as previsões DS-5b das seções anteriores. A cadeia aplicada continua
+NATIVE_SERVER; AETHERIUS_SERVER calcula somente o candidato shadow. Sem families,
+continua off; active continua recusado por ACTIVE_REQUIRES_DS7. Nenhuma opção nova.
+
+O host converte `perks.value[].compiled` uma vez por revisão. Só consome itens CLASS
+com status SUPPORTED; uma perk marcada UNSUPPORTED é descartada inteira, mesmo que
+contenha algum efeito SUPPORTED. As origens e identidades de cada efeito são conferidas;
+concessões duplicadas não reaplicam o efeito. NPC_RECORD, RECORD e DISTRIBUTION não são
+compilados no início desta ordem e continuam UNSUPPORTED no consumidor DS-5b. Durante
+esta sessão a DS-4-fix3 passou a compilar RACE/STANDING_STONE no runtime; é uma mudança
+paralela preservada, não consumida pelo host porque o escopo recebido limita a CLASS.
+A tabela é parte da projeção
+nativa existente, sem segundo ActorCombatState ou store de efeitos.
+
+Entry points: ModAttackDamage, CalculateWeaponDamage, ModPowerAttackDamage,
+CalculateMyCriticalHitChance/Damage, ModIncomingDamage, ModTargetDamageResistance,
+ModArmorRating (por peça, depois do Scaling) e ModPercentBlocked (antes do cap).
+ModSneakAttackMult permanece DISABLED_Q9. Operações aritméticas: Set, Add, Multiply,
+MultiplyOnePlusAVMult, MultiplyAVMult e AddAVMult/AddActorValueMult. AV ausente recusa
+somente a regra e registra OPERATION_OR_AV_UNSUPPORTED. O hit nunca usa magnitude de
+record/cliente como substituto das variáveis Q15/Q16: contribuição delas continua zero
+com UNSUPPORTED declarado. ENCH DamageResist da DS-5a continua separado, uma vez.
+
+**Limite de prioridade:** a tabela guarda Priority e ordena crescentemente; não há prova
+certificada da ordem nativa para operações não comutativas. Por isso, um grupo de entry
+point com mais de uma regra suportada e qualquer Set/Add/AddAVMult é inteiramente
+recusado como NONCOMMUTATIVE_PRIORITY_UNCERTIFIED. Multiplicações entre si e operações
+isoladas funcionam. Os testes de ordem aritmética não são prova de paridade com o motor.
+A consulta à [implementação original do Perk Entry Point Extender](https://github.com/NoahBoddie/perk-entry-point-extender/blob/main/src/EntryPoint.h)
+mostra visita reversa opcional, mas não certifica a ordenação original da tabela do motor.
+Não foi usado fórum/wiki como semântica de produção.
+
+As nove condições certificadas usam o mesmo modelo do compilador DS-3: abas e cláusulas
+em AND; membros da cláusula em OR; runOn seleciona Subject/Target. A aba mantém o
+agrupamento já compilado, sem reinterpretar RunOnTabIndex como seleção implícita de
+outro ator. Keywords vêm da tabela DS-5a, por StableFormKey. WornHasKeyword e contagem
+usam só ARMO vestido. Mãos vêm de WEAP.DNAM (staff/crossbow traduzidos), escudo e spells
+equipados do host. Identidade vem da base do ator no binding; NPC pode usar a identidade
+observada do perfil quando publicada diretamente. Skills são do perfil (Archery é o AV
+correspondente a Marksman); Health/Magicka/Stamina usam máximo SUPPORTED do perfil ×
+percentual atual do host. AV, identidade ou equipamento sem fonte ficam indisponíveis,
+inclusive em comparações negativas. OR pode passar por outro membro conhecido verdadeiro,
+como no TS; dado ausente nunca se torna verdadeiro.
+
+A hidratação nativa roda na aceitação do catálogo: WEAP.DNAM, Critical.Damage (CRDT) e
+Template/CNAM resolvido na namespace do winner (até 32 elos, ciclos recusados).
+fPowerAttackDefaultBonus é resolvido por 031899:Skyrim.esm, winner lido no boot; não há
+valor vanilla de substituição. Consultas houseCARL nesta ordem: C:/modOrganizer, perfil
+AETHERIUS - GRAFICO - QUALIDADE, epoch e2-771486e30fc46d2a; nenhuma troca de instância.
+Os exemplos 01397E e 013841 foram conferidos no winner; seus Critical.Damage são 2 e 4.
+A leitura raw de CRDT é coberta contra o winner 01397E no ensaio nativo.
+
+A animação só é registrada depois de SendToNeighbours autorizar ator próprio ou hoster.
+Cada MpActor guarda uma estrutura fixa: tipo, instante, hoster e geração. Forte exige
+flag e evento exato attackPowerStart* já reconhecido em AnimationSystem.cpp, idade de
+até 1500 ms e o mesmo hoster/geração. Evento desconhecido mantém dano convencional Q7.
+A confirmação não prova unicidade de golpe nem consumo de vigor; replay/identidade são
+pendências DS-7, e a janela ainda precisa de observação em jogo. Bash é registrado por
+bashStart/bashRelease/bashPowerStart, mas **a fórmula de bash não foi certificada**:
+UNSUPPORTED_NO_CERTIFIED_BASH_FORMULA, sem bônus inventado; fonte escudo não vira arma.
+Não se alterou spawn, seleção, geração ou respawn de NPC (Q13).
+
+Chance crítica começa em zero. Só perks certificadas a alteram. Chance positiva com
+base crítica disponível faz uma chamada ao RNG xorshift64 do servidor por avaliação;
+estado anterior, roll, número de draws e componente separado ficam no trace. A semente
+inicial vem de random_device no construtor, fora do hit. Sem perk de chance não há
+crítico. As perks de chance do recorte de dourados continuam recusadas pelas condições
+não certificadas; os testes sintéticos do núcleo não certificam esses records em produção.
+Sem base crítica, contribuição zero declarada por criticalBaseMissing, sem draw.
+
+Limites: 512 grants, 2048 regras, 16 abas e 256 condições por regra; equipamento 64;
+48 decisões por trace (overflow contado), anel de 1024 hits. Trace copia provenance,
+operação e Priority na publicação/avaliação, preservando a origem mesmo após nova revisão.
+Não há JSON, arquivo, banco ou rede no candidato do hit. A fila NPC e a projeção DS-5a
+continuam as existentes. GetActorValue(DamageResist) sem contexto continua indisponível;
+a regra composta Alkahest também depende de HasMagicEffectKeyword não certificado.
+
+Dourados: 26 PASS / 0 FAIL / 10 PENDING. G1 8/0/1; G2 6/0/9; G3 10/0/0; G4 2/0/0.
+Os dez pendentes: crítico histórico sem provider de chance certificado; seis efeitos
+não certificados/desligados (Backstab, Valorous Charge, Sneak, Execute chance/dano,
+Alkahest); Battle Fatigue e Heavy Armor Fit sem contexto completo na fixture G2;
+e NO_CLASS_PERK_IN_LOAD_ORDER. G3 é probe isolado de condição, inclusive GetIsID,
+IsWeaponSkillType e GetActorValue; não certifica regras compostas/furtivo. Os valores
+esperados e os inputs históricos não mudaram. DS5B_GOLDEN_RULES.json foi gerado pelo
+compilador DS-3 inalterado, buscando exports por formid e mesclando o complemento de
+records truncados; hashes das fontes no próprio artefato. Não é catálogo de produção.
+
+Evidências e falhas intermediárias: _work/evidence/DS-5b; relatório de entrega na ordem.
+Nenhum servidor local ou jogo foi executado. Sessão com dois clientes, N-API/hit ponta
+a ponta e cutover continuam com revisor/dono (DS-6/DS-7).
+
+Conferência offline adicional: class-chance-audit.json em _work/evidence/DS-5b recompila
+os 149 records RESOLVED do crosswalk; 19 perks inteiramente SUPPORTED, cinco regras de
+chance crítica e nenhuma delas SUPPORTED. Não é prova de aplicação no jogo. O compilador
+não foi alterado por esta ordem; a extensão paralela DS-4-fix3 preserva a semântica CLASS.

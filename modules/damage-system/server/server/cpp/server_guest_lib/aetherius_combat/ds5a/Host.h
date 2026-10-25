@@ -2,8 +2,10 @@
 #include "Bridge.h"
 #include "MpActor.h"
 #include "WorldState.h"
+#include "ActorValues.h"
 #include "formulas/IDamageFormula.h"
 #include <limits>
+#include <random>
 
 namespace aetherius::combat::ds5a {
 // Accessed only on the server thread. Weak registry never keeps a world alive.
@@ -34,6 +36,44 @@ inline Settings ReadSettings(const Json& combat) {
   return out;
 }
 inline bool Enabled(const Settings& s) { for(const auto m:s.modes)if(m!=Mode::Off)return true;return false; }
+inline ds5b::Context ActorContext(const MpActor& actor,const Profile& p,const Catalog& cat) {
+  ds5b::Context x;
+  if(p.perks.perksKnown)x.perks=&p.perks.perks;
+  if(p.identity)x.identity=&*p.identity;
+  for(unsigned i=0;i<SkillNames.size();++i)if(p.skills[i].supported)x.values[x.valueCount++]={SkillNames[i],p.skills[i].value};
+  const auto& av=actor.GetActorValues();
+  const double percents[]={av.healthPercentage,av.magickaPercentage,av.staminaPercentage};
+  constexpr const char* names[]={"Health","Magicka","Stamina"};
+  for(unsigned i=0;i<3;++i) {
+    if(InRange(percents[i],1)) {
+      x.percents[x.percentCount++]={names[i],percents[i]};
+      if(p.maxima[i].supported)x.values[x.valueCount++]={names[i],percents[i]*p.maxima[i].value};
+    }
+  }
+  const auto race=cat.records.find(p.race);
+  if(race!=cat.records.end()&&race->second.supported)x.keywords=&race->second.keywords;
+  x.wornKnown=true;x.hands={0.,0.};
+  const auto& equipment=actor.GetEquipment();
+  if(equipment.leftSpell.value_or(0))x.hands[0]=9.;
+  if(equipment.rightSpell.value_or(0))x.hands[1]=9.;
+  for(const auto& entry:equipment.inv.entries) {
+    if(!entry.count||entry.GetWorn()==Inventory::Worn::None)continue;
+    const auto found=cat.records.find(entry.baseId);
+    if(found==cat.records.end()||!found->second.supported){x.wornKnown=false;x.hands={};continue;}
+    const auto& row=found->second;
+    if(row.kind==Record::Kind::Armor&&x.wornCount<x.worn.size())x.worn[x.wornCount++]=&row.keywords;
+    if(row.kind==Record::Kind::Weapon||row.itemType.supported) {
+      const unsigned hand=entry.GetWorn()==Inventory::Worn::Left?0:1;
+      x.hands[hand]=row.itemType.supported?std::optional<double>(row.itemType.value):std::nullopt;
+    }
+  }
+  return x;
+}
+inline uint32_t AnimationOwner(const MpActor& actor) {
+  if(actor.IsCreatedAsPlayer())return actor.GetFormId();
+  const auto* world=actor.GetParent();if(!world)return 0;
+  const auto found=world->hosters.find(actor.GetFormId());return found==world->hosters.end()?0:found->second;
+}
 struct Sample { uint64_t sequence=0;uint32_t attacker=0,defender=0,source=0;float current=0;Trace trace; };
 struct Buffer {
   static constexpr size_t Capacity=1024;
@@ -44,6 +84,12 @@ struct Buffer {
     Json rows=Json::array();
     for(size_t n=0;n<size;++n) {
       const auto& s=samples[(next+Capacity-size+n)%Capacity];const auto& t=s.trace;
+      Json rules=Json::array();
+      for(unsigned i=0;i<t.rules.count;++i) {
+        const auto& r=t.rules.steps[i];
+        rules.push_back({{"ruleIndex",r.rule},{"entryPoint",ds5b::EntryNames[static_cast<unsigned>(r.entry)]},
+          {"provenance",r.provenance.data()},{"priority",r.priority},{"defender",r.defender},{"decision",ds5b::DecisionNames[static_cast<unsigned>(r.decision)]},{"before",r.before},{"after",r.after}});
+      }
       rows.push_back({{"sequence",s.sequence},{"aggressor",s.attacker},{"target",s.defender},{"source",s.source},
         {"family",FamilyNames[static_cast<unsigned>(t.family)]},{"current",s.current},
         {"status",t.status==Status::Calculated?"CALCULATED":t.status==Status::Invalid?"INVALID":"UNSUPPORTED"},
@@ -54,7 +100,14 @@ struct Buffer {
         {"blockConfirmed",t.blockConfirmed},{"blockReduction",t.blockReduction},{"globalMultiplier",t.global},{"preDefense",t.preDefense},
         {"refinementTier",0},{"q16Contribution",0},{"attackerUnsupportedEffects",t.attackerUnsupportedEffects},
         {"defenderUnsupportedEffects",t.defenderUnsupportedEffects},{"q16Reason","ACTIVE_EFFECT_INSTANCE_MAGNITUDE_UNAVAILABLE"},
-        {"hitIdentity","HOST_RECEIVED_NO_UNIQUENESS_CLAIM"}});
+        {"hitIdentity","HOST_RECEIVED_NO_UNIQUENESS_CLAIM"},
+        {"powerConfirmed",t.powerConfirmed},{"powerFactor",t.powerFactor},{"powerSettingMissing",t.powerSettingMissing},
+        {"bashConfirmed",t.bashConfirmed},{"bashDamage","UNSUPPORTED_NO_CERTIFIED_BASH_FORMULA"},{"sneakBonus",0},
+        {"critical",t.critical},{"criticalChancePercent",t.criticalChance},{"criticalComponent",t.criticalComponent},
+        {"criticalBaseMissing",t.criticalBaseMissing},{"rngState",std::to_string(t.rngState)},{"rngRoll",t.rngRoll},{"rngDraws",t.rngDraws},
+        {"attackerUnsupportedPerks",t.attackerUnsupportedPerks},{"defenderUnsupportedPerks",t.defenderUnsupportedPerks},
+        {"attackerUnsupportedRules",t.attackerUnsupportedRules},{"defenderUnsupportedRules",t.defenderUnsupportedRules},
+        {"rules",rules},{"ruleTraceOverflow",t.rules.overflow},{"rulesUnsupported",t.rules.unsupported},{"rulesApplied",t.rules.applied},{"rulesMissingContext",t.rules.missing}});
     }
     return {{"capacity",Capacity},{"hits",hits},{"overwritten",hits-size},{"samples",rows}};
   }
@@ -62,7 +115,7 @@ struct Buffer {
 class Formula final : public IDamageFormula {
 public:
   Formula(std::unique_ptr<IDamageFormula> current,std::shared_ptr<Bridge> bridge,
-      Settings settings,std::shared_ptr<Buffer> buffer):current(std::move(current)),bridge(std::move(bridge)),settings(settings),buffer(std::move(buffer)) {}
+      Settings settings,std::shared_ptr<Buffer> buffer):current(std::move(current)),bridge(std::move(bridge)),settings(settings),buffer(std::move(buffer)),rng((uint64_t(std::random_device{}())<<32)^std::random_device{}()) {}
   Trace Evaluate(const MpActor& attacker,const MpActor& defender,const HitData& hit) const {
     Trace t;
     const auto fail=[&](Reason reason){t.reason=reason;return t;};
@@ -88,9 +141,17 @@ public:
     if((a->player&&attacker.GetUserId()==Networking::InvalidUserId)
         ||(d->player&&defender.GetUserId()==Networking::InvalidUserId))return fail(Reason::ProfileAbsent);
     t.attackerUnsupportedEffects=a->unsupportedEffects;t.defenderUnsupportedEffects=d->unsupportedEffects;
+    t.attackerUnsupportedPerks=a->perks.unsupported;t.defenderUnsupportedPerks=d->perks.unsupported;
+    t.attackerUnsupportedRules=a->perks.unsupportedRules;t.defenderUnsupportedRules=d->perks.unsupportedRules;
     const auto& offense=attacker.GetEquipment().inv.entries;
     const auto& defense=defender.GetEquipment().inv.entries;
     if(offense.size()>64||defense.size()>64)return fail(Reason::EquipmentCapacity);
+    auto ac=ActorContext(attacker,*a,*cat),dc=ActorContext(defender,*d,*cat);
+    if(weapon&&weapon->kind==Record::Kind::Weapon&&weapon->supported) {ac.keywords=&weapon->keywords;ac.weaponSkill=weapon->skill==Skill::Marksman?"Archery":SkillNames[static_cast<unsigned>(weapon->skill)];}
+    const auto owner=AnimationOwner(attacker);const auto now=std::chrono::steady_clock::now();
+    const auto& evidence=attacker.GetCombatAttackEvidence();
+    t.powerConfirmed=hit.isPowerAttack&&owner&&evidence.Confirm(ds5b::AttackEvidence::Kind::Power,owner,attacker.GetNpcGeneration(),now);
+    t.bashConfirmed=hit.isBashAttack&&owner&&evidence.Confirm(ds5b::AttackEvidence::Kind::Bash,owner,attacker.GetNpcGeneration(),now);
     unsigned weaponCount=0,ammoCount=0;
     const Inventory::Entry* weaponEntry=nullptr;
     NeutralRefinement refinement;
@@ -134,17 +195,21 @@ public:
         skill=value.value;
       }
       // Flat record ENCH DamageResist is preserved once, outside base scaling/Q16.
-      t.armor+=rec.clothing?rec.base:ArmorPiece(rec.base,skill,cat->scaling,refinement.Tier(&entry));
+      auto pieceContext=dc;pieceContext.keywords=&rec.keywords;
+      const auto rating=rec.clothing?rec.base:ArmorPiece(rec.base,skill,cat->scaling,refinement.Tier(&entry));
+      t.armor+=std::max(0.,ds5b::Apply(d->perks,ds5b::EP::Armor,rating,pieceContext,ac,t.rules,true));
       t.recordDamageResist+=rec.damageResist;
     }
     t.blockConfirmed=hit.isHitBlocked&&defender.IsBlockActive();
     if(t.blockConfirmed) {
       const auto skill=d->skills[static_cast<unsigned>(Skill::Block)];
       if(!skill.supported)return fail(Reason::SkillAbsent);
-      t.blockReduction=Block(skill.value);
+      t.blockReduction=std::clamp(ds5b::Apply(d->perks,ds5b::EP::Block,.20+.003*skill.value,dc,ac,t.rules,true),0.,.85);
     }
     t.global=a->player&&d->player?settings.pvp:settings.pve;
     Finish(t,cat->scaling,refinement.Tier(weaponEntry),unarmed);
+    if(t.status!=Status::Calculated)return t;
+    FinishPerks(t,a->perks,d->perks,ac,dc,weapon?weapon->criticalBase:Value{},cat->powerBonus,rng);
     return t;
   }
   float CalculateDamage(const MpActor& a,const MpActor& d,const HitData& hit) const override {
@@ -165,6 +230,7 @@ private:
   std::shared_ptr<Bridge> bridge;
   Settings settings;
   std::shared_ptr<Buffer> buffer;
+  mutable ds5b::Rng rng;
 };
 inline Json Capabilities(const Settings& settings,const Bridge& bridge) {
   Json families=Json::object();
@@ -173,10 +239,10 @@ inline Json Capabilities(const Settings& settings,const Bridge& bridge) {
     families[FamilyNames[i]]={{"mode",mode==Mode::Off?"off":mode==Mode::Shadow?"shadow":"active"},
       {"owner","NATIVE_SERVER"},{"candidateOwner","AETHERIUS_SERVER"},
       {"status",mode==Mode::Shadow&&bridge.catalog?"SHADOW":"UNSUPPORTED"},
-      {"reason",mode==Mode::Off?"FAMILY_OFF":mode==Mode::Active?"ACTIVE_REQUIRES_DS7":bridge.catalog?"NO_PERKS_DS5A":ReasonName(bridge.catalogReason)}};
+      {"reason",mode==Mode::Off?"FAMILY_OFF":mode==Mode::Active?"ACTIVE_REQUIRES_DS7":bridge.catalog?"CLASS_COMPILED_PERKS_DS5B":ReasonName(bridge.catalogReason)}};
   }
   return {{"version",1},{"families",families},{"recordDamageResist","PRESERVED_ONCE"},
-    {"perks","UNSUPPORTED_DS5B"},{"q16","UNSUPPORTED_ZERO_CONTRIBUTION"},
+    {"perks","SUPPORTED_CLASS_COMPILED_ONLY"},{"sneak","DISABLED_Q9"},{"bash","UNSUPPORTED_NO_CERTIFIED_BASH_FORMULA"},{"q16","UNSUPPORTED_ZERO_CONTRIBUTION"},
     {"magicOwner","NATIVE_SERVER"},{"procsOwner","NATIVE_CLIENT"},{"deduplication","HOST_COOLDOWNS_ONLY_DS7_PENDING"}};
 }
 }

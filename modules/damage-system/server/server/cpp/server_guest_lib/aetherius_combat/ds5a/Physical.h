@@ -1,5 +1,6 @@
 #pragma once
-// DS-5a: bounded, allocation-free arithmetic. No perk evaluator or actor store.
+// DS-5a/DS-5b: bounded arithmetic and compiled rules, without another actor store.
+#include "Rules.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -37,6 +38,9 @@ struct Profile {
   uint32_t race = 0;
   std::array<Value,6> skills{};
   uint16_t unsupportedEffects = 0;
+  ds5b::Table perks;
+  std::array<Value,3> maxima{};
+  std::optional<StableFormKey> identity;
 };
 struct Trace {
   Status status = Status::Unsupported;
@@ -48,6 +52,13 @@ struct Trace {
   double armor = 0, recordDamageResist = 0, armorReduction = 0, blockReduction = 0;
   double global = 1, preDefense = 0, candidate = 0;
   bool blockConfirmed = false;
+  bool powerConfirmed=false,bashConfirmed=false,critical=false,criticalBaseMissing=false,powerSettingMissing=false;
+  double powerFactor=1,criticalChance=0,criticalComponent=0,normal=0,rngRoll=0;
+  uint64_t rngState=0;
+  unsigned rngDraws=0;
+  ds5b::Audit rules;
+  unsigned attackerUnsupportedPerks=0,defenderUnsupportedPerks=0;
+  unsigned attackerUnsupportedRules=0,defenderUnsupportedRules=0;
 };
 // Instance identity is deliberately opaque; production installs tier zero only.
 class RefinementTierProvider {
@@ -76,10 +87,40 @@ inline bool Finish(Trace& t, const Scaling& g, unsigned weaponTier, bool unarmed
     t.status=Status::Invalid; t.reason=Reason::NumericInvalid; return false;
   }
   t.skillFactor=unarmed ? 1 : 1+(g.weaponMax-1)*t.weaponSkill/100;
-  t.preDefense=(t.weaponBase*RefinementFactor(weaponTier)+t.ammoBase)*t.skillFactor*t.global;
+  t.normal=(t.weaponBase*RefinementFactor(weaponTier)+t.ammoBase)*t.skillFactor;
+  t.preDefense=t.normal*t.global;
   t.armorReduction=ArmorCurve(t.armor+t.recordDamageResist);
   t.candidate=t.preDefense*(1-t.blockReduction)*(1-t.armorReduction);
   if (!InRange(t.candidate)) { t.status=Status::Invalid;t.reason=Reason::NumericInvalid;return false; }
   t.status=Status::Calculated;t.reason=Reason::None;return true;
+}
+// Same arithmetic kernel used by host, native tests and golden tests.
+template<class Random>
+inline void FinishPerks(Trace& t,const ds5b::Table& attackPerks,const ds5b::Table& defensePerks,
+    const ds5b::Context& ac,const ds5b::Context& dc,Value criticalBase,Value powerBonus,Random& rng) {
+    // Explicit entry-point stages. Set/Add operate on that stage's actual value.
+    t.normal=ds5b::Apply(attackPerks,ds5b::EP::Attack,t.normal,ac,dc,t.rules);
+    t.normal=ds5b::Apply(attackPerks,ds5b::EP::Weapon,t.normal,ac,dc,t.rules);
+    if(t.powerConfirmed) {
+      if(powerBonus.supported) {
+        t.powerFactor=ds5b::Apply(attackPerks,ds5b::EP::Power,1+powerBonus.value,ac,dc,t.rules);
+        t.normal*=std::max(0.,t.powerFactor);
+      }else t.powerSettingMissing=true;
+    }
+    ds5b::Apply(attackPerks,ds5b::EP::Sneak,1,ac,dc,t.rules); // Always inactive, even if compiled SUPPORTED.
+    t.criticalChance=std::clamp(ds5b::Apply(attackPerks,ds5b::EP::CritChance,t.criticalChance,ac,dc,t.rules),0.,100.);
+    if(t.criticalChance>0) {
+      if(!criticalBase.supported)t.criticalBaseMissing=true;
+      else {
+        t.rngState=rng.state;t.rngRoll=rng.Next();t.rngDraws=1;t.critical=t.rngRoll<t.criticalChance/100;
+        if(t.critical)t.criticalComponent=std::max(0.,ds5b::Apply(attackPerks,ds5b::EP::CritDamage,criticalBase.value,ac,dc,t.rules));
+      }
+    }
+    t.preDefense=(std::max(0.,t.normal)+t.criticalComponent)*t.global;
+    t.preDefense=std::max(0.,ds5b::Apply(defensePerks,ds5b::EP::Incoming,t.preDefense,dc,ac,t.rules,true));
+    const double rating=std::max(0.,ds5b::Apply(attackPerks,ds5b::EP::TargetArmor,t.armor+t.recordDamageResist,ac,dc,t.rules));
+    t.armorReduction=ArmorCurve(rating);
+    t.candidate=t.preDefense*(1-t.blockReduction)*(1-t.armorReduction);
+    if(t.rules.invalid||!InRange(t.candidate)){t.status=Status::Invalid;t.reason=Reason::NumericInvalid;}
 }
 }

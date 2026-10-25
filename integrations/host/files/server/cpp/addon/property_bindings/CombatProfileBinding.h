@@ -24,8 +24,15 @@ public:
       revision=static_cast<uint64_t>(n);
     }
     const auto raw=NapiHelper::Stringify(env,value);
-    if(const auto bridge=aetherius::combat::ds5a::FindBridge(&world))
-      bridge->Publish(id,world.LookupFormById(id),revision,raw,actor.GetNpcGeneration());
+    if(const auto bridge=aetherius::combat::ds5a::FindBridge(&world)) {
+      const auto base=FormDesc::FromFormId(actor.GetBaseId(),world.pluginIndexMapping);
+      std::optional<aetherius::combat::StableFormKey> identity;
+      if(!base.file.empty()) {
+        std::ostringstream key;key<<base.file<<':'<<std::uppercase<<std::hex<<std::setw(6)<<std::setfill('0')<<base.shortFormId;
+        identity=aetherius::combat::StableFormKey::Parse(key.str());
+      }
+      bridge->Publish(id,world.LookupFormById(id),revision,raw,actor.GetNpcGeneration(),identity?&*identity:nullptr);
+    }
     actor.SetPropertyValueDump(GetPropertyName(),raw,false,false);
   }
 };

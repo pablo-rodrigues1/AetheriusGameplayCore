@@ -20,6 +20,7 @@
 #include "formulas/ShadowDamageFormula.h"
 #include "aetherius_combat/AetheriusDamageFormula.h"
 #include "aetherius_combat/ds5a/Host.h"
+#include "aetherius_combat/ds5a/NativeRecords.h"
 #include "aetherius_combat/CombatProbe.h" // AETHERIUS DS-0b
 #include "gamemode_events/DeathEvent.h"
 #include "libespm/IterateFields.h"

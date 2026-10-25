@@ -99,6 +99,15 @@
       "requiresNativeBuild": false,
       "defaultState": "preservado",
       "officialServer": "conferir baseline de UI do mantenedor"
+    },
+    "damage-ds5b": {
+      "title": "Perks CLASS compiladas, condições, crítico e confirmação de forte; recorte shadow",
+      "orders": [
+        "DS-5b"
+      ],
+      "requiresNativeBuild": true,
+      "defaultState": "off; families ausente",
+      "officialServer": "shadow apenas; bash e prioridade não comutativa UNSUPPORTED; active exige DS-7"
     }
   },
   "featuresWithoutHostFiles": {
@@ -122,7 +131,8 @@
     "server/cpp/addon/ScampServer.cpp": [
       "damage-shadow",
       "weapon-poison",
-      "damage-ds5a"
+      "damage-ds5a",
+      "damage-ds5b"
     ],
     "server/cpp/addon/property_bindings/PropertyBindingFactory.cpp": [
       "weapon-poison",
@@ -146,7 +156,8 @@
       "fix-1010",
       "weapon-poison",
       "dev-attributes",
-      "attribute-bonus"
+      "attribute-bonus",
+      "damage-ds5b"
     ],
     "server/cpp/server_guest_lib/ActiveMagicEffectsMap.cpp": [
       "weapon-poison"
@@ -166,7 +177,8 @@
     "server/cpp/server_guest_lib/MpActor.h": [
       "weapon-poison",
       "dev-attributes",
-      "attribute-bonus"
+      "attribute-bonus",
+      "damage-ds5b"
     ],
     "server/cpp/server_guest_lib/WorldState.h": [
       "weapon-poison"
@@ -194,7 +206,8 @@
     "server/cpp/server_guest_lib/aetherius_combat/README.md": [
       "damage-shadow",
       "weapon-poison",
-      "damage-ds5a"
+      "damage-ds5a",
+      "damage-ds5b"
     ],
     "server/cpp/server_guest_lib/aetherius_combat/ShadowStatus.h": [
       "damage-shadow"
@@ -232,7 +245,8 @@
       "fix-1010",
       "dev-attributes",
       "attribute-bonus",
-      "damage-ds5a"
+      "damage-ds5a",
+      "damage-ds5b"
     ],
     "unit/DevAttributesTest.h": [
       "dev-attributes",
@@ -255,16 +269,20 @@
       "attribute-bonus"
     ],
     "server/cpp/addon/property_bindings/CombatProfileBinding.h": [
-      "damage-ds5a"
+      "damage-ds5a",
+      "damage-ds5b"
     ],
     "server/cpp/server_guest_lib/aetherius_combat/ds5a/Physical.h": [
-      "damage-ds5a"
+      "damage-ds5a",
+      "damage-ds5b"
     ],
     "server/cpp/server_guest_lib/aetherius_combat/ds5a/Bridge.h": [
-      "damage-ds5a"
+      "damage-ds5a",
+      "damage-ds5b"
     ],
     "server/cpp/server_guest_lib/aetherius_combat/ds5a/Host.h": [
-      "damage-ds5a"
+      "damage-ds5a",
+      "damage-ds5b"
     ],
     "unit/Ds5aTest.h": [
       "damage-ds5a"
@@ -325,6 +343,18 @@
     ],
     "unit/NpcObservationTest.h": [
       "damage-prerequisites"
+    ],
+    "unit/Ds5bTest.h": [
+      "damage-ds5b"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/ds5a/AttackEvidence.h": [
+      "damage-ds5b"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/ds5a/NativeRecords.h": [
+      "damage-ds5b"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/ds5a/Rules.h": [
+      "damage-ds5b"
     ]
   }
 }

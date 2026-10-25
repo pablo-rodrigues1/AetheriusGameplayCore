@@ -292,6 +292,9 @@ void ActionListener::OnUpdateAnimation(const RawMessageData& rawMsgData,
                            aetherius::combat::CombatProbeNowMs());
   }
 
+  // DS-5b: SendToNeighbours already verified own actor or current hoster.
+  targetActor->RecordCombatAnimation(msg.data,myActor->GetFormId());
+
   // Only process animation system and set last anim event for player's actor
   if (targetActor != myActor) {
     return;

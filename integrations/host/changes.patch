@@ -1,17 +1,18 @@
 diff --git a/server/cpp/addon/ScampServer.cpp b/server/cpp/addon/ScampServer.cpp
-index fc497aa65e24927b6ec1cd9ad1dd26b62cbf0f25..179a06091b39bef62695055f79b92aa5a5ce940a 100644
+index fc497aa65e24927b6ec1cd9ad1dd26b62cbf0f25..a7492dcdba9315c6ee5e3904d5c50e80021c92c7 100644
 --- a/server/cpp/addon/ScampServer.cpp
 +++ b/server/cpp/addon/ScampServer.cpp
-@@ -19,6 +19,8 @@
+@@ -19,6 +19,9 @@
  #include "formulas/TES5DamageFormula.h"
  #include "formulas/ShadowDamageFormula.h"
  #include "aetherius_combat/AetheriusDamageFormula.h"
 +#include "aetherius_combat/ds5a/Host.h"
++#include "aetherius_combat/ds5a/NativeRecords.h"
 +#include "aetherius_combat/CombatProbe.h" // AETHERIUS DS-0b
  #include "gamemode_events/DeathEvent.h"
  #include "libespm/IterateFields.h"
  #include "libespm/espm.h"
-@@ -394,26 +396,88 @@ ScampServer::ScampServer(const Napi::CallbackInfo& info)
+@@ -394,26 +397,88 @@ ScampServer::ScampServer(const Napi::CallbackInfo& info)
      const auto combat = serverSettings.find("aetheriusCombat");
      // AETHERIUS D-P1: explicit opt-in, independent of the damage shadow spike.
      partOne->worldState.aetheriusWeaponPoison = combat != serverSettings.end() && combat->value("weaponPoison", false);
@@ -140,7 +141,7 @@ index e623620f4206441c15d9303f5492c8fee7b709e7..9953b285119ebee38819775969512626
    result["knownSpells"] = std::make_shared<LearnedSpellsBinding>();
    result["isDead"] = std::make_shared<IsDeadBinding>();
 diff --git a/server/cpp/server_guest_lib/ActionListener.cpp b/server/cpp/server_guest_lib/ActionListener.cpp
-index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c8701743ca2a87e 100644
+index 5af49b12757b81677d1bed068cffa622f43f855b..9781ad42d870751007d031336190d3286b678f22 100644
 --- a/server/cpp/server_guest_lib/ActionListener.cpp
 +++ b/server/cpp/server_guest_lib/ActionListener.cpp
 @@ -1,4 +1,5 @@
@@ -223,7 +224,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
      actor->SetAngle(
        NiPoint3{ msg.data.rot[0], msg.data.rot[1], msg.data.rot[2] },
        SetAngleMode::CalledByUpdateMovement);
-@@ -248,6 +286,12 @@ void ActionListener::OnUpdateAnimation(const RawMessageData& rawMsgData,
+@@ -248,6 +286,15 @@ void ActionListener::OnUpdateAnimation(const RawMessageData& rawMsgData,
      return;
    }
  
@@ -233,10 +234,13 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
 +                           aetherius::combat::CombatProbeNowMs());
 +  }
 +
++  // DS-5b: SendToNeighbours already verified own actor or current hoster.
++  targetActor->RecordCombatAnimation(msg.data,myActor->GetFormId());
++
    // Only process animation system and set last anim event for player's actor
    if (targetActor != myActor) {
      return;
-@@ -434,6 +478,11 @@ void ActionListener::OnUpdateEquipment(const RawMessageData& rawMsgData,
+@@ -434,6 +481,11 @@ void ActionListener::OnUpdateEquipment(const RawMessageData& rawMsgData,
        SendToNeighbours(msg.idx, rawMsgData, true);
        actor->SetEquipment(data);
      }
@@ -248,7 +252,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
    } else {
      actor->SendInventoryUpdate();
  
-@@ -773,6 +822,7 @@ void ActionListener::OnHostAttempt(const RawMessageData& rawMsgData,
+@@ -773,6 +825,7 @@ void ActionListener::OnHostAttempt(const RawMessageData& rawMsgData,
          hostResetTimeout) {
      partOne.GetLogger().info("Hoster changed from {0:x} to {0:x}", prevHoster,
                               me->GetFormId());
@@ -256,7 +260,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
      hoster = me->GetFormId();
      remote.UpdateHoster(hoster);
  
-@@ -918,6 +968,12 @@ void ActionListener::OnChangeValues(const RawMessageData& rawMsgData,
+@@ -918,6 +971,12 @@ void ActionListener::OnChangeValues(const RawMessageData& rawMsgData,
        updated.healthPercentage = newVal;
        actor->NetSetPercentages(
          updated, nullptr, std::vector<espm::ActorValue>{ espm::ActorValue::Health });
@@ -269,7 +273,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
        return;
      }
  
-@@ -1115,6 +1171,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
+@@ -1115,6 +1174,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
    MpActor* myActor = partOne.serverState.ActorByUser(rawMsgData.userId);
  
    if (!myActor) {
@@ -277,7 +281,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
      return spdlog::error(
        "ActionListener::OnHit - no Actor attached to userId {}",
        rawMsgData.userId);
-@@ -1134,6 +1191,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
+@@ -1134,6 +1194,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
        spdlog::error("SendToNeighbours - No permission to send OnHit with "
                      "aggressor actor {:x}",
                      aggressor->GetFormId());
@@ -285,7 +289,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
        return;
      }
    }
-@@ -1146,6 +1204,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
+@@ -1146,6 +1207,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
    MpObjectReference* targetRef =
      targetForm ? targetForm->AsObjectReference() : nullptr;
    if (!targetRef) {
@@ -293,7 +297,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
      spdlog::error("ActionListener::OnHit - MpObjectReference not found for "
                    "hitData.target {:x}",
                    hitData.target);
-@@ -1156,6 +1215,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
+@@ -1156,6 +1218,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
    const FormDesc& targetCellOrWorld = targetRef->GetCellOrWorld();
  
    if (aggressorCellOrWorld != targetCellOrWorld) {
@@ -301,7 +305,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
      const PluginIndexMapping& pluginIndexMapping = partOne.worldState.pluginIndexMapping;
      spdlog::error(
        "ActionListener::OnHit - aggressor and targetRef are in different cells "
-@@ -1174,6 +1234,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
+@@ -1174,6 +1237,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
      constexpr float kExteriorCellWidthUnits = 4096.f;
      if ((aggressorPos - targetPos).SqrLength() >
          kExteriorCellWidthUnits * kExteriorCellWidthUnits) {
@@ -309,7 +313,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
        spdlog::error("ActionListener::OnHit - aggressor and targetRef are too "
                      "distant. Aggressor: {:x}, targetRef: {:x}",
                      aggressor->GetFormId(), targetRef->GetFormId());
-@@ -1182,6 +1243,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
+@@ -1182,6 +1246,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
    }
  
    if (aggressor->IsDead()) {
@@ -317,7 +321,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
      spdlog::debug(fmt::format("{:x} actor is dead and can't attack. "
                                "requesting respawn in order to fix death state",
                                aggressor->GetFormId()));
-@@ -1198,9 +1260,9 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
+@@ -1198,9 +1263,9 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
    const auto equipment = aggressor->GetEquipment();
  
    if (isSourceSpell && equipment.IsSpellEquipped(hitData.source)) {
@@ -330,7 +334,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
        return;
      }
      OnSpellHit(aggressor, targetRef, hitData);
-@@ -1210,15 +1272,16 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
+@@ -1210,15 +1275,16 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
    const bool isUnarmed = IsUnarmedAttack(hitData.source);
  
    if (equipment.inv.HasItem(hitData.source) || isUnarmed) {
@@ -350,7 +354,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
    if (aggressor->GetInventory().HasItem(hitData.source) == false) {
      spdlog::debug("{:x} actor has no {:x} weapon and can't attack",
                    hitData.aggressor, hitData.source);
-@@ -1374,6 +1437,45 @@ bool IsAetheriusInvulnerable(const MpObjectReference& target)
+@@ -1374,6 +1440,45 @@ bool IsAetheriusInvulnerable(const MpObjectReference& target)
                         .count();
    return until > now;
  }
@@ -396,7 +400,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
  }
  
  void ActionListener::OnSpellHit(MpActor* aggressor,
-@@ -1386,6 +1488,7 @@ void ActionListener::OnSpellHit(MpActor* aggressor,
+@@ -1386,6 +1491,7 @@ void ActionListener::OnSpellHit(MpActor* aggressor,
                                 std::to_string(targetRef ? targetRef->GetFormId() : 0) +
                                 "]");
    if (!socialSpellHit.Fire(&partOne.worldState)) {
@@ -404,7 +408,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
      return;
    }
  
-@@ -1393,16 +1496,19 @@ void ActionListener::OnSpellHit(MpActor* aggressor,
+@@ -1393,16 +1499,19 @@ void ActionListener::OnSpellHit(MpActor* aggressor,
  
    auto* targetActorPtr = targetRef ? targetRef->AsActor() : nullptr;
    if (!targetActorPtr) {
@@ -424,7 +428,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
  
    SpellCastData spellCastData{ aggressor->GetFormId(),
                                 targetActorPtr->GetFormId(),
-@@ -1415,14 +1521,20 @@ void ActionListener::OnSpellHit(MpActor* aggressor,
+@@ -1415,14 +1524,20 @@ void ActionListener::OnSpellHit(MpActor* aggressor,
      partOne.CalculateDamage(*aggressor, *targetActorPtr, spellCastData);
    damage = damage <= 0.f ? 0.f : damage;
  
@@ -446,7 +450,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
  
    spdlog::info("OnSpellHit - Target {0:x} is hit by {1:x} spell on {2} "
                 "damage. By caster: {3:x})",
-@@ -1435,17 +1547,20 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
+@@ -1435,17 +1550,20 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
                                   [[maybe_unused]] bool isUnarmed)
  {
    const auto currentHitTime = std::chrono::steady_clock::now();
@@ -467,7 +471,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
      spdlog::info("OnWeaponHit - Target {:x} is invulnerable (staff mode)",
                   targetActor.GetFormId());
      return;
-@@ -1455,6 +1570,13 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
+@@ -1455,6 +1573,13 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
    const std::chrono::duration<float> timePassedAnyTarget =
      currentHitTime - lastHitTimeAnyTarget;
  
@@ -481,7 +485,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
    constexpr float kSplashTimeWindow = 0.1f;
    constexpr size_t kMaxSplashTargets = 4;
  
-@@ -1473,6 +1595,7 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
+@@ -1473,6 +1598,7 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
  
      // If the specific target was hit faster than the splash window
      if (timeSinceSpecific.count() < kSplashTimeWindow) {
@@ -489,7 +493,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
        spdlog::warn("Splash attack from {:x} to {:x} ignored, target hit "
                     "too recently",
                     aggressor->GetFormId(), targetActor.GetFormId());
-@@ -1481,12 +1604,14 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
+@@ -1481,12 +1607,14 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
  
      if (aggressor->CountRecentHits(std::chrono::duration<float>(
            kSplashTimeWindow)) >= kMaxSplashTargets) {
@@ -504,7 +508,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
      WorldState* espmProvider = targetActor.GetParent();
      auto weapDNAM =
        espm::GetData<espm::WEAP>(hitData.source, espmProvider).weapDNAM;
-@@ -1588,6 +1713,11 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
+@@ -1588,6 +1716,11 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
      currentActorValues, aggressor,
      std::vector<espm::ActorValue>{ espm::ActorValue::Health }, hitData.source);
    aggressor->SetLastHitTime(targetActor.GetFormId(), currentHitTime);
@@ -516,7 +520,7 @@ index 5af49b12757b81677d1bed068cffa622f43f855b..4268c75b5f66492a02795f144c870174
    // AETHERIUS D-P1: accepted physical hit; damage calculation above is untouched.
    if (partOne.worldState.aetheriusWeaponPoison) {
      aggressor->ApplyWeaponPoisonHit(targetActor, hitData.source, hitData.isHitBlocked,
-@@ -1617,3 +1747,99 @@ void ActionListener::SendPapyrusOnHitEvent(MpActor* aggressor,
+@@ -1617,3 +1750,99 @@ void ActionListener::SendPapyrusOnHitEvent(MpActor* aggressor,
    args[6] = VarValue(hitData.isHitBlocked);  // abHitBlocked
    target->SendPapyrusEvent("OnHit", args.data(), args.size());
  }
@@ -1388,10 +1392,17 @@ index 454c9c66b3df38fa910eb8addcfc9257f6374c8f..da33809f7913cb203304b09108bf222a
 +  SendMessageToActorListeners(msg, true);
 +}
 diff --git a/server/cpp/server_guest_lib/MpActor.h b/server/cpp/server_guest_lib/MpActor.h
-index f74d449c0d3c36f1167c28dc56a361f906d34796..4cd548cbfa33a6ee08d5882c7730adaecc79b398 100644
+index f74d449c0d3c36f1167c28dc56a361f906d34796..2fa5ad94e2799d116cf2133d1f7da596a8443cf2 100644
 --- a/server/cpp/server_guest_lib/MpActor.h
 +++ b/server/cpp/server_guest_lib/MpActor.h
-@@ -50,6 +50,18 @@ public:
+@@ -1,5 +1,6 @@
+ #pragma once
+ #include "AnimationData.h"
++#include "aetherius_combat/ds5a/AttackEvidence.h"
+ #include "Appearance.h"
+ #include "Equipment.h"
+ #include "GetBaseActorValues.h"
+@@ -50,6 +51,18 @@ public:
    espm::ObjectBounds GetBounds() const;
    const std::vector<FormDesc>& GetTemplateChain() const;
    bool IsCreatedAsPlayer() const;
@@ -1410,7 +1421,7 @@ index f74d449c0d3c36f1167c28dc56a361f906d34796..4cd548cbfa33a6ee08d5882c7730adae
    const ActorValues& GetActorValues() const;
    const ActiveMagicEffectsMap& GetActiveMagicEffects() const;
    int32_t GetProfileId() const;
-@@ -169,6 +181,9 @@ public:
+@@ -169,6 +182,9 @@ public:
    void SetActorValues(const ActorValues& actorValues);
  
    BaseActorValues GetBaseValues() const; // AETHERIUS DEV-A1
@@ -1420,7 +1431,7 @@ index f74d449c0d3c36f1167c28dc56a361f906d34796..4cd548cbfa33a6ee08d5882c7730adae
    BaseActorValues GetMaximumValues() const; // AETHERIUS DEV-A1
    void SetDevAttributes(const std::optional<aetherius::development::Attributes>& attributes); // AETHERIUS DEV-A1
    void SetAttributeBonuses(const std::optional<aetherius::attributes::Bonuses>& bonuses); // AETHERIUS C3d
-@@ -197,7 +212,7 @@ public:
+@@ -197,13 +213,18 @@ public:
    bool GetConsoleCommandsAllowedFlag() const;
    void SetConsoleCommandsAllowedFlag(bool newValue);
  
@@ -1429,10 +1440,22 @@ index f74d449c0d3c36f1167c28dc56a361f906d34796..4cd548cbfa33a6ee08d5882c7730adae
  
    void AddSpell(uint32_t spellId);
    void RemoveSpell(uint32_t spellId);
-@@ -221,6 +236,16 @@ public:
+ 
+   void SetLastAnimEvent(const std::optional<AnimationData>& animationData);
+   std::optional<AnimationData> GetLastAnimEvent() const;
++  // DS-5b: only accepted ingress records this, including hosted NPCs.
++  void RecordCombatAnimation(const AnimationData& data,uint32_t hoster) {
++    combatAttackEvidence.Record(data.animEventName,hoster,GetNpcGeneration(),std::chrono::steady_clock::now());
++  }
++  const aetherius::combat::ds5b::AttackEvidence& GetCombatAttackEvidence() const { return combatAttackEvidence; }
+ 
+ private:
+   struct Impl;
+@@ -221,6 +242,17 @@ public:
    uint32_t GetPoisonResult() const { return aetheriusPoisonResult; }
    uint32_t GetPoisonUnsupported() const { return aetheriusPoisonUnsupported; }
  private:
++  aetherius::combat::ds5b::AttackEvidence combatAttackEvidence;
 +  bool npcObservationNeeded = false, npcConfirmed = false;
 +  bool npcObservationRestoreWarned = false;
 +  uint16_t npcLevel = 0;
@@ -1467,7 +1490,7 @@ index 2dc4eb20a2c178ccfaa99c47c471f21937497010..fc3ca0e7dd3c1b794e11fcc775aca135
  
    return {};
 diff --git a/server/cpp/server_guest_lib/aetherius_combat/README.md b/server/cpp/server_guest_lib/aetherius_combat/README.md
-index 9821b6ad995368acff23d0630177d3c648110eca..0bcde81dc3d01cf360a2cb68d78d5083925ff80f 100644
+index 9821b6ad995368acff23d0630177d3c648110eca..a70f2d3a9915e05ffb0a27670fb893faf039c615 100644
 --- a/server/cpp/server_guest_lib/aetherius_combat/README.md
 +++ b/server/cpp/server_guest_lib/aetherius_combat/README.md
 @@ -1,3 +1,51 @@
@@ -1522,11 +1545,34 @@ index 9821b6ad995368acff23d0630177d3c648110eca..0bcde81dc3d01cf360a2cb68d78d5083
  # A6-S3: physical damage shadow spike
  
  This disposable spike wraps the existing TES5 -> DamageMult -> SweetPieDamage ->
+@@ -118,3 +166,22 @@ instructions do not describe this host spike; this file and the A6-S3 report do.
+ Evidence and delivery report live in the workspace's `_work/evidence/A6-S3/`
+ and `_work/orders/A6-S3-formula-dano-shadow.result.md`. No game session or
+ production cutover is certified by automated acceptance.
++
++## DS-5b — extensão do candidato shadow
++
++`ds5a/Rules.h` converte o compiled CLASS por revisão e avalia as nove condições DS-3;
++`Physical.h::FinishPerks` aplica os entry points físicos, crítico separado e caps;
++`NativeRecords.h::HydrateNative` carrega tipos/CRDT/template e GMST de forte no boot;
++`AttackEvidence.h` mantém a confirmação limitada por ator, hoster e geração.
++`ActionListener::OnUpdateAnimation` só registra após a autorização existente.
++
++Perks UNSUPPORTED inteiras, origens não CLASS, Q15/Q16, furtivo, fórmula de bash e
++combinações de operações não comutativas sem prova de ordem são recusados explicitamente.
++Forte exige flag e animação exata recente (1500 ms); evento desconhecido é convencional.
++RNG do servidor tem estado/draw no trace; chance sem provider certificado fica zero.
++Nenhuma mudança de ownership aplicado, opção nova ou cutover. active exige DS-7.
++
++Aceites sem sockets: aetherius-shadow-test --ds5b <manifest> <DS5B_GOLDEN_RULES.json>,
++--ds5a e as suítes existentes. Corpus/runner dourado e espelho estão no Core.
++Detalhes, fontes e limitações em modules/damage-system/docs/FONTES_E_DONOS.md §15;
++evidências em _work/evidence/DS-5b. Build autorizado somente build/ds5b-server.
 diff --git a/unit/AetheriusShadowTest.cpp b/unit/AetheriusShadowTest.cpp
-index 4b62bc1c67c86761105917762aa19308f92d56e3..1066f5e3976e62819e38ffaae6ec06423aa252e0 100644
+index 4b62bc1c67c86761105917762aa19308f92d56e3..8be9a73c37b6e1f91c80c9f7816d8134b5db84d6 100644
 --- a/unit/AetheriusShadowTest.cpp
 +++ b/unit/AetheriusShadowTest.cpp
-@@ -252,10 +252,37 @@ void Run(const std::filesystem::path& manifestPath) {
+@@ -252,10 +252,39 @@ void Run(const std::filesystem::path& manifestPath) {
  #include "WeaponPoisonNpcTest.h" // FIX-1010 hosted NPC reproduction.
  #include "WeaponPoisonIntentTest.h" // D-P1-fix2 actual command, no OnEquip assumption.
  #include "DevAttributesTest.h" // AETHERIUS DEV-A1: native resource acceptance, no sockets.
@@ -1535,6 +1581,7 @@ index 4b62bc1c67c86761105917762aa19308f92d56e3..1066f5e3976e62819e38ffaae6ec0642
 +
 +#include "NpcEquipmentTest.h" // DS-0k real host respawn and namespace regression.
 +#include "Ds5aTest.h"
++#include "Ds5bTest.h"
 +#include "NpcEntryInventoryTest.h"
 +#include "NpcAreaContainerDiffTest.h" // DS-0k-fix1 entry wire/override investigation.
 +
@@ -1545,6 +1592,7 @@ index 4b62bc1c67c86761105917762aa19308f92d56e3..1066f5e3976e62819e38ffaae6ec0642
  #ifdef AETHERIUS_SHADOW_STANDALONE
  int main(int argc, char** argv) {
    try {
++    if (argc == 4 && std::string(argv[1]) == "--ds5b") { RunDs5bTests(argv[2],argv[3]); return 0; }
 +    if (argc == 3 && std::string(argv[1]) == "--ds5a") { RunDs5aTests(argv[2]); return 0; }
 +    if (argc == 4 && std::string(argv[1]) == "--npc-entry-area-items") {
 +#ifdef _MSC_VER
@@ -1584,10 +1632,10 @@ index 1735dfb3607d84f8b80ac07823c54ddc87d4b1e0..f2c1a52c31ca60b94ea463c0585ccae2
 +endif()
 diff --git a/server/cpp/addon/property_bindings/CombatProfileBinding.h b/server/cpp/addon/property_bindings/CombatProfileBinding.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..be19c13a6deb0f225c77420abef1f64c01442a35
+index 0000000000000000000000000000000000000000..6147adeac81ebbf0e2fa22c0194198078a950e07
 --- /dev/null
 +++ b/server/cpp/addon/property_bindings/CombatProfileBinding.h
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,63 @@
 +#pragma once
 +#include "PropertyBinding.h"
 +#include "NapiHelper.h"
@@ -1614,8 +1662,15 @@ index 0000000000000000000000000000000000000000..be19c13a6deb0f225c77420abef1f64c
 +      revision=static_cast<uint64_t>(n);
 +    }
 +    const auto raw=NapiHelper::Stringify(env,value);
-+    if(const auto bridge=aetherius::combat::ds5a::FindBridge(&world))
-+      bridge->Publish(id,world.LookupFormById(id),revision,raw,actor.GetNpcGeneration());
++    if(const auto bridge=aetherius::combat::ds5a::FindBridge(&world)) {
++      const auto base=FormDesc::FromFormId(actor.GetBaseId(),world.pluginIndexMapping);
++      std::optional<aetherius::combat::StableFormKey> identity;
++      if(!base.file.empty()) {
++        std::ostringstream key;key<<base.file<<':'<<std::uppercase<<std::hex<<std::setw(6)<<std::setfill('0')<<base.shortFormId;
++        identity=aetherius::combat::StableFormKey::Parse(key.str());
++      }
++      bridge->Publish(id,world.LookupFormById(id),revision,raw,actor.GetNpcGeneration(),identity?&*identity:nullptr);
++    }
 +    actor.SetPropertyValueDump(GetPropertyName(),raw,false,false);
 +  }
 +};
@@ -2946,12 +3001,49 @@ index 0000000000000000000000000000000000000000..90ff5dd2c4f9d6457091999e686efecb
 +  return result;
 +}
 +}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/ds5a/AttackEvidence.h b/server/cpp/server_guest_lib/aetherius_combat/ds5a/AttackEvidence.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..2e92a7521d4bf48c64b3b5f83a1770e6f01d7e5e
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/ds5a/AttackEvidence.h
+@@ -0,0 +1,31 @@
++#pragma once
++#include <chrono>
++#include <string_view>
++#include <cstdint>
++namespace aetherius::combat::ds5b {
++// Fixed storage on each actor. Only the accepted animation ingress writes it.
++// A confirmation is evidence of an animation, not a unique hit (DS-7 pending).
++struct AttackEvidence {
++  enum class Kind { None, Power, Bash };
++  Kind kind=Kind::None;
++  uint64_t generation=0;
++  uint32_t hoster=0;
++  std::chrono::steady_clock::time_point received{};
++  void Record(std::string_view event,uint32_t owner,uint64_t epoch,std::chrono::steady_clock::time_point now) {
++    // Exact event names from AnimationSystem.cpp; unknown/directional stays conventional (Q7).
++    constexpr std::string_view power[]={"attackPowerStartInPlace","attackPowerStartBackward","attackPowerStartLeft",
++      "attackPowerStartRight","attackPowerStartDualWield","attackPowerStartForward","attackPowerStart_2HWSprint","attackPowerStart_2HMSprint"};
++    Kind next=Kind::None;
++    for(auto name:power)if(event==name)next=Kind::Power;
++    if(event=="bashStart"||event=="bashRelease"||event=="bashPowerStart")next=Kind::Bash;
++    // Hit-frame events do not clear a preceding start confirmation.
++    if(event=="weaponSwing"||event=="weaponLeftSwing"||event=="HitFrame")return;
++    kind=next;hoster=owner;generation=epoch;received=now;
++  }
++  bool Confirm(Kind requested,uint32_t owner,uint64_t epoch,std::chrono::steady_clock::time_point now) const {
++    const auto age=now-received;
++    return kind==requested&&hoster==owner&&generation==epoch&&age>=std::chrono::steady_clock::duration::zero()
++      &&age<=std::chrono::milliseconds(1500);
++  }
++};
++}
 diff --git a/server/cpp/server_guest_lib/aetherius_combat/ds5a/Bridge.h b/server/cpp/server_guest_lib/aetherius_combat/ds5a/Bridge.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..e0a331dcda087bcbc7bc68e17e079c95262de844
+index 0000000000000000000000000000000000000000..2c6d831b5527c9c9a9b61f6ea041ce4be8d92922
 --- /dev/null
 +++ b/server/cpp/server_guest_lib/aetherius_combat/ds5a/Bridge.h
-@@ -0,0 +1,165 @@
+@@ -0,0 +1,181 @@
 +#pragma once
 +#include "Physical.h"
 +#include "../forms/StableFormKey.h"
@@ -2990,10 +3082,12 @@ index 0000000000000000000000000000000000000000..e0a331dcda087bcbc7bc68e17e079c95
 +  bool supported=false, ranged=false, clothing=false;
 +  double base=0, damageResist=0;
 +  Skill skill=Skill::None;
++  Value criticalBase,itemType;
 +  std::vector<StableFormKey> keywords;
 +};
 +struct Catalog {
 +  Scaling scaling;
++  Value powerBonus;
 +  std::map<uint32_t,Record> records;
 +  std::map<StableFormKey,uint32_t> ids;
 +};
@@ -3002,7 +3096,8 @@ index 0000000000000000000000000000000000000000..e0a331dcda087bcbc7bc68e17e079c95
 +class Bridge {
 +public:
 +  using Resolver=std::function<uint32_t(const StableFormKey&)>;
-+  explicit Bridge(Resolver resolver):resolve(std::move(resolver)) {}
++  using Hydrator=std::function<void(Catalog&)>;
++  explicit Bridge(Resolver resolver,Hydrator hydrate={}):resolve(std::move(resolver)),hydrate(std::move(hydrate)) {}
 +  bool SetCatalog(const std::string& text) {
 +    if(catalog && text==catalogText)return true;
 +    if(catalog)return false; // accepted table is immutable for this host boot
@@ -3044,6 +3139,7 @@ index 0000000000000000000000000000000000000000..e0a331dcda087bcbc7bc68e17e079c95
 +        }
 +        next->ids.emplace(key,id);next->records.emplace(id,std::move(rec));
 +      }
++      if(hydrate)hydrate(*next);
 +      catalog=next;catalogText=text;catalogReason=Reason::None;return true;
 +    }catch(...){catalogReason=Reason::CatalogInvalid;return false;}
 +  }
@@ -3059,7 +3155,7 @@ index 0000000000000000000000000000000000000000..e0a331dcda087bcbc7bc68e17e079c95
 +    if(requestCount<requests.size())requests[requestCount++]=id;
 +  }
 +  Json TakeRequests() { Json out=Json::array();for(size_t i=0;i<requestCount;++i)out.push_back(requests[i]);requestCount=0;return out; }
-+  bool Publish(uint32_t id,const std::shared_ptr<void>& actor,uint64_t revision,const std::string& text,uint64_t generation=0) {
++  bool Publish(uint32_t id,const std::shared_ptr<void>& actor,uint64_t revision,const std::string& text,uint64_t generation=0,const StableFormKey* identity=nullptr) {
 +    Sweep();
 +    if(text=="null"){profiles.erase(id);return true;}
 +    auto i=profiles.find(id);
@@ -3080,6 +3176,17 @@ index 0000000000000000000000000000000000000000..e0a331dcda087bcbc7bc68e17e079c95
 +      const auto kind=j.at("subject").at("kind");
 +      if(kind!="PLAYER"&&kind!="NPC")throw std::invalid_argument("profile subject");
 +      p.player=kind=="PLAYER";
++      if(identity)p.identity=*identity;
++      else if(j.at("subject").contains("stableFormKey")&&j.at("subject").at("stableFormKey").is_string())p.identity=Key(j.at("subject").at("stableFormKey"));
++      p.perks=ds5b::ConvertPerks(j);
++      if(j.contains("attributes")) {
++        unsigned index=0;
++        for(const auto* name:{"health","magicka","stamina"}) {
++          const auto& attribute=j.at("attributes").at(name);
++          if(attribute.at("status")=="SUPPORTED")p.maxima[index]={true,Numeric(attribute.at("value"))};
++          ++index;
++        }
++      }
 +      const auto& race=j.at("race");
 +      if(race.at("status")=="SUPPORTED")p.race=resolve(Key(race.at("value")));
 +      for(unsigned s=0;s<SkillNames.size();++s) {
@@ -3111,6 +3218,7 @@ index 0000000000000000000000000000000000000000..e0a331dcda087bcbc7bc68e17e079c95
 +  Reason catalogReason=Reason::CatalogAbsent;
 +private:
 +  Resolver resolve;
++  Hydrator hydrate;
 +  std::string catalogText;
 +  std::map<uint32_t,Entry> profiles;
 +  std::array<uint32_t,2048> requests{};
@@ -3119,16 +3227,18 @@ index 0000000000000000000000000000000000000000..e0a331dcda087bcbc7bc68e17e079c95
 +}
 diff --git a/server/cpp/server_guest_lib/aetherius_combat/ds5a/Host.h b/server/cpp/server_guest_lib/aetherius_combat/ds5a/Host.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..263021f98af8aa1e78b242d607b0667b044ee6fa
+index 0000000000000000000000000000000000000000..fcb7ce4e0b9b5edce34747ed3284c91c876c7279
 --- /dev/null
 +++ b/server/cpp/server_guest_lib/aetherius_combat/ds5a/Host.h
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,248 @@
 +#pragma once
 +#include "Bridge.h"
 +#include "MpActor.h"
 +#include "WorldState.h"
++#include "ActorValues.h"
 +#include "formulas/IDamageFormula.h"
 +#include <limits>
++#include <random>
 +
 +namespace aetherius::combat::ds5a {
 +// Accessed only on the server thread. Weak registry never keeps a world alive.
@@ -3159,6 +3269,44 @@ index 0000000000000000000000000000000000000000..263021f98af8aa1e78b242d607b0667b
 +  return out;
 +}
 +inline bool Enabled(const Settings& s) { for(const auto m:s.modes)if(m!=Mode::Off)return true;return false; }
++inline ds5b::Context ActorContext(const MpActor& actor,const Profile& p,const Catalog& cat) {
++  ds5b::Context x;
++  if(p.perks.perksKnown)x.perks=&p.perks.perks;
++  if(p.identity)x.identity=&*p.identity;
++  for(unsigned i=0;i<SkillNames.size();++i)if(p.skills[i].supported)x.values[x.valueCount++]={SkillNames[i],p.skills[i].value};
++  const auto& av=actor.GetActorValues();
++  const double percents[]={av.healthPercentage,av.magickaPercentage,av.staminaPercentage};
++  constexpr const char* names[]={"Health","Magicka","Stamina"};
++  for(unsigned i=0;i<3;++i) {
++    if(InRange(percents[i],1)) {
++      x.percents[x.percentCount++]={names[i],percents[i]};
++      if(p.maxima[i].supported)x.values[x.valueCount++]={names[i],percents[i]*p.maxima[i].value};
++    }
++  }
++  const auto race=cat.records.find(p.race);
++  if(race!=cat.records.end()&&race->second.supported)x.keywords=&race->second.keywords;
++  x.wornKnown=true;x.hands={0.,0.};
++  const auto& equipment=actor.GetEquipment();
++  if(equipment.leftSpell.value_or(0))x.hands[0]=9.;
++  if(equipment.rightSpell.value_or(0))x.hands[1]=9.;
++  for(const auto& entry:equipment.inv.entries) {
++    if(!entry.count||entry.GetWorn()==Inventory::Worn::None)continue;
++    const auto found=cat.records.find(entry.baseId);
++    if(found==cat.records.end()||!found->second.supported){x.wornKnown=false;x.hands={};continue;}
++    const auto& row=found->second;
++    if(row.kind==Record::Kind::Armor&&x.wornCount<x.worn.size())x.worn[x.wornCount++]=&row.keywords;
++    if(row.kind==Record::Kind::Weapon||row.itemType.supported) {
++      const unsigned hand=entry.GetWorn()==Inventory::Worn::Left?0:1;
++      x.hands[hand]=row.itemType.supported?std::optional<double>(row.itemType.value):std::nullopt;
++    }
++  }
++  return x;
++}
++inline uint32_t AnimationOwner(const MpActor& actor) {
++  if(actor.IsCreatedAsPlayer())return actor.GetFormId();
++  const auto* world=actor.GetParent();if(!world)return 0;
++  const auto found=world->hosters.find(actor.GetFormId());return found==world->hosters.end()?0:found->second;
++}
 +struct Sample { uint64_t sequence=0;uint32_t attacker=0,defender=0,source=0;float current=0;Trace trace; };
 +struct Buffer {
 +  static constexpr size_t Capacity=1024;
@@ -3169,6 +3317,12 @@ index 0000000000000000000000000000000000000000..263021f98af8aa1e78b242d607b0667b
 +    Json rows=Json::array();
 +    for(size_t n=0;n<size;++n) {
 +      const auto& s=samples[(next+Capacity-size+n)%Capacity];const auto& t=s.trace;
++      Json rules=Json::array();
++      for(unsigned i=0;i<t.rules.count;++i) {
++        const auto& r=t.rules.steps[i];
++        rules.push_back({{"ruleIndex",r.rule},{"entryPoint",ds5b::EntryNames[static_cast<unsigned>(r.entry)]},
++          {"provenance",r.provenance.data()},{"priority",r.priority},{"defender",r.defender},{"decision",ds5b::DecisionNames[static_cast<unsigned>(r.decision)]},{"before",r.before},{"after",r.after}});
++      }
 +      rows.push_back({{"sequence",s.sequence},{"aggressor",s.attacker},{"target",s.defender},{"source",s.source},
 +        {"family",FamilyNames[static_cast<unsigned>(t.family)]},{"current",s.current},
 +        {"status",t.status==Status::Calculated?"CALCULATED":t.status==Status::Invalid?"INVALID":"UNSUPPORTED"},
@@ -3179,7 +3333,14 @@ index 0000000000000000000000000000000000000000..263021f98af8aa1e78b242d607b0667b
 +        {"blockConfirmed",t.blockConfirmed},{"blockReduction",t.blockReduction},{"globalMultiplier",t.global},{"preDefense",t.preDefense},
 +        {"refinementTier",0},{"q16Contribution",0},{"attackerUnsupportedEffects",t.attackerUnsupportedEffects},
 +        {"defenderUnsupportedEffects",t.defenderUnsupportedEffects},{"q16Reason","ACTIVE_EFFECT_INSTANCE_MAGNITUDE_UNAVAILABLE"},
-+        {"hitIdentity","HOST_RECEIVED_NO_UNIQUENESS_CLAIM"}});
++        {"hitIdentity","HOST_RECEIVED_NO_UNIQUENESS_CLAIM"},
++        {"powerConfirmed",t.powerConfirmed},{"powerFactor",t.powerFactor},{"powerSettingMissing",t.powerSettingMissing},
++        {"bashConfirmed",t.bashConfirmed},{"bashDamage","UNSUPPORTED_NO_CERTIFIED_BASH_FORMULA"},{"sneakBonus",0},
++        {"critical",t.critical},{"criticalChancePercent",t.criticalChance},{"criticalComponent",t.criticalComponent},
++        {"criticalBaseMissing",t.criticalBaseMissing},{"rngState",std::to_string(t.rngState)},{"rngRoll",t.rngRoll},{"rngDraws",t.rngDraws},
++        {"attackerUnsupportedPerks",t.attackerUnsupportedPerks},{"defenderUnsupportedPerks",t.defenderUnsupportedPerks},
++        {"attackerUnsupportedRules",t.attackerUnsupportedRules},{"defenderUnsupportedRules",t.defenderUnsupportedRules},
++        {"rules",rules},{"ruleTraceOverflow",t.rules.overflow},{"rulesUnsupported",t.rules.unsupported},{"rulesApplied",t.rules.applied},{"rulesMissingContext",t.rules.missing}});
 +    }
 +    return {{"capacity",Capacity},{"hits",hits},{"overwritten",hits-size},{"samples",rows}};
 +  }
@@ -3187,7 +3348,7 @@ index 0000000000000000000000000000000000000000..263021f98af8aa1e78b242d607b0667b
 +class Formula final : public IDamageFormula {
 +public:
 +  Formula(std::unique_ptr<IDamageFormula> current,std::shared_ptr<Bridge> bridge,
-+      Settings settings,std::shared_ptr<Buffer> buffer):current(std::move(current)),bridge(std::move(bridge)),settings(settings),buffer(std::move(buffer)) {}
++      Settings settings,std::shared_ptr<Buffer> buffer):current(std::move(current)),bridge(std::move(bridge)),settings(settings),buffer(std::move(buffer)),rng((uint64_t(std::random_device{}())<<32)^std::random_device{}()) {}
 +  Trace Evaluate(const MpActor& attacker,const MpActor& defender,const HitData& hit) const {
 +    Trace t;
 +    const auto fail=[&](Reason reason){t.reason=reason;return t;};
@@ -3213,9 +3374,17 @@ index 0000000000000000000000000000000000000000..263021f98af8aa1e78b242d607b0667b
 +    if((a->player&&attacker.GetUserId()==Networking::InvalidUserId)
 +        ||(d->player&&defender.GetUserId()==Networking::InvalidUserId))return fail(Reason::ProfileAbsent);
 +    t.attackerUnsupportedEffects=a->unsupportedEffects;t.defenderUnsupportedEffects=d->unsupportedEffects;
++    t.attackerUnsupportedPerks=a->perks.unsupported;t.defenderUnsupportedPerks=d->perks.unsupported;
++    t.attackerUnsupportedRules=a->perks.unsupportedRules;t.defenderUnsupportedRules=d->perks.unsupportedRules;
 +    const auto& offense=attacker.GetEquipment().inv.entries;
 +    const auto& defense=defender.GetEquipment().inv.entries;
 +    if(offense.size()>64||defense.size()>64)return fail(Reason::EquipmentCapacity);
++    auto ac=ActorContext(attacker,*a,*cat),dc=ActorContext(defender,*d,*cat);
++    if(weapon&&weapon->kind==Record::Kind::Weapon&&weapon->supported) {ac.keywords=&weapon->keywords;ac.weaponSkill=weapon->skill==Skill::Marksman?"Archery":SkillNames[static_cast<unsigned>(weapon->skill)];}
++    const auto owner=AnimationOwner(attacker);const auto now=std::chrono::steady_clock::now();
++    const auto& evidence=attacker.GetCombatAttackEvidence();
++    t.powerConfirmed=hit.isPowerAttack&&owner&&evidence.Confirm(ds5b::AttackEvidence::Kind::Power,owner,attacker.GetNpcGeneration(),now);
++    t.bashConfirmed=hit.isBashAttack&&owner&&evidence.Confirm(ds5b::AttackEvidence::Kind::Bash,owner,attacker.GetNpcGeneration(),now);
 +    unsigned weaponCount=0,ammoCount=0;
 +    const Inventory::Entry* weaponEntry=nullptr;
 +    NeutralRefinement refinement;
@@ -3259,17 +3428,21 @@ index 0000000000000000000000000000000000000000..263021f98af8aa1e78b242d607b0667b
 +        skill=value.value;
 +      }
 +      // Flat record ENCH DamageResist is preserved once, outside base scaling/Q16.
-+      t.armor+=rec.clothing?rec.base:ArmorPiece(rec.base,skill,cat->scaling,refinement.Tier(&entry));
++      auto pieceContext=dc;pieceContext.keywords=&rec.keywords;
++      const auto rating=rec.clothing?rec.base:ArmorPiece(rec.base,skill,cat->scaling,refinement.Tier(&entry));
++      t.armor+=std::max(0.,ds5b::Apply(d->perks,ds5b::EP::Armor,rating,pieceContext,ac,t.rules,true));
 +      t.recordDamageResist+=rec.damageResist;
 +    }
 +    t.blockConfirmed=hit.isHitBlocked&&defender.IsBlockActive();
 +    if(t.blockConfirmed) {
 +      const auto skill=d->skills[static_cast<unsigned>(Skill::Block)];
 +      if(!skill.supported)return fail(Reason::SkillAbsent);
-+      t.blockReduction=Block(skill.value);
++      t.blockReduction=std::clamp(ds5b::Apply(d->perks,ds5b::EP::Block,.20+.003*skill.value,dc,ac,t.rules,true),0.,.85);
 +    }
 +    t.global=a->player&&d->player?settings.pvp:settings.pve;
 +    Finish(t,cat->scaling,refinement.Tier(weaponEntry),unarmed);
++    if(t.status!=Status::Calculated)return t;
++    FinishPerks(t,a->perks,d->perks,ac,dc,weapon?weapon->criticalBase:Value{},cat->powerBonus,rng);
 +    return t;
 +  }
 +  float CalculateDamage(const MpActor& a,const MpActor& d,const HitData& hit) const override {
@@ -3290,6 +3463,7 @@ index 0000000000000000000000000000000000000000..263021f98af8aa1e78b242d607b0667b
 +  std::shared_ptr<Bridge> bridge;
 +  Settings settings;
 +  std::shared_ptr<Buffer> buffer;
++  mutable ds5b::Rng rng;
 +};
 +inline Json Capabilities(const Settings& settings,const Bridge& bridge) {
 +  Json families=Json::object();
@@ -3298,21 +3472,78 @@ index 0000000000000000000000000000000000000000..263021f98af8aa1e78b242d607b0667b
 +    families[FamilyNames[i]]={{"mode",mode==Mode::Off?"off":mode==Mode::Shadow?"shadow":"active"},
 +      {"owner","NATIVE_SERVER"},{"candidateOwner","AETHERIUS_SERVER"},
 +      {"status",mode==Mode::Shadow&&bridge.catalog?"SHADOW":"UNSUPPORTED"},
-+      {"reason",mode==Mode::Off?"FAMILY_OFF":mode==Mode::Active?"ACTIVE_REQUIRES_DS7":bridge.catalog?"NO_PERKS_DS5A":ReasonName(bridge.catalogReason)}};
++      {"reason",mode==Mode::Off?"FAMILY_OFF":mode==Mode::Active?"ACTIVE_REQUIRES_DS7":bridge.catalog?"CLASS_COMPILED_PERKS_DS5B":ReasonName(bridge.catalogReason)}};
 +  }
 +  return {{"version",1},{"families",families},{"recordDamageResist","PRESERVED_ONCE"},
-+    {"perks","UNSUPPORTED_DS5B"},{"q16","UNSUPPORTED_ZERO_CONTRIBUTION"},
++    {"perks","SUPPORTED_CLASS_COMPILED_ONLY"},{"sneak","DISABLED_Q9"},{"bash","UNSUPPORTED_NO_CERTIFIED_BASH_FORMULA"},{"q16","UNSUPPORTED_ZERO_CONTRIBUTION"},
 +    {"magicOwner","NATIVE_SERVER"},{"procsOwner","NATIVE_CLIENT"},{"deduplication","HOST_COOLDOWNS_ONLY_DS7_PENDING"}};
++}
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/ds5a/NativeRecords.h b/server/cpp/server_guest_lib/aetherius_combat/ds5a/NativeRecords.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..9dd21eab0c5dacc95d738d4c3c3f8acb3a91d243
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/ds5a/NativeRecords.h
+@@ -0,0 +1,50 @@
++#pragma once
++#include "Bridge.h"
++#include "libespm/espm.h"
++#include "libespm/IterateFields.h"
++#include <cstring>
++namespace aetherius::combat::ds5a {
++// Called once by SetCatalog, never by Evaluate. Winners use source-aware links.
++inline void HydrateNative(Catalog& catalog,const espm::CombineBrowser& browser) {
++  auto& cache=browser.GetCache();
++  const auto source=browser.FindSourceByFilename("Skyrim.esm");
++  if(source) {
++    const auto record=browser.LookupById(browser.ToRuntimeFormId(*source,0x031899));
++    if(const auto gmst=espm::Convert<espm::GMST>(record.rec)) {
++      const double value=gmst->GetData(cache).value;
++      if(InRange(value,100))catalog.powerBonus={true,value};
++    }
++  }
++  for(auto& row:catalog.records) {
++    auto& record=row.second;if(!record.supported)continue;
++    if(record.kind==Record::Kind::Armor) {
++      const auto armo=espm::Convert<espm::ARMO>(browser.LookupById(row.first).rec);
++      if(armo) {const auto data=armo->GetData(cache);if(data.equipSlotId)record.itemType={true,10};}
++      continue;
++    }
++    if(record.kind!=Record::Kind::Weapon)continue;
++    uint32_t id=row.first;std::array<uint32_t,32> visited{};size_t count=0;
++    for(;;) {
++      if(count==visited.size()||std::find(visited.begin(),visited.begin()+count,id)!=visited.begin()+count)break;
++      visited[count++]=id;
++      const auto lookup=browser.LookupById(id);const auto weapon=espm::Convert<espm::WEAP>(lookup.rec);
++      if(!weapon)break;
++      uint32_t parent=0;Value critical;
++      espm::IterateFields_(weapon,[&](const char* type,uint32_t size,const char* data) {
++        if(!std::memcmp(type,"CNAM",4)&&size==4)std::memcpy(&parent,data,4);
++        // CRDT starts with the ushort Critical.Damage; verified against exported winners.
++        if(!std::memcmp(type,"CRDT",4)&&size>=2) {uint16_t damage=0;std::memcpy(&damage,data,2);critical={true,double(damage)};}
++      },cache);
++      if(parent){id=lookup.ToGlobalId(parent);continue;} // Q15a: template base, no enchantment magnitude.
++      record.criticalBase=critical;
++      const auto data=weapon->GetData(cache);
++      if(data.weapDNAM) {
++        const auto type=static_cast<unsigned>(data.weapDNAM->animType);
++        // WEAP anim enum 8=staff,9=crossbow; GetEquippedItemType uses 8=staff,12=crossbow.
++        record.itemType={true,double(type==9?12:type)};
++      }
++      break;
++    }
++  }
 +}
 +}
 diff --git a/server/cpp/server_guest_lib/aetherius_combat/ds5a/Physical.h b/server/cpp/server_guest_lib/aetherius_combat/ds5a/Physical.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..17035fb7a24d884fefbf71830e46c6b007976211
+index 0000000000000000000000000000000000000000..2041300b097935389ffc9238881a7166dd9e2a57
 --- /dev/null
 +++ b/server/cpp/server_guest_lib/aetherius_combat/ds5a/Physical.h
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,126 @@
 +#pragma once
-+// DS-5a: bounded, allocation-free arithmetic. No perk evaluator or actor store.
++// DS-5a/DS-5b: bounded arithmetic and compiled rules, without another actor store.
++#include "Rules.h"
 +#include <algorithm>
 +#include <array>
 +#include <cmath>
@@ -3350,6 +3581,9 @@ index 0000000000000000000000000000000000000000..17035fb7a24d884fefbf71830e46c6b0
 +  uint32_t race = 0;
 +  std::array<Value,6> skills{};
 +  uint16_t unsupportedEffects = 0;
++  ds5b::Table perks;
++  std::array<Value,3> maxima{};
++  std::optional<StableFormKey> identity;
 +};
 +struct Trace {
 +  Status status = Status::Unsupported;
@@ -3361,6 +3595,13 @@ index 0000000000000000000000000000000000000000..17035fb7a24d884fefbf71830e46c6b0
 +  double armor = 0, recordDamageResist = 0, armorReduction = 0, blockReduction = 0;
 +  double global = 1, preDefense = 0, candidate = 0;
 +  bool blockConfirmed = false;
++  bool powerConfirmed=false,bashConfirmed=false,critical=false,criticalBaseMissing=false,powerSettingMissing=false;
++  double powerFactor=1,criticalChance=0,criticalComponent=0,normal=0,rngRoll=0;
++  uint64_t rngState=0;
++  unsigned rngDraws=0;
++  ds5b::Audit rules;
++  unsigned attackerUnsupportedPerks=0,defenderUnsupportedPerks=0;
++  unsigned attackerUnsupportedRules=0,defenderUnsupportedRules=0;
 +};
 +// Instance identity is deliberately opaque; production installs tier zero only.
 +class RefinementTierProvider {
@@ -3389,12 +3630,297 @@ index 0000000000000000000000000000000000000000..17035fb7a24d884fefbf71830e46c6b0
 +    t.status=Status::Invalid; t.reason=Reason::NumericInvalid; return false;
 +  }
 +  t.skillFactor=unarmed ? 1 : 1+(g.weaponMax-1)*t.weaponSkill/100;
-+  t.preDefense=(t.weaponBase*RefinementFactor(weaponTier)+t.ammoBase)*t.skillFactor*t.global;
++  t.normal=(t.weaponBase*RefinementFactor(weaponTier)+t.ammoBase)*t.skillFactor;
++  t.preDefense=t.normal*t.global;
 +  t.armorReduction=ArmorCurve(t.armor+t.recordDamageResist);
 +  t.candidate=t.preDefense*(1-t.blockReduction)*(1-t.armorReduction);
 +  if (!InRange(t.candidate)) { t.status=Status::Invalid;t.reason=Reason::NumericInvalid;return false; }
 +  t.status=Status::Calculated;t.reason=Reason::None;return true;
 +}
++// Same arithmetic kernel used by host, native tests and golden tests.
++template<class Random>
++inline void FinishPerks(Trace& t,const ds5b::Table& attackPerks,const ds5b::Table& defensePerks,
++    const ds5b::Context& ac,const ds5b::Context& dc,Value criticalBase,Value powerBonus,Random& rng) {
++    // Explicit entry-point stages. Set/Add operate on that stage's actual value.
++    t.normal=ds5b::Apply(attackPerks,ds5b::EP::Attack,t.normal,ac,dc,t.rules);
++    t.normal=ds5b::Apply(attackPerks,ds5b::EP::Weapon,t.normal,ac,dc,t.rules);
++    if(t.powerConfirmed) {
++      if(powerBonus.supported) {
++        t.powerFactor=ds5b::Apply(attackPerks,ds5b::EP::Power,1+powerBonus.value,ac,dc,t.rules);
++        t.normal*=std::max(0.,t.powerFactor);
++      }else t.powerSettingMissing=true;
++    }
++    ds5b::Apply(attackPerks,ds5b::EP::Sneak,1,ac,dc,t.rules); // Always inactive, even if compiled SUPPORTED.
++    t.criticalChance=std::clamp(ds5b::Apply(attackPerks,ds5b::EP::CritChance,t.criticalChance,ac,dc,t.rules),0.,100.);
++    if(t.criticalChance>0) {
++      if(!criticalBase.supported)t.criticalBaseMissing=true;
++      else {
++        t.rngState=rng.state;t.rngRoll=rng.Next();t.rngDraws=1;t.critical=t.rngRoll<t.criticalChance/100;
++        if(t.critical)t.criticalComponent=std::max(0.,ds5b::Apply(attackPerks,ds5b::EP::CritDamage,criticalBase.value,ac,dc,t.rules));
++      }
++    }
++    t.preDefense=(std::max(0.,t.normal)+t.criticalComponent)*t.global;
++    t.preDefense=std::max(0.,ds5b::Apply(defensePerks,ds5b::EP::Incoming,t.preDefense,dc,ac,t.rules,true));
++    const double rating=std::max(0.,ds5b::Apply(attackPerks,ds5b::EP::TargetArmor,t.armor+t.recordDamageResist,ac,dc,t.rules));
++    t.armorReduction=ArmorCurve(rating);
++    t.candidate=t.preDefense*(1-t.blockReduction)*(1-t.armorReduction);
++    if(t.rules.invalid||!InRange(t.candidate)){t.status=Status::Invalid;t.reason=Reason::NumericInvalid;}
++}
++}
+diff --git a/server/cpp/server_guest_lib/aetherius_combat/ds5a/Rules.h b/server/cpp/server_guest_lib/aetherius_combat/ds5a/Rules.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..e5c75fd2d41788c9ba23336b4ad03af6f2138edc
+--- /dev/null
++++ b/server/cpp/server_guest_lib/aetherius_combat/ds5a/Rules.h
+@@ -0,0 +1,249 @@
++#pragma once
++// DS-5b. Conversion only at publication; evaluation has no JSON, I/O or allocation.
++#include "../forms/StableFormKey.h"
++#include <nlohmann/json.hpp>
++#include <array>
++#include <cmath>
++#include <cstring>
++#include <optional>
++#include <string_view>
++#include <vector>
++
++namespace aetherius::combat::ds5b {
++using Json = nlohmann::json;
++enum class EP : unsigned { Attack, Weapon, Power, Sneak, CritChance, CritDamage, Incoming, TargetArmor, Armor, Block, Count };
++inline constexpr std::array<const char*,10> EntryNames={"ModAttackDamage","CalculateWeaponDamage","ModPowerAttackDamage","ModSneakAttackMult",
++  "CalculateMyCriticalHitChance","CalculateMyCriticalHitDamage","ModIncomingDamage","ModTargetDamageResistance","ModArmorRating","ModPercentBlocked"};
++inline EP Entry(std::string_view name) {
++  for(unsigned i=0;i<EntryNames.size();++i)if(name==EntryNames[i])return static_cast<EP>(i);
++  return EP::Count;
++}
++enum class Decision : unsigned { Applied, False, Missing, Unsupported, Operation, Disabled, Invalid, Order };
++inline constexpr const char* DecisionNames[]={"APPLIED","CONDITION_FALSE","CONDITION_CONTEXT_UNAVAILABLE","PROFILE_RULE_UNSUPPORTED",
++  "OPERATION_OR_AV_UNSUPPORTED","SNEAK_DISABLED_Q9","NUMERIC_INVALID","NONCOMMUTATIVE_PRIORITY_UNCERTIFIED"};
++struct Condition {
++  std::string function, compare, actorValue;
++  std::optional<StableFormKey> key;
++  double expected=0;
++  bool target=false;
++};
++using Clause=std::vector<Condition>;
++using Tab=std::vector<Clause>;
++struct Rule {
++  EP entry=EP::Count;
++  StableFormKey perk;
++  std::string modification,actorValue,sourceKey,reason;
++  double value=0,priority=0;
++  unsigned rank=0,effectIndex=0,index=0;
++  bool supported=false,orderUncertified=false;
++  std::array<char,256> provenance{};
++  std::vector<Tab> tabs;
++};
++struct Table {
++  std::array<std::vector<Rule>,10> rules;
++  std::vector<StableFormKey> perks;
++  bool perksKnown=false;
++  unsigned unsupported=0,unsupportedRules=0;
++};
++struct Number { std::string_view name; double value; };
++struct Context {
++  const std::vector<StableFormKey>* keywords=nullptr;
++  const std::vector<StableFormKey>* perks=nullptr;
++  const StableFormKey* identity=nullptr;
++  std::string_view weaponSkill;
++  std::array<const std::vector<StableFormKey>*,64> worn{};
++  size_t wornCount=0;
++  bool wornKnown=false;
++  std::array<Number,16> values{}, percents{};
++  size_t valueCount=0,percentCount=0;
++  std::array<std::optional<double>,2> hands{}; // Left, Right; absent differs from empty (0)
++  std::optional<double> Value(std::string_view key,bool percent=false) const {
++    const auto& rows=percent?percents:values;const auto count=percent?percentCount:valueCount;
++    // Compiler calls the weapon AV Archery; fixed profile calls it Marksman.
++    if(key=="Archery")key="Marksman";
++    for(size_t i=0;i<count;++i)if(rows[i].name==key&&std::isfinite(rows[i].value))return rows[i].value;
++    return {};
++  }
++};
++inline bool Contains(const std::vector<StableFormKey>& rows,const StableFormKey& key) {
++  return std::find(rows.begin(),rows.end(),key)!=rows.end();
++}
++inline std::optional<double> ConditionValue(const Condition& c,const Context& x) {
++  if(c.function=="HasKeyword")return x.keywords&&c.key?std::optional<double>(Contains(*x.keywords,*c.key)):std::nullopt;
++  if(c.function=="HasPerk")return x.perks&&c.key?std::optional<double>(Contains(*x.perks,*c.key)):std::nullopt;
++  if(c.function=="GetIsID")return x.identity&&c.key?std::optional<double>(*x.identity==*c.key):std::nullopt;
++  if(c.function=="WornHasKeyword"||c.function=="WornApparelHasKeywordCount") {
++    if(!x.wornKnown||!c.key)return {};
++    double count=0;for(size_t i=0;i<x.wornCount;++i)if(Contains(*x.worn[i],*c.key))++count;
++    return c.function=="WornHasKeyword"?double(count>0):count;
++  }
++  if(c.function=="GetEquippedItemType") {
++    if(c.actorValue=="Left")return x.hands[0];if(c.actorValue=="Right")return x.hands[1];return {};
++  }
++  if(c.function=="IsWeaponSkillType")return x.weaponSkill.empty()?std::nullopt:std::optional<double>(x.weaponSkill==c.actorValue);
++  if(c.function=="GetActorValue")return x.Value(c.actorValue);
++  if(c.function=="GetActorValuePercent")return x.Value(c.actorValue,true);
++  return {};
++}
++inline bool Compare(double v,const std::string& op,double expected) {
++  if(op=="EqualTo")return v==expected;if(op=="NotEqualTo")return v!=expected;
++  if(op=="GreaterThan")return v>expected;if(op=="GreaterThanOrEqualTo")return v>=expected;
++  if(op=="LessThan")return v<expected;if(op=="LessThanOrEqualTo")return v<=expected;
++  return false;
++}
++inline Decision Matches(const Rule& rule,const Context* subject,const Context* target) {
++  if(!rule.supported)return Decision::Unsupported;
++  bool failed=false,missing=false;
++  for(const auto& tab:rule.tabs)for(const auto& clause:tab) {
++    bool any=false,unknown=false;
++    for(const auto& c:clause) {
++      const auto* x=c.target?target:subject;
++      const auto value=x?ConditionValue(c,*x):std::nullopt;
++      if(!value||!std::isfinite(*value)){unknown=true;continue;}
++      if(Compare(*value,c.compare,c.expected))any=true;
++    }
++    if(!any){failed=true;missing|=unknown;}
++  }
++  return failed?(missing?Decision::Missing:Decision::False):Decision::Applied;
++}
++struct Step {
++  unsigned rule=0;
++  EP entry=EP::Count;
++  Decision decision=Decision::False;
++  bool defender=false;
++  double before=0,after=0;
++  double priority=0;
++  std::array<char,256> provenance{};
++};
++struct Audit {
++  std::array<Step,48> steps{};
++  unsigned count=0,overflow=0,applied=0,missing=0,unsupported=0;
++  bool invalid=false;
++  void Add(const Rule& rule,Decision decision,double before,double after,bool defender) {
++    if(count<steps.size())steps[count++]={rule.index,rule.entry,decision,defender,before,after,rule.priority,rule.provenance};else ++overflow;
++    applied+=decision==Decision::Applied;missing+=decision==Decision::Missing;
++    unsupported+=decision==Decision::Unsupported||decision==Decision::Operation||decision==Decision::Order;
++    invalid|=decision==Decision::Invalid;
++  }
++};
++// Operations modify the current entry-point value. Uncertified noncommuting groups are withheld at publication.
++inline std::optional<double> Operate(const Rule& r,double current,const Context& subject) {
++  if(r.modification=="Set")return r.value;
++  if(r.modification=="Add")return current+r.value;
++  if(r.modification=="Multiply")return current*r.value;
++  const auto av=subject.Value(r.actorValue);if(!av)return {};
++  if(r.modification=="MultiplyOnePlusAVMult")return current*(1+r.value**av);
++  if(r.modification=="MultiplyAVMult")return current*r.value**av;
++  if(r.modification=="AddAVMult"||r.modification=="AddActorValueMult")return current+r.value**av;
++  return {};
++}
++inline double Apply(const Table& table,EP ep,double value,const Context& subject,const Context& target,Audit& audit,bool defender=false) {
++  for(const auto& rule:table.rules[static_cast<unsigned>(ep)]) {
++    auto decision=ep==EP::Sneak?Decision::Disabled:rule.orderUncertified?Decision::Order:Matches(rule,&subject,&target);
++    const double before=value;
++    if(decision==Decision::Applied) {
++      const auto next=Operate(rule,value,subject);
++      if(!next)decision=Decision::Operation;
++      else if(!std::isfinite(*next)||std::abs(*next)>1e7)decision=Decision::Invalid;
++      else value=*next;
++    }
++    audit.Add(rule,decision,before,value,defender);
++  }
++  return value;
++}
++inline StableFormKey Form(const std::string& value) {
++  const auto split=value.find(':');
++  if(split!=6)throw std::invalid_argument("compiled form key");
++  return StableFormKey::Parse(value.substr(7)+":"+value.substr(0,6));
++}
++inline Rule Convert(const Json& j,const StableFormKey& perk,unsigned index) {
++  Rule r;r.perk=perk;r.index=index;r.entry=Entry(j.at("entryPoint").get<std::string>());
++  r.supported=j.at("status")=="SUPPORTED";r.reason=j.value("reason",std::string{});
++  if(!r.supported)return r; // Never parse partial conditions into a usable rule.
++  r.modification=j.at("modification");r.value=j.at("value");r.priority=j.at("priority");
++  r.actorValue=j.value("actorValue",std::string{});r.rank=j.at("rank");r.effectIndex=j.at("effectIndex");
++  r.sourceKey=j.at("origin").at("sourceKey");
++  const auto provenance=perk.ToString()+"#"+std::to_string(r.effectIndex)+" CLASS:"+r.sourceKey+" "+r.modification;
++  if(provenance.size()>=r.provenance.size())throw std::invalid_argument("rule provenance capacity");
++  std::memcpy(r.provenance.data(),provenance.c_str(),provenance.size()+1);
++  if(!std::isfinite(r.value)||!std::isfinite(r.priority)||!(Form(j.at("perk"))==perk))throw std::invalid_argument("compiled rule identity/value");
++  unsigned conditionCount=0;
++  if(j.at("conditions").size()>16)throw std::invalid_argument("tab capacity");
++  for(const auto& tab:j.at("conditions")) {
++    Tab t;
++    for(const auto& clause:tab.at("clauses")) {
++      if(clause.empty())throw std::invalid_argument("empty clause");
++      Clause cs;
++      for(const auto& row:clause) {
++        if(++conditionCount>256)throw std::invalid_argument("condition capacity");
++        Condition c;c.function=row.at("function");c.compare=row.at("compare");c.expected=row.at("comparisonValue");
++        const auto run=row.at("runOn").get<std::string>();
++        if(run!="Subject"&&run!="Target")r.supported=false;
++        c.target=run=="Target";c.actorValue=row.value("actorValue",std::string{});
++        if(row.contains("parameter"))c.key=Form(row.at("parameter"));
++        constexpr const char* functions[]={"HasKeyword","WornHasKeyword","WornApparelHasKeywordCount","HasPerk","GetIsID",
++          "GetEquippedItemType","IsWeaponSkillType","GetActorValuePercent","GetActorValue"};
++        if(std::find(std::begin(functions),std::end(functions),c.function)==std::end(functions)||!std::isfinite(c.expected))r.supported=false;
++        cs.push_back(std::move(c));
++      }
++      t.push_back(std::move(cs));
++    }
++    r.tabs.push_back(std::move(t));
++  }
++  return r;
++}
++inline Table ConvertPerks(const Json& profile) {
++  Table table;
++  if(!profile.contains("perks")){table.unsupported=1;return table;}
++  const auto& set=profile.at("perks");table.perksKnown=set.at("status")!="UNSUPPORTED";
++  const auto& rows=set.at("value");if(!rows.is_array()||rows.size()>512)throw std::invalid_argument("perk capacity");
++  unsigned index=0;
++  for(const auto& item:rows) {
++    const auto keyText=item.at("stableFormKey").get<std::string>();const auto split=keyText.rfind('|');
++    if(split==std::string::npos)throw std::invalid_argument("profile perk key");
++    const auto key=StableFormKey::Parse(keyText.substr(0,split)+":"+keyText.substr(split+1));
++    // Grant presence is known even when its semantics are unsupported.
++    if(!Contains(table.perks,key))table.perks.push_back(key);
++    if(item.at("status")!="SUPPORTED"||item.at("sourceKind")!="CLASS"||item.at("compiled").is_null()) {
++      ++table.unsupported;
++      const auto& skipped=item.at("compiled");
++      if(skipped.is_object()&&skipped.contains("rules")&&skipped.at("rules").is_array()) {
++        table.unsupportedRules+=static_cast<unsigned>(skipped.at("rules").size());
++        if(table.unsupportedRules>2048)throw std::invalid_argument("unsupported rule capacity");
++      }
++      continue;
++    }
++    const auto& compiled=item.at("compiled");
++    if(!(Form(compiled.at("perk"))==key)||compiled.at("origin").at("sourceKind")!="CLASS"
++      ||compiled.at("origin").at("sourceKey")!=item.at("sourceKey"))throw std::invalid_argument("compiled origin");
++    for(const auto& row:compiled.at("rules")) {
++      if(++index>2048)throw std::invalid_argument("rule capacity");
++      if(row.at("origin")!=compiled.at("origin"))throw std::invalid_argument("rule origin mismatch");
++      Rule rule=Convert(row,key,index);
++      if(rule.rank>=item.at("rank").get<unsigned>())rule.supported=false;
++      if(!rule.supported)++table.unsupportedRules;
++      // A record effect is active once even when two grants confer the same perk.
++      if(rule.entry==EP::Count){++table.unsupported;continue;}
++      auto& dest=table.rules[static_cast<unsigned>(rule.entry)];
++      if(std::any_of(dest.begin(),dest.end(),[&](const Rule& x){return x.perk==key&&x.effectIndex==rule.effectIndex;}))continue;
++      dest.push_back(std::move(rule));
++    }
++  }
++  for(auto& rules:table.rules) {
++    std::stable_sort(rules.begin(),rules.end(),[](const Rule& a,const Rule& b){return a.priority<b.priority;});
++    const auto active=std::count_if(rules.begin(),rules.end(),[](const Rule& r){return r.supported;});
++    const auto noncommutative=std::any_of(rules.begin(),rules.end(),[](const Rule& r){return r.supported
++      &&r.modification!="Multiply"&&r.modification!="MultiplyOnePlusAVMult"&&r.modification!="MultiplyAVMult";});
++    // Engine ordering for noncommuting operations has no certified proof yet.
++    // Do not choose an approximate order: withhold the entire affected group.
++    if(active>1&&noncommutative)for(auto& r:rules)if(r.supported)r.orderUncertified=true;
++  }
++  return table;
++}
++// Server-owned seed/state. One draw per eligible hit; reproducible from trace state.
++struct Rng {
++  uint64_t state;
++  explicit Rng(uint64_t seed):state(seed?seed:1){}
++  double Next() {state^=state<<13;state^=state>>7;state^=state<<17;return double(state>>11)*0x1.0p-53;}
++};
 +}
 diff --git a/unit/CombatProbeTest.h b/unit/CombatProbeTest.h
 new file mode 100644
@@ -4082,6 +4608,178 @@ index 0000000000000000000000000000000000000000..933e0c3dd4435147f7f076056bc25d6b
 +  const auto count=bridge->ProfileCount();ephemeral.reset();check(bridge->ProfileCount()==count-1,"destroyed actor cleaned outside hit");
 +  bridge->Publish(actorA,ownerA,0,"null");check(!bridge->Get(actorA,&attacker),"unbound actor cleared");
 +  std::cout<<"PASS DS-5a "<<total<<" checks profileParses="<<bridge->profileParses<<'\n';
++}
+diff --git a/unit/Ds5bTest.h b/unit/Ds5bTest.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..4de96e35c0aceebafc93aec386aa1cfccedf2cfa
+--- /dev/null
++++ b/unit/Ds5bTest.h
+@@ -0,0 +1,166 @@
++#pragma once
++#include "aetherius_combat/ds5a/Host.h"
++#include "aetherius_combat/ds5a/NativeRecords.h"
++#include "UpdateAnimationMessage.h"
++#include <fstream>
++inline void RunDs5bTests(const std::filesystem::path& manifestPath,const std::filesystem::path& corpusPath) {
++  using namespace aetherius::combat;
++  namespace ds=ds5a;namespace r=ds5b;
++  unsigned checks=0;std::cout<<std::unitbuf;
++  const auto check=[&](bool ok,const char* what){++checks;if(!ok)throw std::runtime_error(std::string("DS5b ")+what);};
++  const auto assertNear=[&](double a,double b,const char* what){check(std::abs(a-b)<1e-6,what);};
++  // Synthetic arithmetic inputs exercise operations, not substitute record data.
++  r::Context ac,dc;ac.values[ac.valueCount++]={"OneHanded",60};ac.values[ac.valueCount++]={"Stamina",60};
++  r::Rule rule;rule.supported=true;rule.entry=r::EP::Attack;rule.value=.01;rule.actorValue="OneHanded";
++  for(const auto& op:std::vector<std::pair<std::string,double>>{{"Set",.01},{"Add",2.01},{"Multiply",.02},{"MultiplyOnePlusAVMult",3.2},{"MultiplyAVMult",1.2},{"AddAVMult",2.6}}) {
++    rule.modification=op.first;assertNear(*r::Operate(rule,2,ac),op.second,"operation");
++  }
++  rule.actorValue="Unknown";check(!r::Operate(rule,2,ac),"missing AV never neutral truth");
++  r::Table ordered;rule.modification="Multiply";rule.value=3;rule.priority=20;rule.index=2;ordered.rules[0].push_back(rule);
++  rule.modification="Add";rule.value=4;rule.priority=10;rule.index=1;ordered.rules[0].push_back(rule);
++  std::stable_sort(ordered.rules[0].begin(),ordered.rules[0].end(),[](const auto& a,const auto& b){return a.priority<b.priority;});
++  r::Audit audit;assertNear(r::Apply(ordered,r::EP::Attack,2,ac,dc,audit),18,"priority and Add exact");
++  rule.modification="Set";rule.value=7;rule.priority=30;ordered.rules[0].push_back(rule);
++  assertNear(r::Apply(ordered,r::EP::Attack,2,ac,dc,audit),7,"Set exact after multiply");
++  rule.modification="Multiply";rule.value=99;rule.supported=false;ordered.rules[0]={rule};
++  assertNear(r::Apply(ordered,r::EP::Attack,2,ac,dc,audit),2,"unsupported never applied");
++  r::Condition condition;condition.function="GetActorValue";condition.actorValue="OneHanded";condition.compare="GreaterThan";condition.expected=50;
++  rule.supported=true;rule.tabs={r::Tab{r::Clause{condition}}};
++  check(r::Matches(rule,&ac,&dc)==r::Decision::Applied,"subject");
++  rule.tabs[0][0][0].target=true;
++  check(r::Matches(rule,&ac,&dc)==r::Decision::Missing,"Target missing");
++  dc.values[dc.valueCount++]={"OneHanded",55};check(r::Matches(rule,&ac,&dc)==r::Decision::Applied,"Target selection");
++  condition.actorValue="absent";condition.target=false;rule.tabs[0][0].push_back(condition);
++  check(r::Matches(rule,&ac,&dc)==r::Decision::Applied,"OR true despite unknown");
++  rule.tabs.push_back(r::Tab{r::Clause{condition}});check(r::Matches(rule,&ac,&dc)==r::Decision::Missing,"tabs AND");
++  r::Rng rng(1234567),replay(1234567);for(int i=0;i<100;++i){const double roll=rng.Next();check(roll>=0&&roll<1&&roll==replay.Next(),"RNG reproducible range");}
++  r::Table critical;rule.tabs.clear();rule.supported=true;rule.entry=r::EP::CritChance;rule.modification="Set";rule.value=100;critical.rules[4]={rule};
++  rule.entry=r::EP::CritDamage;rule.modification="MultiplyOnePlusAVMult";rule.actorValue="OneHanded";rule.value=.05;critical.rules[5]={rule};
++  ds::Trace t;t.weaponBase=20;t.weaponSkill=50;ds::Finish(t,{1.5,1,1.4},0,false);
++  ds::FinishPerks(t,critical,r::Table{},ac,dc,{true,5},{true,1},rng);
++  check(t.critical&&t.rngDraws==1,"one critical draw");assertNear(t.criticalComponent,20,"critical separate component");assertNear(t.candidate,45,"critical plus normal");
++  r::Rng captured(t.rngState);assertNear(captured.Next(),t.rngRoll,"trace replays draw");
++  auto rngBuffer=std::make_shared<ds::Buffer>();rngBuffer->Add({0,1,2,3,0,t});
++  check(rngBuffer->Read().at("samples")[0].at("rngState")==std::to_string(t.rngState),"RNG trace preserves uint64 through JS JSON");
++  ds::Trace noCrit;noCrit.weaponBase=20;ds::Finish(noCrit,{1.5,1,1.4},0,false);const auto state=rng.state;
++  ds::FinishPerks(noCrit,r::Table{},r::Table{},ac,dc,{true,5},{true,1},rng);
++  check(!noCrit.critical&&noCrit.rngDraws==0&&rng.state==state,"no perk no critical");
++  ds::Trace missingBase;missingBase.weaponBase=20;ds::Finish(missingBase,{1.5,1,1.4},0,false);
++  ds::FinishPerks(missingBase,critical,r::Table{},ac,dc,{}, {true,1},rng);check(missingBase.criticalBaseMissing&&missingBase.rngDraws==0,"missing critical record declared");
++  ds::Trace power;power.weaponBase=20;power.powerConfirmed=true;ds::Finish(power,{1.5,1,1.4},0,false);
++  ds::FinishPerks(power,r::Table{},r::Table{},ac,dc,{}, {true,1},rng);assertNear(power.candidate,40,"confirmed power default bonus");
++  ds::Trace zero;zero.weaponBase=20;zero.global=0;ds::Finish(zero,{1.5,1,1.4},0,false);
++  ds::FinishPerks(zero,r::Table{},r::Table{},ac,dc,{}, {true,1},rng);assertNear(zero.candidate,0,"zero global finite");
++  r::AttackEvidence evidence;const auto now=std::chrono::steady_clock::now();
++  evidence.Record("attackPowerStartInPlace",10,2,now);
++  using Kind=r::AttackEvidence::Kind;
++  check(evidence.Confirm(Kind::Power,10,2,now),"confirmed power");
++  check(!evidence.Confirm(Kind::Power,11,2,now)&&!evidence.Confirm(Kind::Power,10,3,now),"hoster/generation invalidation");
++  check(!evidence.Confirm(Kind::Power,10,2,now+std::chrono::seconds(2)),"bounded time");
++  evidence.Record("BFCO_unknown",10,2,now);check(!evidence.Confirm(Kind::Power,10,2,now),"directional ordinary Q7");
++  evidence.Record("bashStart",10,2,now);check(evidence.Confirm(Kind::Bash,10,2,now),"bash evidence only");
++
++  std::ifstream stream(manifestPath);ds::Json manifest;stream>>manifest;
++  std::vector<std::filesystem::path> paths;for(const auto& row:manifest.at("plugins"))paths.push_back(manifestPath.parent_path()/row.at("filename").get<std::string>());
++  espm::Loader loader(paths);PartOne host;host.AttachEspm(&loader);const auto& browser=loader.GetBrowser();
++  auto resolver=[&](const StableFormKey& key){const auto source=browser.FindSourceByFilename(key.plugin.c_str());if(!source)throw std::runtime_error("plugin absent");return browser.ToRuntimeFormId(*source,key.localId);};
++  const auto weaponId=resolver(ds::Key("skyrim.esm|01397E"));
++  ds::Catalog catalog;ds::Record weapon;weapon.kind=ds::Record::Kind::Weapon;weapon.key=ds::Key("skyrim.esm|01397E");weapon.supported=true;
++  weapon.skill=ds::Skill::OneHanded;weapon.base=espm::Convert<espm::WEAP>(browser.LookupById(weaponId).rec)->GetData(browser.GetCache()).weapData->damage;
++  catalog.records.emplace(weaponId,weapon);ds::HydrateNative(catalog,browser);
++  assertNear(catalog.records.at(weaponId).criticalBase.value,2,"CRDT winning export 01397E");check(catalog.records.at(weaponId).criticalBase.supported,"critical exists");
++  assertNear(catalog.records.at(weaponId).itemType.value,2,"dagger equipped type");assertNear(catalog.powerBonus.value,1,"winning power GMST 031899");
++  const auto playerId=host.CreateActor(0,{0,0,0},0,0x3c),npcId=host.CreateActor(0,{0,0,0},0,0x3c);
++  auto& player=host.worldState.GetFormAt<MpActor>(playerId);auto& npc=host.worldState.GetFormAt<MpActor>(npcId);
++  host.serverState.Connect(0,"ds5b-test");host.SetUserActor(0,playerId);host.worldState.hosters[npcId]=playerId;
++  auto send=[&](uint32_t idx,const char* name) {
++    UpdateAnimationMessage msg;msg.idx=idx;msg.data.animEventName=name;SLNet::BitStream packet;
++    PartOne::GetMessageSerializerInstance().Serialize(msg,packet);RawMessageData raw;raw.userId=0;
++    raw.unparsed=packet.GetData();raw.unparsedLength=packet.GetNumberOfBytesUsed();host.GetActionListener().OnUpdateAnimation(raw,msg);
++  };
++  send(npc.GetIdx(),"attackPowerStartInPlace");
++  check(npc.GetCombatAttackEvidence().Confirm(Kind::Power,playerId,npc.GetNpcGeneration(),std::chrono::steady_clock::now()),"hosted NPC accepted ingress");
++  host.worldState.hosters.erase(npcId);send(npc.GetIdx(),"bashStart");
++  check(!npc.GetCombatAttackEvidence().Confirm(Kind::Bash,playerId,npc.GetNpcGeneration(),std::chrono::steady_clock::now()),"non-hoster rejected");
++  send(player.GetIdx(),"attackPowerStartForward");
++  check(player.GetCombatAttackEvidence().Confirm(Kind::Power,playerId,player.GetNpcGeneration(),std::chrono::steady_clock::now()),"own actor accepted ingress");
++
++  std::ifstream corpusStream(corpusPath);ds::Json corpus;corpusStream>>corpus;
++  auto nativeCatalog=std::make_shared<ds::Catalog>(catalog);
++  for(auto pair:std::vector<std::pair<const char*,const char*>>{{"weapon","skyrim.esm|0C5C0F"},{"base","skyrim.esm|01A157"},{"armor","skyrim.esm|0C5C0C"}}) {
++    const auto value=espm::Convert<espm::GMST>(browser.LookupById(resolver(ds::Key(pair.second))).rec)->GetData(browser.GetCache()).value;
++    if(std::string(pair.first)=="weapon")nativeCatalog->scaling.weaponMax=value;
++    else if(std::string(pair.first)=="base")nativeCatalog->scaling.armorBase=value;
++    else nativeCatalog->scaling.armorMax=value;
++  }
++  const auto lookup=browser.LookupById(weaponId);
++  for(auto keyword:lookup.rec->GetKeywordIds(browser.GetCache())) {
++    const auto resolved=browser.ResolveRuntimeFormId(lookup.ToGlobalId(keyword));
++    const auto meta=resolved.source?browser.GetSourceMetadata(*resolved.source):nullptr;
++    check(meta&&resolved.localId,"keyword stable mapping");
++    auto plugin=meta->fileName;std::transform(plugin.begin(),plugin.end(),plugin.begin(),[](unsigned char c){return char(std::tolower(c));});
++    nativeCatalog->records.at(weaponId).keywords.push_back({plugin,*resolved.localId});
++  }
++  const auto defenderId=host.CreateActor(0,{0,0,0},0,0x3c);
++  auto& defender=host.worldState.GetFormAt<MpActor>(defenderId);defender.SetEquipment(Equipment{});
++  Equipment equipment;equipment.inv.entries.push_back(Worn(weaponId));player.SetEquipment(equipment);
++  auto bridge=std::make_shared<ds::Bridge>(resolver);bridge->catalog=nativeCatalog;
++  ds::Json profile={{"version",1},{"revision",1},{"subject",{{"kind","PLAYER"}}},
++    {"race",{{"status","UNSUPPORTED"},{"value",nullptr}}},{"skills",ds::Json::object()},
++    {"effects",ds::Json::object()},{"perks",{{"status","SUPPORTED"},{"value",ds::Json::array()}}}};
++  for(const auto* skill:ds::SkillNames)profile["skills"][skill]={{"status","SUPPORTED"},{"value",50}};
++  for(const auto* effect:{"fortifyOneHandedDamage","fortifyTwoHandedDamage","fortifyArcheryDamage","fortifyUnarmedDamage","fortifyPowerAttacks",
++    "fortifyBashDamage","fortifyArmorRating","fortifyBlock","resistArrowDamage","resistPowerAttackDamage","fortifySneakAttacks"})
++    profile["effects"][effect]={{"status","UNSUPPORTED"},{"value",nullptr}};
++  profile["perks"]["value"].push_back({{"sourceKind","CLASS"},{"sourceKey","golden-test"},{"stableFormKey","skyrim.esm|0BABE4"},
++    {"rank",1},{"status","SUPPORTED"},{"compiled",corpus.at("perks").at("0BABE4:Skyrim.esm")}});
++  auto owner=host.worldState.LookupFormById(playerId),victim=host.worldState.LookupFormById(defenderId);
++  check(bridge->Publish(playerId,owner,1,profile.dump()),"real DS3 compiled projection publication");
++  auto defenderProfile=profile;defenderProfile["subject"]["kind"]="NPC";defenderProfile["perks"]["value"]=ds::Json::array();
++  check(bridge->Publish(defenderId,victim,1,defenderProfile.dump()),"defender projection");
++  const auto parses=bridge->profileParses;
++  auto buffer=std::make_shared<ds::Buffer>();ds::Settings settings;settings.modes.fill(ds::Mode::Shadow);
++  ds::Formula formula(Legacy(),bridge,settings,buffer);
++  HitData hit{};hit.aggressor=playerId;hit.target=defenderId;hit.source=weaponId;
++  const double expected=nativeCatalog->records.at(weaponId).base*1.25*1.5;
++  const auto initial=formula.Evaluate(player,defender,hit);
++  std::cout<<"DS5b first candidate status="<<unsigned(initial.status)<<" reason="<<ds::ReasonName(initial.reason)<<" base="<<initial.weaponBase<<" armor="<<initial.armor<<" candidate="<<initial.candidate<<'\n';
++  check(initial.status==ds::Status::Calculated,"host candidate calculated");
++  assertNear(initial.candidate,expected,"real mastery participates in host hit");check(initial.rules.applied==1,"one weapon rule once");
++  hit.isPowerAttack=true;send(player.GetIdx(),"attackPowerStartForward");
++  const auto confirmed=formula.Evaluate(player,defender,hit);check(confirmed.powerConfirmed,"flag plus accepted animation");
++  assertNear(confirmed.candidate,expected*2,"power with mastery");
++  send(player.GetIdx(),"BFCO_unknown");const auto conventional=formula.Evaluate(player,defender,hit);
++  check(!conventional.powerConfirmed,"forged power flag");assertNear(conventional.candidate,expected,"ordinary damage Q7");
++  hit.isPowerAttack=false;hit.isSneakAttack=true;assertNear(formula.Evaluate(player,defender,hit).candidate,expected,"sneak flag inactive Q9");hit.isSneakAttack=false;
++  check(bridge->profileParses==parses,"hit no profile parse");
++  const auto benchmark=[&](const IDamageFormula& candidate,const char* label) {
++    std::vector<double> times;times.reserve(20001);volatile float sink=0;
++    for(unsigned i=0;i<2000;++i)sink=candidate.CalculateDamage(player,defender,hit);
++    for(unsigned i=0;i<20001;++i){const auto start=std::chrono::steady_clock::now();sink=candidate.CalculateDamage(player,defender,hit);
++      times.push_back(std::chrono::duration<double,std::nano>(std::chrono::steady_clock::now()-start).count());}
++    std::sort(times.begin(),times.end());std::cout<<"BENCH DS5b "<<label<<" median_ns="<<times[10000]<<" p99_ns="<<times[19800]<<" samples=20001 sink="<<sink<<'\n';
++  };
++  auto legacy=Legacy();benchmark(*legacy,"legacy");benchmark(formula,"shadow_with_class_perks");
++  check(buffer->Read().at("samples").back().at("rulesApplied")==1,"bounded trace records rule");
++  profile["revision"]=2;profile["perks"]["value"][0]["status"]="UNSUPPORTED";
++  check(bridge->Publish(playerId,owner,2,profile.dump()),"unsupported profile accepted as explicit absence of semantics");
++  const auto unsupported=formula.Evaluate(player,defender,hit);check(unsupported.attackerUnsupportedPerks==1,"unsupported perk trace count");
++  check(unsupported.attackerUnsupportedRules==2,"all rules of unsupported perk counted");
++  assertNear(unsupported.candidate,expected/1.5,"whole unsupported perk never applied");
++
++  // Deliberately synthetic conflicting operations test the production publication gate.
++  auto conflict=profile;conflict["revision"]=3;conflict["perks"]["value"][0]["status"]="SUPPORTED";
++  auto extra=conflict["perks"]["value"][0]["compiled"]["rules"][0];extra["modification"]="Add";extra["value"]=10;extra["effectIndex"]=99;
++  conflict["perks"]["value"][0]["compiled"]["rules"].push_back(extra);
++  check(bridge->Publish(playerId,owner,3,conflict.dump()),"noncommutative group publication");
++  const auto refused=formula.Evaluate(player,defender,hit);
++  assertNear(refused.candidate,expected/1.5,"uncertified ordering never guessed");check(refused.rules.unsupported==2,"ordering refusal counted per rule");
++  auto duplicate=profile;duplicate["revision"]=4;duplicate["perks"]["value"][0]["status"]="SUPPORTED";
++  duplicate["perks"]["value"].push_back(duplicate["perks"]["value"][0]);
++  check(bridge->Publish(playerId,owner,4,duplicate.dump()),"duplicate grant origins projection");
++  assertNear(formula.Evaluate(player,defender,hit).candidate,expected,"same perk effect once across grants");
++  auto badOrigin=duplicate;badOrigin["revision"]=5;badOrigin["perks"]["value"][0]["compiled"]["rules"][0]["origin"]["sourceKey"]="other-origin";
++  check(!bridge->Publish(playerId,owner,5,badOrigin.dump()),"inconsistent origin invalidates projection");
++  std::cout<<"PASS DS-5b "<<checks<<" checks (operations, conditions, RNG, records, authorized animation ingress)\n";
 +}
 diff --git a/unit/NpcAreaContainerDiffTest.h b/unit/NpcAreaContainerDiffTest.h
 new file mode 100644

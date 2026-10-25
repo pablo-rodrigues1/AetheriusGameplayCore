@@ -162,3 +162,24 @@ O teste G3 mantém a avaliação isolada de `GetActorValue`; não atribui suport
 ## 7. DS-5a — recorte sem perks
 
 O runner agora confere a peça sem mastery e a curva contra ds5a/Physical.h, o mesmo núcleo do host, corrigindo a expectativa +0,4% da ARMOR-02. ARMOR-01 e os demais casos com perks/condições são PENDING com motivo DS-5b, inclusive os que o spike antigo calculava parcialmente. BLOCK-01 contém três amostras: a sem perk continua sendo conferida pelo núcleo novo, mas o caso inteiro fica PENDING pelas outras duas. Nenhum valor esperado foi alterado; somente estado/motivo na fixture. Placar por caso em _work/evidence/DS-5a/golden.log: 3 PASS, 0 FAIL, 33 PENDING. Os testes nativos DS-5a cobrem adicionalmente base+skill, munição, desarmado, ENCH, refino e validação, separados da fixture histórica. A regra antiga de +0,5% para armadura do spike não é usada no consumidor novo.
+
+## 8. DS-5b — núcleo nativo e condições certificadas
+
+A §7 é supersedida para os casos cobertos pela DS-5b: 26 PASS / 0 FAIL / 10 PENDING
+(G1 8/0/1, G2 6/0/9, G3 10/0/0, G4 2/0/0). Runner usa Rules/Physical do mesmo espelho
+compilado no host. As regras vêm de DS5B_GOLDEN_RULES.json, gerado pelo compilador DS-3
+inalterado sobre exports combat-20261024 buscados por formid (hashes das fontes incluídos).
+Não é fixture de produção. Só estado/motivo mudaram na fixture histórica.
+
+G2 exige condições completas e fonte dos AVs: Battle Fatigue e Heavy Armor Fit continuam
+PENDING porque a entrada histórica não fornece equipamento vestido/percentual necessários.
+Condições não certificadas permanecem PENDING. Furtivo permanece desligado Q9. O exemplo
+histórico crítico injeta chance de provider; não existe provider CLASS certificado nesse
+recorte, portanto fica PENDING. O RNG/componente é exercitado por testes nativos sintéticos,
+sem inventar uma chance de classe em produção. G3 testa cada função isolada com positivo,
+negativo e dado ausente; o probe não certifica a regra completa que contém outras condições.
+
+A auditoria recursiva de identidades/origens, o Scaling +0,4%, a curva absoluta, todas as
+amostras de bloqueio e a estabilidade entre hits permanecem verificações obrigatórias.
+--verify-expected-status exige mismatch zero; --fail-on-pending continua falhando por
+projeto enquanto houver pendências. Consulte FONTES_E_DONOS §15 e o relatório DS-5b.
