@@ -1,3 +1,4 @@
+import { deliverCombatCatalog, startNpcCombatProfilePump } from './combat-catalog-bridge.ts';
 import type { FeatureMode } from '../../shared/contracts/src/capabilities.js';
 import type { SessionBinding } from '../../shared/contracts/src/identity.js';
 import { loadDomain } from '../../shared/record-catalog/src/index.ts';
@@ -149,6 +150,7 @@ export function createGameplayCore(host: HostContext) {
   let projection: SpellProjection | undefined;
   let composition: ActorComposition | undefined;
   let combatProfiles: CombatProfileProjectionPort | undefined;
+  let nativeCombat: ReturnType<typeof deliverCombatCatalog> | undefined;
   let standingStones: StandingStoneSystem | undefined;
   let races: RaceSystem | undefined;
   let classes: ClassSystem | undefined;
@@ -199,6 +201,7 @@ export function createGameplayCore(host: HostContext) {
       missing: Object.freeze(missing), proof: Object.freeze(['runtime/tests/runtime.test.mjs', 'runtime/tests/database.test.mjs',
         ...(spec.id === 'standing-stones' ? ['modules/standing-stone-system/tests/provider.test.mjs', 'runtime/tests/standing-stones.test.mjs'] : []),
         ...(spec.id === 'races' ? ['modules/race-system/tests/provider.test.mjs', 'runtime/tests/races.acceptance.mjs'] : [])]),
+      ...(spec.id === 'damage' ? { nativeCombat } : {}),
       ...(spec.id === 'races' ? { ownership: raceOwnership,
         observation: Object.freeze({ source:'mp.get(actorId, appearance).raceId', changeSignal:'onUpdateAppearanceAttempt',
           resultAuthority:'NATIVE_CLIENT', hostMutations:0, limitations:['BASE_NPC_RACE_USED_BY_NATIVE_ADD_SPELL', 'MULTIPLAYER_RESULTS_UNVERIFIED'] }) } : {}),
@@ -279,6 +282,9 @@ export function createGameplayCore(host: HostContext) {
       const adapter = createFileHost(mp, dataDir, BUILD_DOMAINS);
       for (const domain of BUILD_DOMAINS) catalogs.set(domain.domain, loadDomain(domain, adapter));
     } catch { for (const domain of BUILD_DOMAINS) catalogFailures.set(domain.domain, ['Catalog host/files unavailable; check host dataDir and relevant plugin files']); }
+    nativeCombat=deliverCombatCatalog(host.mp,catalogs.get('combat'),catalogs.get('effects'));
+    if(nativeCombat.status==='SUPPORTED')failures.delete('damage');
+    else failures.set('damage',String(nativeCombat.reason));
     const instruction = 'Run npm run migrations:apply -- <absolute-path-to-gamemode-core/pg.js> [schema] from the Core root';
     try {
       if (refusedDevOptions.has('GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV')) throw Object.assign(Error('Development migrations refused'), { code: 'DEV_MIGRATIONS_REFUSED' });
@@ -373,6 +379,8 @@ export function createGameplayCore(host: HostContext) {
       combatProfiles=new CombatProfileProjectionPort({mp:host.mp,
         current:binding=>current()&&actors.isCurrent(binding)&&profileCanPublish(binding),warn});
       scope.add(actors.onUnbound(binding=>combatProfiles?.clear(binding)));
+      if(nativeCombat?.status==='SUPPORTED')startNpcCombatProfilePump(host.mp,scope,actorId=>
+        combatProfiles?.inspectNpc(actorId,catalogs.get('npcs'),catalogs.get('races'),currentNpcPerkLookup()));
     }
     const profileClassData=BUILD_DOMAINS.find(domain=>domain.domain==='classes');
     composition = new ActorComposition({ pool: db.status === 'SUPPORTED' ? pool : undefined,

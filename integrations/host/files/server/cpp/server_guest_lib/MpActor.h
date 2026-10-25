@@ -50,6 +50,18 @@ public:
   espm::ObjectBounds GetBounds() const;
   const std::vector<FormDesc>& GetTemplateChain() const;
   bool IsCreatedAsPlayer() const;
+  // DS-0g: cached observation context; getters do not resolve records on a hit.
+  bool NeedsNpcObservation() const noexcept { return npcObservationNeeded; }
+  bool IsNpcConfirmed() const noexcept { return npcConfirmed; }
+  uint16_t GetNpcLevel() const noexcept { return npcLevel; }
+  uint64_t GetNpcGeneration() const noexcept { return npcGeneration; }
+  const FormDesc& GetNpcTraitsProvider() const noexcept { return npcTraitsProvider; }
+  const FormDesc& GetNpcStatsProvider() const noexcept { return npcStatsProvider; }
+  const char* AdoptNpcObservation(const FormDesc& base, uint32_t level, uint64_t generation,
+    ChangeFormGuard::Mode mode = ChangeFormGuard::Mode::RequestSave);
+  const char* AdoptNpcRaceObservation(const FormDesc& race, uint32_t level, uint64_t generation,
+    uint32_t* candidates = nullptr, ChangeFormGuard::Mode mode = ChangeFormGuard::Mode::RequestSave);
+  std::optional<std::array<float, 18>> GetNpcSkills() const { return GetBaseValues().npcSkills; }
   const ActorValues& GetActorValues() const;
   const ActiveMagicEffectsMap& GetActiveMagicEffects() const;
   int32_t GetProfileId() const;
@@ -128,9 +140,11 @@ public:
   void NetSendChangeValues(
     const ActorValues& actorValues,
     const std::optional<std::vector<espm::ActorValue>>& avFilter);
+  // Aetherius SkyDeath: source = arma/magia do golpe (0 sem origem conhecida).
   void NetSetPercentages(
     const ActorValues& actorValues, MpActor* aggressor,
-    const std::optional<std::vector<espm::ActorValue>>& avFilter);
+    const std::optional<std::vector<espm::ActorValue>>& avFilter,
+    uint32_t source = 0);
 
   std::chrono::steady_clock::time_point GetLastAttributesPercentagesUpdate();
   std::chrono::steady_clock::time_point GetLastHitTime(
@@ -167,6 +181,9 @@ public:
   void SetActorValues(const ActorValues& actorValues);
 
   BaseActorValues GetBaseValues() const; // AETHERIUS DEV-A1
+  // DS-0d: read-only inputs for the probe's bounded maximum cache.
+  const std::string& GetCombatProbeAppearanceDump() const;
+  uint64_t GetCombatProbeMaximumRevision() const noexcept { return aetheriusDevAttributesRevision; }
   BaseActorValues GetMaximumValues() const; // AETHERIUS DEV-A1
   void SetDevAttributes(const std::optional<aetherius::development::Attributes>& attributes); // AETHERIUS DEV-A1
   void SetAttributeBonuses(const std::optional<aetherius::attributes::Bonuses>& bonuses); // AETHERIUS C3d
@@ -195,7 +212,7 @@ public:
   bool GetConsoleCommandsAllowedFlag() const;
   void SetConsoleCommandsAllowedFlag(bool newValue);
 
-  void EquipBestWeapon();
+  void EquipBestWeapon(std::optional<uint32_t> previousNumChanges = std::nullopt);
 
   void AddSpell(uint32_t spellId);
   void RemoveSpell(uint32_t spellId);
@@ -219,6 +236,16 @@ public:
   uint32_t GetPoisonResult() const { return aetheriusPoisonResult; }
   uint32_t GetPoisonUnsupported() const { return aetheriusPoisonUnsupported; }
 private:
+  bool npcObservationNeeded = false, npcConfirmed = false;
+  bool npcObservationRestoreWarned = false;
+  uint16_t npcLevel = 0;
+  uint64_t npcGeneration = 1;
+  FormDesc npcReportedBase, npcTraitsProvider, npcStatsProvider;
+  const char* AdoptNpcObservationChain(const FormDesc& base, const std::vector<FormDesc>& chain,
+    uint32_t level, ChangeFormGuard::Mode mode, const FormDesc* race = nullptr);
+  void RefreshNpcObservationContext();
+  void RestoreNpcObservation();
+  void ResetNpcObservation();
   uint32_t aetheriusPoisonDoseBonus = 0;
   std::optional<aetherius::development::Attributes> aetheriusDevAttributes; // AETHERIUS DEV-A1
   Networking::UserId aetheriusDevAttributesUser = Networking::InvalidUserId; // AETHERIUS DEV-A1

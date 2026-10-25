@@ -19,6 +19,8 @@
 #include "formulas/TES5DamageFormula.h"
 #include "formulas/ShadowDamageFormula.h"
 #include "aetherius_combat/AetheriusDamageFormula.h"
+#include "aetherius_combat/ds5a/Host.h"
+#include "aetherius_combat/CombatProbe.h" // AETHERIUS DS-0b
 #include "gamemode_events/DeathEvent.h"
 #include "libespm/IterateFields.h"
 #include "libespm/espm.h"
@@ -98,6 +100,7 @@ Napi::Object ScampServer::Init(Napi::Env env, Napi::Object exports)
       InstanceMethod("getActorName", &ScampServer::GetActorName),
       InstanceMethod("destroyActor", &ScampServer::DestroyActor),
       InstanceMethod("setRaceMenuOpen", &ScampServer::SetRaceMenuOpen),
+      InstanceMethod("dropItem", &ScampServer::DropItem),
       InstanceMethod("getActorsByProfileId",
                      &ScampServer::GetActorsByProfileId),
       InstanceMethod("setEnabled", &ScampServer::SetEnabled),
@@ -393,27 +396,102 @@ ScampServer::ScampServer(const Napi::CallbackInfo& info)
     const auto combat = serverSettings.find("aetheriusCombat");
     // AETHERIUS D-P1: explicit opt-in, independent of the damage shadow spike.
     partOne->worldState.aetheriusWeaponPoison = combat != serverSettings.end() && combat->value("weaponPoison", false);
-    if (combat != serverSettings.end() && combat->value("shadow", false)) {
-      auto buffer = std::make_shared<ShadowDamageFormula::Buffer>();
-      const auto& configuredRecords = combat->at("physicalRecords");
-      if (!configuredRecords.is_array() || configuredRecords.size() > 4096)
-        throw std::invalid_argument("shadow physicalRecords must be an array of at most 4096 StableFormKeys");
-      std::vector<aetherius::combat::StableFormKey> physicalRecords;
-      for (const auto& key : configuredRecords)
-        physicalRecords.push_back(aetherius::combat::StableFormKey::Parse(key.get<std::string>()));
-      formula = std::make_unique<ShadowDamageFormula>(std::move(formula),
-        std::make_unique<aetherius::combat::AetheriusDamageFormula>(espm->GetBrowser(), physicalRecords),
-        buffer);
-      // Read only on request, outside the hit. Capturing the buffer owns no actors.
-      Value().Set("getAetheriusCombatShadow", Napi::Function::New(Env(),
-        [buffer](const Napi::CallbackInfo& call) -> Napi::Value {
-          return Napi::String::New(call.Env(), buffer->Read().dump());
-        }));
-      logger->info("Aetherius damage shadow enabled: neutral profile, capacity={}",
-        ShadowDamageFormula::kCapacity);
-    }
+    // DS-5a: bridge lifetime follows this host's formula/bindings, never an actor.
+    namespace ds = aetherius::combat::ds5a;
+    const auto dsSettings=ds::ReadSettings(combat==serverSettings.end()?nlohmann::json{}:*combat);
+    std::weak_ptr<PartOne> combatHost=partOne;
+    auto bridge=std::make_shared<ds::Bridge>([combatHost](const aetherius::combat::StableFormKey& key) {
+      const auto owner=combatHost.lock();
+      if(!owner)throw std::invalid_argument("host unavailable");
+      const auto& browser=owner->GetEspm().GetBrowser();
+      const auto file=browser.FindSourceByFilename(key.plugin.c_str());
+      if(!file)throw std::invalid_argument("combat plugin absent");
+      const auto id=browser.ToRuntimeFormId(*file,key.localId);
+      if(!browser.LookupById(id).rec)throw std::invalid_argument("combat record absent");
+      return id;
+    });
+    ds::Bridges()[&partOne->worldState]=bridge;
+    auto dsBuffer=std::make_shared<ds::Buffer>();
+    Value().Set("setAetheriusCombatCatalog",Napi::Function::New(Env(),
+      [bridge](const Napi::CallbackInfo& call)->Napi::Value {
+        if(call.Length()!=1||!call[0].IsString())return Napi::Boolean::New(call.Env(),false);
+        return Napi::Boolean::New(call.Env(),bridge->SetCatalog(call[0].As<Napi::String>().Utf8Value()));
+      }));
+    Value().Set("getAetheriusCombatProfileRequests",Napi::Function::New(Env(),
+      [bridge](const Napi::CallbackInfo& call)->Napi::Value {
+        bridge->Sweep();return Napi::String::New(call.Env(),bridge->TakeRequests().dump());
+      }));
+    Value().Set("getAetheriusCombatCapabilities",Napi::Function::New(Env(),
+      [bridge,dsSettings](const Napi::CallbackInfo& call)->Napi::Value {
+        return Napi::String::New(call.Env(),ds::Capabilities(dsSettings,*bridge).dump());
+      }));
+    Value().Set("getAetheriusCombatShadow",Napi::Function::New(Env(),
+      [bridge,dsBuffer](const Napi::CallbackInfo& call)->Napi::Value {
+        auto result=dsBuffer->Read();result["profileParses"]=bridge->profileParses;
+        result["profileCacheSize"]=bridge->ProfileCount();
+        return Napi::String::New(call.Env(),result.dump());
+      }));
+    if(ds::Enabled(dsSettings))formula=std::make_unique<ds::Formula>(std::move(formula),bridge,dsSettings,dsBuffer);
     partOne->SetDamageFormula(std::move(formula));
+    // AETHERIUS DS-0b: development-only combat probe. Absent or false installs
+    // nothing and registers no function; a non-boolean value is a startup error.
+    aetherius::combat::InstallCombatProbe(nullptr);
+    if (combat != serverSettings.end() && combat->value("probe", false)) {
+      auto probe = std::make_shared<aetherius::combat::CombatProbe>(
+        aetherius::combat::CombatProbeNowMs());
+      aetherius::combat::InstallCombatProbe(probe);
+      // Read only on request, outside the hit; does not empty the buffers.
+      // With a numeric argument: read-only resolution of that enchantmentId
+      // against the load-order winners (SUPPORTED/UNSUPPORTED with reason).
+      std::weak_ptr<PartOne> host = partOne;
+      Value().Set("getAetheriusCombatProbe", Napi::Function::New(Env(),
+        [probe, host](const Napi::CallbackInfo& call) -> Napi::Value {
+          if (call.Length() > 0 && call[0].IsNumber()) {
+            const auto owner = host.lock();
+            const uint32_t id = call[0].As<Napi::Number>().Uint32Value();
+            const auto result = owner && owner->HasEspm()
+              ? aetherius::combat::CombatProbe::ResolveEnchantment(
+                  owner->GetEspm().GetBrowser(),
+                  owner->worldState.GetEspmCache(), id)
+              : nlohmann::json{ { "enchantmentId", id },
+                                { "status", "UNSUPPORTED" },
+                                { "reason", "HOST_ESPM_UNAVAILABLE" } };
+            return Napi::String::New(call.Env(), result.dump());
+          }
+          if (call.Length() > 0 && call[0].IsObject()) {
+            const auto request = call[0].As<Napi::Object>();
+            const auto owner = host.lock();
+            if (request.Has("recordType") && request.Get("recordType").IsNumber() && owner && owner->HasEspm()) {
+              const auto result = aetherius::combat::CombatProbe::ResolveRecordType(
+                owner->GetEspm().GetBrowser(), request.Get("recordType").As<Napi::Number>().Uint32Value());
+              return Napi::String::New(call.Env(), result.dump());
+            }
+            return Napi::String::New(call.Env(), R"({"status":"UNSUPPORTED","reason":"INVALID_TYPE_REQUEST"})");
+          }
+          return Napi::String::New(call.Env(), probe->ReadString());
+        }));
+      logger->warn("Aetherius combat probe ENABLED (aetheriusCombat.probe): "
+                   "DEVELOPMENT ONLY, never on the official server; "
+                   "hits={} animations={} health={} names={}",
+                   aetherius::combat::CombatProbe::kHitCapacity,
+                   aetherius::combat::CombatProbe::kAnimationCapacity,
+                   aetherius::combat::CombatProbe::kHealthCapacity,
+                   aetherius::combat::CombatProbe::kNameCapacity);
+    }
 
+    if (serverSettings.contains("papyrusScriptAllowlist")) {
+      const auto& list = serverSettings.at("papyrusScriptAllowlist");
+      if (!list.is_array() || list.size() > 256)
+        throw std::runtime_error("papyrusScriptAllowlist must be an array of at most 256 script names");
+      auto names = list.get<std::vector<std::string>>();
+      for (const auto& name : names) {
+        if (name.empty() || name.size() > 128 || name.find_first_of("/\\\\") != std::string::npos)
+          throw std::runtime_error("Invalid Papyrus script allowlist name");
+      }
+      partOne->worldState.papyrusScriptAllowlist = std::move(names);
+      logger->info("Explicit Papyrus script allowlist active ({} entries)",
+                   partOne->worldState.papyrusScriptAllowlist->size());
+    }
     partOne->worldState.AttachScriptStorage(
       ScriptStorageFactory::Create(serverSettings));
 
@@ -662,6 +740,33 @@ Napi::Value ScampServer::SetRaceMenuOpen(const Napi::CallbackInfo& info)
   auto open = info[1].As<Napi::Boolean>().operator bool();
   try {
     partOne->SetRaceMenuOpen(formId, open);
+  } catch (std::exception& e) {
+    throw Napi::Error::New(info.Env(), (std::string)e.what());
+  }
+  return info.Env().Undefined();
+}
+
+// Aetherius: mp.dropItem(actorId, baseId, count) — larga itens do inventário do
+// ator no chão, pelo mesmo caminho do drop do inventário nativo
+// (ActionListener::OnDropItem -> MpActor::DropItem). Usado pelo inventário do
+// UI Core, que substitui o InventoryMenu (o cliente só reporta drop com ele aberto).
+Napi::Value ScampServer::DropItem(const Napi::CallbackInfo& info)
+{
+  auto actorId = info[0].As<Napi::Number>().Uint32Value();
+  auto baseId = info[1].As<Napi::Number>().Uint32Value();
+  auto count = info[2].As<Napi::Number>().Int32Value();
+  try {
+    auto& actor = partOne->worldState.GetFormAt<MpActor>(actorId);
+    if (count <= 0 || actor.GetInventory().GetItemCount(baseId) < static_cast<uint32_t>(count)) {
+      throw std::runtime_error("dropItem: invalid count");
+    }
+    if (partOne->worldState.HasKeyword(baseId, "SweetCantDrop")) {
+      throw std::runtime_error("dropItem: item can't be dropped");
+    }
+    Inventory::Entry entry;
+    entry.baseId = baseId;
+    entry.count = static_cast<uint32_t>(count);
+    actor.DropItem(baseId, entry);
   } catch (std::exception& e) {
     throw Napi::Error::New(info.Env(), (std::string)e.what());
   }

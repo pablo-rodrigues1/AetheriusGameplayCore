@@ -3,7 +3,7 @@
   "repository": {
     "name": "aetherius-server",
     "url": "https://github.com/AetheriusRP/aetherius-server.git",
-    "baseline": "340449fae21bb4404439cad0814e60759f944857"
+    "baseline": "6181abf1774c31a4e93206f71b784af5b13f10ae"
   },
   "exclude": [
     "build/",
@@ -68,6 +68,37 @@
       "requiresNativeBuild": true,
       "defaultState": "desligado: aetheriusCombat.shadow ausente ou false em server-settings.json",
       "officialServer": "nao ligar; trilha de dano adiada"
+    },
+    "damage-ds5a": {
+      "title": "Catalogo e perfis nativos; formula fisica sem perks em shadow",
+      "orders": [
+        "DS-5a"
+      ],
+      "requiresNativeBuild": true,
+      "defaultState": "off: aetheriusCombat.families ausente",
+      "officialServer": "shadow apenas; active exige DS-7"
+    },
+    "damage-prerequisites": {
+      "title": "Pre-requisitos aprovados DS-0b a DS-0k-fix4; baseline preservada",
+      "orders": [
+        "DS-0b",
+        "DS-0g",
+        "DS-0i",
+        "DS-0k",
+        "DS-0k-fix4"
+      ],
+      "requiresNativeBuild": true,
+      "defaultState": "observacao e equipamento existentes; probe opt-in",
+      "officialServer": "conferir pareceres das ordens e guia vigente"
+    },
+    "class-ui-existing": {
+      "title": "Dados de classe existentes na baseline local; sem alteracao DS-5a",
+      "orders": [
+        "C3"
+      ],
+      "requiresNativeBuild": false,
+      "defaultState": "preservado",
+      "officialServer": "conferir baseline de UI do mantenedor"
     }
   },
   "featuresWithoutHostFiles": {
@@ -90,12 +121,14 @@
     ],
     "server/cpp/addon/ScampServer.cpp": [
       "damage-shadow",
-      "weapon-poison"
+      "weapon-poison",
+      "damage-ds5a"
     ],
     "server/cpp/addon/property_bindings/PropertyBindingFactory.cpp": [
       "weapon-poison",
       "dev-attributes",
-      "attribute-bonus"
+      "attribute-bonus",
+      "damage-ds5a"
     ],
     "server/cpp/addon/property_bindings/DevAttributesBinding.cpp": [
       "dev-attributes"
@@ -160,7 +193,8 @@
     ],
     "server/cpp/server_guest_lib/aetherius_combat/README.md": [
       "damage-shadow",
-      "weapon-poison"
+      "weapon-poison",
+      "damage-ds5a"
     ],
     "server/cpp/server_guest_lib/aetherius_combat/ShadowStatus.h": [
       "damage-shadow"
@@ -197,7 +231,8 @@
       "weapon-poison",
       "fix-1010",
       "dev-attributes",
-      "attribute-bonus"
+      "attribute-bonus",
+      "damage-ds5a"
     ],
     "unit/DevAttributesTest.h": [
       "dev-attributes",
@@ -218,6 +253,78 @@
     ],
     "server/cpp/addon/property_bindings/AttributeBonusesBinding.h": [
       "attribute-bonus"
+    ],
+    "server/cpp/addon/property_bindings/CombatProfileBinding.h": [
+      "damage-ds5a"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/ds5a/Physical.h": [
+      "damage-ds5a"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/ds5a/Bridge.h": [
+      "damage-ds5a"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/ds5a/Host.h": [
+      "damage-ds5a"
+    ],
+    "unit/Ds5aTest.h": [
+      "damage-ds5a"
+    ],
+    "server/cpp/server_guest_lib/ActionListener.h": [
+      "damage-prerequisites"
+    ],
+    "server/cpp/server_guest_lib/GetBaseActorValues.cpp": [
+      "damage-prerequisites"
+    ],
+    "server/cpp/server_guest_lib/GetBaseActorValues.h": [
+      "damage-prerequisites"
+    ],
+    "server/cpp/server_guest_lib/LeveledListUtils.cpp": [
+      "damage-prerequisites"
+    ],
+    "server/cpp/server_guest_lib/LeveledListUtils.h": [
+      "damage-prerequisites"
+    ],
+    "server/cpp/server_guest_lib/MovementValidation.cpp": [
+      "damage-prerequisites"
+    ],
+    "server/cpp/server_guest_lib/MovementValidation.h": [
+      "damage-prerequisites"
+    ],
+    "server/cpp/server_guest_lib/MpObjectReference.cpp": [
+      "damage-prerequisites"
+    ],
+    "server/gameplay/class-system/ui/js/embedded-data.js": [
+      "class-ui-existing"
+    ],
+    "unit/CMakeLists.txt": [
+      "damage-prerequisites"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/CombatProbe.h": [
+      "damage-prerequisites"
+    ],
+    "server/cpp/server_guest_lib/aetherius_combat/NpcObservation.h": [
+      "damage-prerequisites"
+    ],
+    "unit/CombatProbeTest.h": [
+      "damage-prerequisites"
+    ],
+    "unit/NpcAreaContainerDiffTest.h": [
+      "damage-prerequisites"
+    ],
+    "unit/NpcAreaItemsTest.h": [
+      "damage-prerequisites"
+    ],
+    "unit/NpcEntryInventoryTest.h": [
+      "damage-prerequisites"
+    ],
+    "unit/NpcEquipmentTest.h": [
+      "damage-prerequisites"
+    ],
+    "unit/NpcMovementCorrectionTest.cpp": [
+      "damage-prerequisites"
+    ],
+    "unit/NpcObservationTest.h": [
+      "damage-prerequisites"
     ]
   }
 }

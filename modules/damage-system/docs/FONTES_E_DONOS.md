@@ -370,3 +370,87 @@ O perfil é uma projeção imutável, versionada (version=1) e publicada como um
 Inspeção do perfil NPC compõe por `actorId`, chave normalizada da observação (status, StableFormKey, geração, nível e motivo), identidade e assinatura dos catálogos NPC/race e identidade do lookup de perks. A mesma chave retorna o perfil cacheado sem recompor nem chamar `mp.set`; chave ou fonte diferente recompõe, mas só publica e avança a revisão se o conteúdo mudar. O runtime disponível não expõe callback de saída/destruição de NPC; o cache usa LRU limitado a 2.048 entradas e limpa a propriedade do host ao expulsar a mais antiga. Uma geração/observação nova substitui a entrada desse ator. O cache e a leitura não fazem I/O.
 
 Leitura do perfil consulta somente a propriedade em memória; composição de player usa o snapshot produzido pelo ActorComposition. A troca publica um snapshot completo em um único mp.set, com revisão, para não expor campos de composições diferentes. Isso não prova que um hit consome essa revisão: consumo nativo e garantia no caminho de hit são DS-5.
+
+## 14. DS-5a — pontes nativas e físico sem perks (25/10/2026)
+
+Esta seção supersede o spike neutro S3 como integração de produção e a ausência
+ de consumidor nativo descrita na §13. O spike e os testes históricos ficam preservados.
+A implementação atual vive em aetherius_combat/ds5a/{Physical,Bridge,Host}.h.
+
+**Ponte A:** combat-catalog-bridge.ts prepara os records efetivos do domínio combat
+(Q15a já resolvida pelo catálogo), seus keywords e a contribuição legada de ENCH
+DamageResist. A tabela só usa domínios reconciliados. ARMO com ObjectEffect cujo
+ENCH não está completo no domínio effects fica UNSUPPORTED; não se perde a
+contribuição antiga nem se presume que efeitos omitidos valem zero. A soma vem dos
+carriers ENCH/links MGEF estáveis, sem reinterpretar FormIDs locais de ENCH como
+globais. Nenhum enchantmentId dinâmico do cliente é aceito como magnitude.
+Os GMSTs são lidos dos winners reais pela API bruta do host no boot: fDamagePCSkillMax
+(skyrim.esm|0C5C0F), fArmorRatingBase (skyrim.esm|01A157) e fArmorRatingPCMax
+(skyrim.esm|0C5C0C). Tipo, EDID e DATA float são conferidos; valores não estão
+embutidos na ponte. Identidades confirmadas em houseCARL, instância C:\modOrganizer,
+mesmo epoch e2-771486e30fc46d2a; evidência gmst-winners.jsonl em DS-5a.
+A resolução usa getIdFromDesc e o nativo confere a correspondência da chave.
+setAetheriusCombatCatalog recebe JSON uma vez; após aceito, o catálogo é imutável
+pelo boot do host. Reenvio idêntico é idempotente; alteração exige outro boot.
+Sem tabela ou tabela inicial inválida, o candidato é UNSUPPORTED. Não há JSON no hit.
+
+**Ponte B:** aetheriusCombatProfile tem binding nativo invisível aos clientes.
+Cada publicação converte uma vez por ator/revisão. Repetição idêntica não faz parse;
+mesma revisão com conteúdo diferente ou revisão regressiva invalida o snapshot.
+Há no máximo 4.096 conversões retidas, com referência fraca ao ator. null remove;
+saída de player usa o clear já existente do Core, e atores destruídos são removidos
+na manutenção (publicação, leitura de diagnóstico ou drenagem das solicitações),
+fora do hit. O hit recusa referência expirada, player desconectado e geração NPC
+obsoleta. Não se instala outro ActorCombatState ou store de efeitos.
+
+A propriedade aetheriusNpcObservation agora normaliza a observação privada
+confirmada do host para o contrato DS-4; NPC estático usa sua base real. Não sorteia
+listas, não troca base, não gera/remove NPC (Q13). Solicitações de NPC são guardadas
+num array de até 2.048 ids, drenado pelo Core a cada 250 ms; inspectNpcCombatProfile
+compõe fora do hit com o cache DS-4-fix2. O primeiro hit pode ficar UNSUPPORTED.
+AutoCalcStats, raças fora do domínio races e demais limitações do perfil DS-4
+continuam UNSUPPORTED: esta ponte não inventa skills de NPC.
+
+A fórmula aplica base WEAP (+ AMMO vestido para arco/besta), ou RACE desarmada;
+Scaling de skill pela projeção (Archery do WEAP mapeia ao Marksman do contrato);
+Scaling de ARMO pela skill leve/pesada, curva absoluta Q4, ENCH DamageResist uma vez,
+bloqueio com isHitBlocked && IsBlockActive, G separado PvE/PvP e provider de refino
+neutro. A confirmação de bloqueio só reutiliza o estado já disponível: NÃO certifica
+geometria. Perks, forte, furtivo, bash e crítico não dão bônus ao candidato DS-5a.
+Q16 fica UNSUPPORTED com contribuição zero e máscara por família no trace, mesmo
+que um perfil futuro apresente variável SUPPORTED sem ativação certificada aqui.
+NaN/inf/negativos/limites violados resultam em INVALID, preservando a cadeia atual.
+
+Configuração: aetheriusCombat.families.{melee,ranged,unarmed} = off|shadow|active;
+aetheriusCombat.multipliers.{pve,pvp} = número finito entre 0 e 100 (padrão 1).
+Com todas off, a cadeia TES5 e suas quatro decorações é instalada sem wrapper DS-5a.
+Shadow calcula o candidato e retorna sempre o resultado vigente. active é reconhecido
+mas bloqueado com ACTIVE_REQUIRES_DS7; não existe cutover nesta ordem.
+A chave antiga shadow/physicalRecords é histórica e não liga a DS-5a.
+
+| Família | Owner aplicado | Candidato / estado |
+|---|---|---|
+| melee, ranged, unarmed | NATIVE_SERVER | AETHERIUS_SERVER / SHADOW quando configurada e com tabela válida; perfis/campos são verificados por hit |
+| armadura e bloqueio | mesmo owner do golpe físico | componentes DS-5a; sem geometria certificada |
+| perks, crítico, forte/bash | owner atual preservado | UNSUPPORTED_DS5B no candidato |
+| Q16 | owner atual preservado | UNSUPPORTED_ZERO_CONTRIBUTION |
+| magia | NATIVE_SERVER | cadeia vigente |
+| procs | NATIVE_CLIENT | fora do candidato |
+
+A tabela é conferida no boot pelo Core e exposta em systems.damage.nativeCombat.
+getAetheriusCombatShadow() serializa só sob pedido os últimos 1.024 hits: revisões
+dos dois lados, base, munição, Scaling, armor, ENCH, bloco, G, candidato/status e
+motivo. A sequência é do buffer, nunca identidade do golpe. Sem log, banco,
+arquivo, rede ou parse/alocação de JSON no cálculo do candidato.
+
+**Deduplicação:** resolvido para a DS-5a pelo adendo 1; pendente para a DS-7.
+Permanecem os cooldowns de splash e CanHit do host. Não foi adicionado cache
+heurístico nem id por chamada. HitMessage com id/sequência real é pré-requisito
+ da DS-7; o trace declara HOST_RECEIVED_NO_UNIQUENESS_CLAIM.
+
+Aceites e limitações da execução estão no relatório DS-5a e em _work/evidence/DS-5a.
+O script runtime/tests/ds5a-host.mjs é exclusivo do revisor, com --port e --work-dir
+obrigatórios (recusa 7777, diretório não vazio e build/dist), addon, data-dir,
+actor-base, target-base e weapon como argumentos. Ele usa host compilado real,
+transporte bot nativo e base NPC do export, sem mock de fórmula. Não foi executado
+pelo implementador; não constitui prova em jogo.

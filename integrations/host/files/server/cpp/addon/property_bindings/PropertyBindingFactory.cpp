@@ -6,6 +6,7 @@
 #include "BaseDescBinding.h"
 #include "ConsoleCommandsAllowedBinding.h"
 #include "CustomPropertyBinding.h"
+#include "CombatProfileBinding.h"
 #include "EquipmentBinding.h"
 #include "IdxBinding.h"
 #include "InventoryBinding.h"
@@ -29,6 +30,35 @@
 #include "TemplateChainBinding.h"
 #include "TypeBinding.h"
 #include "WorldOrCellDescBinding.h"
+#include "libespm/espm.h"
+#include <set>
+
+// Server-owned learned abilities. This property deliberately has no setter.
+class LearnedSpellsBinding final : public PropertyBinding
+{
+public:
+  std::string GetPropertyName() const override { return "knownSpells"; }
+  Napi::Value Get(Napi::Env env, ScampServer& server, uint32_t formId) override
+  {
+    auto& world = server.GetPartOne()->worldState;
+    auto& actor = world.GetFormAt<MpActor>(formId);
+    const auto learned = actor.GetSpellList();
+    std::set<uint32_t> spells(learned.begin(), learned.end());
+    const auto npc = world.GetEspm().GetBrowser().LookupById(actor.GetBaseId());
+    const auto npcData = espm::GetData<espm::NPC_>(actor.GetBaseId(), &world);
+    for (const auto raw : npcData.spells) spells.insert(npc.ToGlobalId(raw));
+    // Aetherius: raça do personagem (aparência), não a do NPC base 0x7 de todo
+    // jogador (Nord) — senão todo mundo listava as habilidades raciais Nord.
+    const auto raceId = actor.GetRaceId();
+    const auto race = world.GetEspm().GetBrowser().LookupById(raceId);
+    const auto raceData = espm::GetData<espm::RACE>(raceId, &world);
+    for (const auto raw : raceData.spells) spells.insert(race.ToGlobalId(raw));
+    auto result = Napi::Array::New(env, spells.size());
+    size_t i = 0;
+    for (const auto spell : spells) result.Set(i++, Napi::Number::New(env, spell));
+    return result;
+  }
+};
 
 std::map<std::string, std::shared_ptr<PropertyBinding>>
 PropertyBindingFactory::CreateStandardPropertyBindings()
@@ -39,7 +69,10 @@ PropertyBindingFactory::CreateStandardPropertyBindings()
   result["appearance"] = std::make_shared<AppearanceBinding>();
   result["baseDesc"] = std::make_shared<BaseDescBinding>();
   result["equipment"] = std::make_shared<EquipmentBinding>();
+  result["aetheriusCombatProfile"] = std::make_shared<CombatProfileBinding>();
+  result["aetheriusNpcObservation"] = std::make_shared<CombatNpcObservationBinding>();
   result["inventory"] = std::make_shared<InventoryBinding>();
+  result["knownSpells"] = std::make_shared<LearnedSpellsBinding>();
   result["isDead"] = std::make_shared<IsDeadBinding>();
   result["isDisabled"] = std::make_shared<IsDisabledBinding>();
   result["isOnline"] = std::make_shared<IsOnlineBinding>();

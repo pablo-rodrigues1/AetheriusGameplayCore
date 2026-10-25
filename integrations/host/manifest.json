@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
   "preview": false,
-  "generatedAt": "2026-10-13T02:47:53.495Z",
+  "generatedAt": "2026-10-25T20:28:10.894Z",
   "generatedBy": "integrations/host/make-package.mjs",
   "format": "patch git unificado (arquivos novos incluidos) mais copia integral dos arquivos no estado final",
   "lineEndings": "LF em changes.patch e em files/; sha256 e size calculados sobre o conteudo com CRLF convertido em LF",
   "repository": {
     "name": "aetherius-server",
     "url": "https://github.com/AetheriusRP/aetherius-server.git",
-    "baseline": "340449fae21bb4404439cad0814e60759f944857",
-    "headWhenGenerated": "340449fae21bb4404439cad0814e60759f944857"
+    "baseline": "6181abf1774c31a4e93206f71b784af5b13f10ae",
+    "headWhenGenerated": "6181abf1774c31a4e93206f71b784af5b13f10ae"
   },
   "patch": {
     "path": "changes.patch",
-    "bytes": 180986,
-    "sha256": "7a91b0036e3fbf322a23480bea1cd64323b66cfdd9ced46b59af54ff5cd146d2"
+    "bytes": 310534,
+    "sha256": "d8f4d46c67b4abafc22009906803c7038bbcdeaaae496c2c2f74e36c11eb74aa"
   },
   "excluded": [
     "build/",
@@ -79,6 +79,37 @@
       "requiresNativeBuild": true,
       "defaultState": "desligado: aetheriusCombat.shadow ausente ou false em server-settings.json",
       "officialServer": "nao ligar; trilha de dano adiada"
+    },
+    "damage-ds5a": {
+      "title": "Catalogo e perfis nativos; formula fisica sem perks em shadow",
+      "orders": [
+        "DS-5a"
+      ],
+      "requiresNativeBuild": true,
+      "defaultState": "off: aetheriusCombat.families ausente",
+      "officialServer": "shadow apenas; active exige DS-7"
+    },
+    "damage-prerequisites": {
+      "title": "Pre-requisitos aprovados DS-0b a DS-0k-fix4; baseline preservada",
+      "orders": [
+        "DS-0b",
+        "DS-0g",
+        "DS-0i",
+        "DS-0k",
+        "DS-0k-fix4"
+      ],
+      "requiresNativeBuild": true,
+      "defaultState": "observacao e equipamento existentes; probe opt-in",
+      "officialServer": "conferir pareceres das ordens e guia vigente"
+    },
+    "class-ui-existing": {
+      "title": "Dados de classe existentes na baseline local; sem alteracao DS-5a",
+      "orders": [
+        "C3"
+      ],
+      "requiresNativeBuild": false,
+      "defaultState": "preservado",
+      "officialServer": "conferir baseline de UI do mantenedor"
     }
   },
   "featuresWithoutHostFiles": {
@@ -86,35 +117,57 @@
     "spell-and-perk-projection": "B5a, B5b e B5b-fix1: nenhum arquivo do host foi alterado. O Core usa a API do gamemode que ja existe na base (feiticos pelo host; perks pelo canal de pacote customizado aetherius.gameplay.grants, com a contraparte no pacote do cliente)."
   },
   "counts": {
-    "modified": 12,
-    "added": 28,
+    "modified": 17,
+    "added": 14,
     "removed": 0
   },
   "unclassified": [],
-  "mappedButUnchanged": [],
+  "mappedButUnchanged": [
+    "server/cpp/CMakeLists.txt",
+    "server/cpp/addon/property_bindings/AttributeBonusesBinding.cpp",
+    "server/cpp/addon/property_bindings/AttributeBonusesBinding.h",
+    "server/cpp/addon/property_bindings/DevAttributesBinding.cpp",
+    "server/cpp/addon/property_bindings/DevAttributesBinding.h",
+    "server/cpp/addon/property_bindings/PoisonDoseBinding.cpp",
+    "server/cpp/addon/property_bindings/PoisonDoseBinding.h",
+    "server/cpp/server_guest_lib/ActiveMagicEffectsMap.cpp",
+    "server/cpp/server_guest_lib/ActiveMagicEffectsMap.h",
+    "server/cpp/server_guest_lib/CropRegeneration.cpp",
+    "server/cpp/server_guest_lib/WorldState.h",
+    "server/cpp/server_guest_lib/aetherius_combat/AetheriusDamageFormula.cpp",
+    "server/cpp/server_guest_lib/aetherius_combat/AetheriusDamageFormula.h",
+    "server/cpp/server_guest_lib/aetherius_combat/DevAttributes.cpp",
+    "server/cpp/server_guest_lib/aetherius_combat/DevAttributes.h",
+    "server/cpp/server_guest_lib/aetherius_combat/ShadowStatus.h",
+    "server/cpp/server_guest_lib/aetherius_combat/WeaponPoison.h",
+    "server/cpp/server_guest_lib/aetherius_combat/WeaponPoisonHost.h",
+    "server/cpp/server_guest_lib/aetherius_combat/config/CombatSettings.h",
+    "server/cpp/server_guest_lib/aetherius_combat/context/DamageContext.h",
+    "server/cpp/server_guest_lib/aetherius_combat/debug/CombatTrace.h",
+    "server/cpp/server_guest_lib/aetherius_combat/forms/StableFormKey.h",
+    "server/cpp/server_guest_lib/aetherius_combat/perks/PerkRegistry.h",
+    "server/cpp/server_guest_lib/aetherius_combat/physical/ArmorCurve.h",
+    "server/cpp/server_guest_lib/aetherius_combat/physical/PhysicalDamagePipeline.h",
+    "server/cpp/server_guest_lib/aetherius_combat/state/ActorCombatState.h",
+    "server/cpp/server_guest_lib/formulas/ShadowDamageFormula.h",
+    "server/gamemode/.env.example",
+    "server/gamemode/phase0-basic.js",
+    "unit/DevAttributesTest.h",
+    "unit/WeaponPoisonIntentTest.h",
+    "unit/WeaponPoisonNpcTest.h",
+    "unit/WeaponPoisonTest.h"
+  ],
   "files": [
-    {
-      "path": "server/cpp/CMakeLists.txt",
-      "status": "modified",
-      "features": [
-        "damage-shadow",
-        "attribute-bonus",
-        "dev-attributes",
-        "weapon-poison",
-        "fix-1010"
-      ],
-      "size": 5957,
-      "sha256": "a40215ab163cef414f924048498b58e95bcf0300157341c1163241524b38e8d2"
-    },
     {
       "path": "server/cpp/addon/ScampServer.cpp",
       "status": "modified",
       "features": [
         "damage-shadow",
-        "weapon-poison"
+        "weapon-poison",
+        "damage-ds5a"
       ],
-      "size": 64619,
-      "sha256": "ff6692b2939071bf69b111f4ed91f573cf7b67ad9efab9c1912b387ba8a0b878"
+      "size": 70587,
+      "sha256": "ed44b33a9d4fe02315a9aac3f9d2a617af695dd7cfbeee5a0faf6242e56e9e6c"
     },
     {
       "path": "server/cpp/addon/property_bindings/PropertyBindingFactory.cpp",
@@ -122,10 +175,11 @@
       "features": [
         "weapon-poison",
         "dev-attributes",
-        "attribute-bonus"
+        "attribute-bonus",
+        "damage-ds5a"
       ],
-      "size": 3509,
-      "sha256": "90e5fcea654b40baee694fc7a4163ca35c079fbbbbcb7df21880b38f3bd52604"
+      "size": 5183,
+      "sha256": "905d9ce488d3315750fa632cdfcaf4791cebdd24bf4d40a9fcc4991d00f73bcd"
     },
     {
       "path": "server/cpp/server_guest_lib/ActionListener.cpp",
@@ -136,36 +190,71 @@
         "dev-attributes",
         "attribute-bonus"
       ],
-      "size": 49296,
-      "sha256": "494ed5dd412c3cd2ef769c6d8b420301132c38431e71be5fa6808135dbe97299"
+      "size": 70607,
+      "sha256": "52e984cd8c92913fca40c292de7db71cf26b6f231e8621e2b9ec389e5dcdb637"
     },
     {
-      "path": "server/cpp/server_guest_lib/ActiveMagicEffectsMap.cpp",
+      "path": "server/cpp/server_guest_lib/ActionListener.h",
       "status": "modified",
       "features": [
-        "weapon-poison"
+        "damage-prerequisites"
       ],
-      "size": 3069,
-      "sha256": "c945321f37fb1c912aedb4feb6342c8e8b426ad425e6c850d978a505d9ca47c9"
+      "size": 4472,
+      "sha256": "de20702a05b9312bc7fc1556b659ee4088346b5bd697f094d8a19b4c308dfd64"
     },
     {
-      "path": "server/cpp/server_guest_lib/ActiveMagicEffectsMap.h",
+      "path": "server/cpp/server_guest_lib/GetBaseActorValues.cpp",
       "status": "modified",
       "features": [
-        "weapon-poison"
+        "damage-prerequisites"
       ],
-      "size": 1178,
-      "sha256": "31fad3c18850b79f779a8c517be718e6726bccdcd7059003984df8d5bf651030"
+      "size": 5794,
+      "sha256": "44530ed1a2c92b1aa8aa8f1941d5a57ebab1f6182cdc424814dc860bc6c899d5"
     },
     {
-      "path": "server/cpp/server_guest_lib/CropRegeneration.cpp",
+      "path": "server/cpp/server_guest_lib/GetBaseActorValues.h",
       "status": "modified",
       "features": [
-        "dev-attributes",
-        "attribute-bonus"
+        "damage-prerequisites"
       ],
-      "size": 4709,
-      "sha256": "4261d5481a36253d4fa3242b4d624940a60e00dc4603e2f2126d19556c1a5a59"
+      "size": 855,
+      "sha256": "918bbf07e0fcf566b714fb16044ca535b022dc1fd4b4ee9bda1351bcc035a55a"
+    },
+    {
+      "path": "server/cpp/server_guest_lib/LeveledListUtils.cpp",
+      "status": "modified",
+      "features": [
+        "damage-prerequisites"
+      ],
+      "size": 12510,
+      "sha256": "7f8396535f23d3822ad31c4c5803960d5eb9beaf6f1656bef51de648b1ab9368"
+    },
+    {
+      "path": "server/cpp/server_guest_lib/LeveledListUtils.h",
+      "status": "modified",
+      "features": [
+        "damage-prerequisites"
+      ],
+      "size": 2487,
+      "sha256": "aabf88d59d4f4fb0665f2e41bf6096b8d738c3f72d361d36fac82463d0af28f3"
+    },
+    {
+      "path": "server/cpp/server_guest_lib/MovementValidation.cpp",
+      "status": "modified",
+      "features": [
+        "damage-prerequisites"
+      ],
+      "size": 5107,
+      "sha256": "63c16db5cd489a3e3a94a9fe39186f5ed635bb48873873da36388fb4d8ec04b8"
+    },
+    {
+      "path": "server/cpp/server_guest_lib/MovementValidation.h",
+      "status": "modified",
+      "features": [
+        "damage-prerequisites"
+      ],
+      "size": 1275,
+      "sha256": "18dff72af823854692f5db05fae6efe76dfea3d1fe2365c0defc49702996fd20"
     },
     {
       "path": "server/cpp/server_guest_lib/MpActor.cpp",
@@ -175,8 +264,8 @@
         "dev-attributes",
         "attribute-bonus"
       ],
-      "size": 63856,
-      "sha256": "9e60fe1eaf70abd79ad7cecb9a86fa6bc58659d1af84b4ece00c785e483be937"
+      "size": 79156,
+      "sha256": "a708b946248b94d89a76028dab8d26df1b50f5318c664701450b85bcb9829e8a"
     },
     {
       "path": "server/cpp/server_guest_lib/MpActor.h",
@@ -186,296 +275,186 @@
         "dev-attributes",
         "attribute-bonus"
       ],
-      "size": 10557,
-      "sha256": "42a307ca3eb1049aca47b0b1d905c1c3e6cac45c401b37eb17abdef2491e419a"
+      "size": 12433,
+      "sha256": "04bc0228c2899e7e544e4ae12089810f82d729e477fe9d59895d44793f779988"
     },
     {
-      "path": "server/cpp/server_guest_lib/WorldState.h",
+      "path": "server/cpp/server_guest_lib/MpObjectReference.cpp",
       "status": "modified",
       "features": [
-        "weapon-poison"
+        "damage-prerequisites"
       ],
-      "size": 10785,
-      "sha256": "8ad5a94fdc872f214439f1521b0037f7ace80d9cbc91c7f5faa6ccd9b0ae08b7"
-    },
-    {
-      "path": "server/gamemode/.env.example",
-      "status": "modified",
-      "features": [
-        "core-loader"
-      ],
-      "size": 5517,
-      "sha256": "7bd6729743a367e0bce4d9af67430936c060ff79b1ea2091539dab157997ebd2"
-    },
-    {
-      "path": "server/gamemode/phase0-basic.js",
-      "status": "modified",
-      "features": [
-        "core-loader"
-      ],
-      "size": 17037,
-      "sha256": "7050895334e5165a398d07d3a93cd2acd82695b91ecf9884b8f09bf09b20f885"
-    },
-    {
-      "path": "server/cpp/addon/property_bindings/AttributeBonusesBinding.cpp",
-      "status": "added",
-      "features": [
-        "attribute-bonus"
-      ],
-      "size": 1987,
-      "sha256": "70e47f5c67b36dbd23aec2bafc2a0c197af2fc381cf9d74386a4f24032b599ab"
-    },
-    {
-      "path": "server/cpp/addon/property_bindings/AttributeBonusesBinding.h",
-      "status": "added",
-      "features": [
-        "attribute-bonus"
-      ],
-      "size": 440,
-      "sha256": "9fe2a6e9910d82891bf0f6786ed61776da35fa8a7d52bc84431ffb0336291b33"
-    },
-    {
-      "path": "server/cpp/addon/property_bindings/DevAttributesBinding.cpp",
-      "status": "added",
-      "features": [
-        "dev-attributes"
-      ],
-      "size": 1685,
-      "sha256": "099b323f77d3557cac5a75501efa3d7c560eb8b0b98c10e394947e2c8e8f3587"
-    },
-    {
-      "path": "server/cpp/addon/property_bindings/DevAttributesBinding.h",
-      "status": "added",
-      "features": [
-        "dev-attributes"
-      ],
-      "size": 436,
-      "sha256": "46613ed71a86da16e91340c46b28bbab2851cae1490f9a28c45453317d388518"
-    },
-    {
-      "path": "server/cpp/addon/property_bindings/PoisonDoseBinding.cpp",
-      "status": "added",
-      "features": [
-        "weapon-poison"
-      ],
-      "size": 2339,
-      "sha256": "deeadde85c6f1b790a681c6adf2ecf9e67dfbde3cde69db44d0eb02050f01ff6"
-    },
-    {
-      "path": "server/cpp/addon/property_bindings/PoisonDoseBinding.h",
-      "status": "added",
-      "features": [
-        "weapon-poison"
-      ],
-      "size": 977,
-      "sha256": "2f63a93b620ae7e8c66522a3931498deac395d0099e01a1cf9df442798daec30"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/AetheriusDamageFormula.cpp",
-      "status": "added",
-      "features": [
-        "damage-shadow"
-      ],
-      "size": 4909,
-      "sha256": "dce06a1a91d76107ad1665216585aff71ae34973fdf809a2dd76bc65bb903b37"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/AetheriusDamageFormula.h",
-      "status": "added",
-      "features": [
-        "damage-shadow"
-      ],
-      "size": 1166,
-      "sha256": "e0ae136308055c844f37df81da2e61c2c6eb2593c81bdc7eb0921b88c2247269"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/DevAttributes.cpp",
-      "status": "added",
-      "features": [
-        "dev-attributes",
-        "attribute-bonus"
-      ],
-      "size": 3752,
-      "sha256": "1c9b65de19879d6902245d66a1bff26c2f528cd5ff0d78cce5b071e6df332ed3"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/DevAttributes.h",
-      "status": "added",
-      "features": [
-        "dev-attributes",
-        "attribute-bonus"
-      ],
-      "size": 1356,
-      "sha256": "cf49915eccb2eaa9c4234f6fcc4322f3eee028df3192cc78156c34465187ab52"
+      "size": 66374,
+      "sha256": "4bda6f93b27ea56f93325156cbf02511e36d434aaaff481671c49633bc98184f"
     },
     {
       "path": "server/cpp/server_guest_lib/aetherius_combat/README.md",
-      "status": "added",
+      "status": "modified",
       "features": [
         "damage-shadow",
-        "weapon-poison"
+        "weapon-poison",
+        "damage-ds5a"
       ],
-      "size": 6674,
-      "sha256": "13315cb008e657c5e76db4e54c1c658137ed3ab5e2f713d1cf8683670e31ebff"
+      "size": 9563,
+      "sha256": "50c50a85f6b0414cae291827c66a00168adcc6bda19919b8b5e215f7615a6934"
     },
     {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/ShadowStatus.h",
-      "status": "added",
+      "path": "server/gameplay/class-system/ui/js/embedded-data.js",
+      "status": "modified",
       "features": [
-        "damage-shadow"
+        "class-ui-existing"
       ],
-      "size": 498,
-      "sha256": "cffe06451b5cba4204cdbcdf76e5eac46aedc3622eb25108540f7b47a492738c"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/WeaponPoison.h",
-      "status": "added",
-      "features": [
-        "weapon-poison"
-      ],
-      "size": 5953,
-      "sha256": "0bba6b7886e039282eae1e3bc7f999af152391f2309974f8d79817805d7cbc26"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/WeaponPoisonHost.h",
-      "status": "added",
-      "features": [
-        "weapon-poison"
-      ],
-      "size": 17055,
-      "sha256": "4fa1ffb03ae028ff4c34e4a8c4ac9d2c0624bc7348da7c4a45733f41c523abad"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/config/CombatSettings.h",
-      "status": "added",
-      "features": [
-        "damage-shadow"
-      ],
-      "size": 3297,
-      "sha256": "e814754a310d6daf673a2a7903ff6be8f97b8c554877ffeef6dc092d6a28872f"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/context/DamageContext.h",
-      "status": "added",
-      "features": [
-        "damage-shadow"
-      ],
-      "size": 1410,
-      "sha256": "bdc8d170e7f32e66636842095623de8ec96b5eaabffdf8b0e558af577aa8362c"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/debug/CombatTrace.h",
-      "status": "added",
-      "features": [
-        "damage-shadow"
-      ],
-      "size": 514,
-      "sha256": "380d4aec44bac6f09fd492985f733316db5f2684dc3f4487147762658ce1a3b8"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/forms/StableFormKey.h",
-      "status": "added",
-      "features": [
-        "damage-shadow"
-      ],
-      "size": 1739,
-      "sha256": "6b41005c3791509074ed87436b41fe1504bd1f40ba1e27084ba00b9f8950cefd"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/perks/PerkRegistry.h",
-      "status": "added",
-      "features": [
-        "damage-shadow"
-      ],
-      "size": 3865,
-      "sha256": "362aa7f22ac973301fb947ed19c2a16c550a9557cf49af9525b8d8b6e7e572c9"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/physical/ArmorCurve.h",
-      "status": "added",
-      "features": [
-        "damage-shadow"
-      ],
-      "size": 509,
-      "sha256": "79da51c37f44df4cb45a0d00ff91fe9b12e54e995ede78ae1b2c54c14be65596"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/physical/PhysicalDamagePipeline.h",
-      "status": "added",
-      "features": [
-        "damage-shadow"
-      ],
-      "size": 2639,
-      "sha256": "bf50fe30d1a225680d4fee3a9d8ec7536c8ffbb2fe7e35a3e3320f336318b1de"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/aetherius_combat/state/ActorCombatState.h",
-      "status": "added",
-      "features": [
-        "damage-shadow"
-      ],
-      "size": 3501,
-      "sha256": "affeb64dd618e213c2c2e11b8a2b0b2651b7b8bce5493e93a9b40a9f6711c055"
-    },
-    {
-      "path": "server/cpp/server_guest_lib/formulas/ShadowDamageFormula.h",
-      "status": "added",
-      "features": [
-        "damage-shadow"
-      ],
-      "size": 3979,
-      "sha256": "56f5b4ab11778f0fa46f5a92d5ff34164187c304f9775dbdd4705a5d68835bfe"
+      "size": 168674,
+      "sha256": "a6776bf481735865d8dbc4d2d0606da64b4241ee9a16f2a572af9477f1cc1352"
     },
     {
       "path": "unit/AetheriusShadowTest.cpp",
-      "status": "added",
+      "status": "modified",
       "features": [
         "damage-shadow",
         "weapon-poison",
         "fix-1010",
         "dev-attributes",
-        "attribute-bonus"
+        "attribute-bonus",
+        "damage-ds5a"
       ],
-      "size": 15530,
-      "sha256": "899c60284c3f4d243d9160888a9f7d83b49eef5a31dbd6db04001deeea194cf5"
+      "size": 17278,
+      "sha256": "691294924fe59acdbc91a63fda2144b97f68a242eaf91033820f6f423ba5e557"
     },
     {
-      "path": "unit/DevAttributesTest.h",
-      "status": "added",
+      "path": "unit/CMakeLists.txt",
+      "status": "modified",
       "features": [
-        "dev-attributes",
-        "attribute-bonus"
+        "damage-prerequisites"
       ],
-      "size": 14499,
-      "sha256": "4dccefd5e617b5e78a7978bcaf13f9d606edf9124c912714f108324700210887"
+      "size": 3226,
+      "sha256": "af38800272294197e3535d05aed6054b73d0f91dc4a206f2a896c9752de7eb60"
     },
     {
-      "path": "unit/WeaponPoisonIntentTest.h",
+      "path": "server/cpp/addon/property_bindings/CombatProfileBinding.h",
       "status": "added",
       "features": [
-        "weapon-poison"
+        "damage-ds5a"
       ],
-      "size": 4712,
-      "sha256": "3733efd220a73dc32d5b60c8543f7353f78dc1d1426c24daed8974d8cc2d3ab0"
+      "size": 3145,
+      "sha256": "d83a68026f4c8dca68f047b9e48729d41220be011ab3ffea2ebbf5647bfb63b9"
     },
     {
-      "path": "unit/WeaponPoisonNpcTest.h",
+      "path": "server/cpp/server_guest_lib/aetherius_combat/CombatProbe.h",
       "status": "added",
       "features": [
-        "weapon-poison",
-        "fix-1010"
+        "damage-prerequisites"
       ],
-      "size": 13554,
-      "sha256": "acca0d753928056de1fff3052041d29db8f04921a5a8b966c4d811c48214e654"
+      "size": 50475,
+      "sha256": "69bbb2b3203a44e2bc66fd672f70bf4a5e3313dfc69cdfd8d609b214699d975e"
     },
     {
-      "path": "unit/WeaponPoisonTest.h",
+      "path": "server/cpp/server_guest_lib/aetherius_combat/NpcObservation.h",
       "status": "added",
       "features": [
-        "weapon-poison"
+        "damage-prerequisites"
       ],
-      "size": 28641,
-      "sha256": "ee1e2b9acaa99d20011f6eb53804ede7ae2a145b6ee6a91da712ccb880fd6771"
+      "size": 7420,
+      "sha256": "f9ea2899f3ae30bf62482e19e8b9c9aef861a944bee5fe8fa82ddb94e4243a43"
+    },
+    {
+      "path": "server/cpp/server_guest_lib/aetherius_combat/ds5a/Bridge.h",
+      "status": "added",
+      "features": [
+        "damage-ds5a"
+      ],
+      "size": 8141,
+      "sha256": "d9245b2ca9853c03723abd578de1dc1d10fe6636884d84aeede9d3ee0c263659"
+    },
+    {
+      "path": "server/cpp/server_guest_lib/aetherius_combat/ds5a/Host.h",
+      "status": "added",
+      "features": [
+        "damage-ds5a"
+      ],
+      "size": 10342,
+      "sha256": "2e501de118ed504e02efc20f8664aa87519508595b920514b5d6527b617d89af"
+    },
+    {
+      "path": "server/cpp/server_guest_lib/aetherius_combat/ds5a/Physical.h",
+      "status": "added",
+      "features": [
+        "damage-ds5a"
+      ],
+      "size": 4281,
+      "sha256": "caaa49f6389daa7020ce20bd0e171859ce1ca513dda926a657bb351d66860d98"
+    },
+    {
+      "path": "unit/CombatProbeTest.h",
+      "status": "added",
+      "features": [
+        "damage-prerequisites"
+      ],
+      "size": 31581,
+      "sha256": "47d2639f210359787c3e25f3e844398420f997201367361abebee2408b4f70f3"
+    },
+    {
+      "path": "unit/Ds5aTest.h",
+      "status": "added",
+      "features": [
+        "damage-ds5a"
+      ],
+      "size": 13478,
+      "sha256": "82bc611352cc7a7ca34a18114c438bb449d992ee3995b63d37e804294f237e2f"
+    },
+    {
+      "path": "unit/NpcAreaContainerDiffTest.h",
+      "status": "added",
+      "features": [
+        "damage-prerequisites"
+      ],
+      "size": 6621,
+      "sha256": "740d452a7d34d7f70d2dae1cb2d53f9716e961228c4b1c06bdc68c40a30f1201"
+    },
+    {
+      "path": "unit/NpcAreaItemsTest.h",
+      "status": "added",
+      "features": [
+        "damage-prerequisites"
+      ],
+      "size": 11400,
+      "sha256": "9332ab42ce2c44941e0c16ae2614984e25a3cc8b6be61201600e5f66c8f3de49"
+    },
+    {
+      "path": "unit/NpcEntryInventoryTest.h",
+      "status": "added",
+      "features": [
+        "damage-prerequisites"
+      ],
+      "size": 14701,
+      "sha256": "3dfc03e09c4f0232c1de8ab65ab459615718a77fc586f45879781bf3c479cb83"
+    },
+    {
+      "path": "unit/NpcEquipmentTest.h",
+      "status": "added",
+      "features": [
+        "damage-prerequisites"
+      ],
+      "size": 11476,
+      "sha256": "dbe4eb75b8d5f9ea75d629f15b4b0daf00dc3edbfb05180a321fede82b0b8984"
+    },
+    {
+      "path": "unit/NpcMovementCorrectionTest.cpp",
+      "status": "added",
+      "features": [
+        "damage-prerequisites"
+      ],
+      "size": 10351,
+      "sha256": "91139c71e102dfed30d41ea96b3e76a426343d7ba4e20281fb3d176d58be1000"
+    },
+    {
+      "path": "unit/NpcObservationTest.h",
+      "status": "added",
+      "features": [
+        "damage-prerequisites"
+      ],
+      "size": 34856,
+      "sha256": "f94258ad5af4e70f5f8b66beec33e2143d48c548b9f5c3209a7ffd37953faefb"
     }
   ]
 }

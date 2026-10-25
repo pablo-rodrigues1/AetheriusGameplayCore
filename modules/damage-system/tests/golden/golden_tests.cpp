@@ -1,4 +1,5 @@
 #include "aetherius_combat/physical/PhysicalDamagePipeline.h"
+#include "aetherius_combat/ds5a/Physical.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -853,7 +854,28 @@ int main(int argc, char** argv) {
     std::vector<CaseResult> results;
     for (const auto& tc : fixture.at("cases")) {
       const std::string kind = tc.at("kind").get<std::string>();
-      if (kind == "physical_damage") {
+      // DS-5a executes only the perk-free slice against the installed kernel.
+      namespace ds = aetherius::combat::ds5a;
+      if (tc.value("statusReason","")=="DS-5b") {
+        CaseResult pending;pending.id=tc.at("id");pending.group=tc.at("group");pending.kind=kind;
+        pending.expectedStatus="PENDING";pending.outcome=CaseOutcome::Pending;pending.detail="DS-5b";pending.origin=tc.value("origin","");
+        // BLOCK-01 contains one perk-free sample: check it even though the full case is pending.
+        if(kind=="block_reduction")for(const auto& sample:tc.at("input").at("samples")) {
+          if(sample.at("perks").empty() && !Near(ds::Block(sample.at("blockSkill")),sample.at("expectedReduction"),1e-6)) {
+            pending.outcome=CaseOutcome::Failed;pending.detail="perk-free block sample failed";
+          }
+        }
+        results.push_back(pending);
+      } else if (kind == "armor_piece") {
+        const auto& input=tc.at("input");const double value=ds::ArmorPiece(input.at("baseArmor"),input.at("actorSkills").at(input.at("skill").get<std::string>()),{1.5,1,1.4});
+        CaseResult r;r.id=tc.at("id");r.group=tc.at("group");r.kind=kind;r.expectedStatus=tc.at("expectedStatus");r.origin=tc.value("origin","");
+        r.outcome=Near(value,tc.at("expected").at("armorRating"),1e-6)?CaseOutcome::Passed:CaseOutcome::Failed;
+        r.detail="DS-5a kernel rating="+std::to_string(value);results.push_back(r);
+      } else if(kind=="armor_curve_table") {
+        auto r=EvaluateArmorCurveTableCase(tc,settings,perks);
+        for(const auto& point:tc.at("input").at("points"))if(!Near(ds::ArmorCurve(point.at("armor")),point.at("expectedReduction"),1e-6))r.outcome=CaseOutcome::Failed;
+        r.detail+="; DS-5a kernel checked";results.push_back(r);
+      } else if (kind == "physical_damage") {
         results.push_back(EvaluatePhysicalDamageCase(tc, settings, perks));
       } else if (kind == "armor_piece") {
         results.push_back(EvaluateArmorPieceCase(tc, settings, perks));

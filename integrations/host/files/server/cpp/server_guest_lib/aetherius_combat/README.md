@@ -1,3 +1,51 @@
+# DS-5a: physical shadow with prepared catalog and Core profiles
+
+The historical S3 spike below is superseded for host installation by ds5a/Host.h.
+It remains available only to its standalone regression tests. Current settings:
+
+```json
+{"aetheriusCombat":{"families":{"melee":"shadow","ranged":"shadow","unarmed":"shadow"},"multipliers":{"pve":1,"pvp":1}}}
+```
+
+Absent families/off installs the existing TES5 chain without a DS-5a wrapper.
+active is recognized but returns UNSUPPORTED / ACTIVE_REQUIRES_DS7; it cannot apply
+a candidate before actual hit identity and cutover certification. Old shadow and
+physicalRecords settings no longer enable the installed formula.
+
+Core boot calls setAetheriusCombatCatalog(json): effective combat records, stable
+keys plus boot-resolved ids, GMST winners and preserved record ENCH DamageResist.
+The accepted native table is immutable. Missing/invalid initial table is unsupported.
+CombatProfileBinding converts each actor projection once per revision on publication,
+never on hits. Cache uses weak owners, max 4096; null clears it, and maintenance
+outside hits removes destroyed actors. Disconnected players/generation changes are
+rejected. NPC requests use a fixed 2048-id queue drained by Core every 250 ms; the
+first hit may be unsupported. The normalized observation binding only reads the
+creature already confirmed by the host; it never changes spawn or base (Q13).
+
+No-perk candidate: WEAP + worn AMMO / RACE unarmed, profile skills, winning GMST
+Scaling (weapon +0.5%, armor +0.4% on the installed winners), absolute Q4 curve,
+record DamageResist once outside Scaling/Q16, native block state plus blocked flag,
+PvE/PvP G and neutral RefinementTierProvider (0). It does not certify block geometry.
+Q16 contributes zero with an explicit unsupported mask. Perks, critical, power,
+sneak and bash bonuses are excluded pending DS-5b. Invalid numbers keep legacy damage.
+
+getAetheriusCombatCapabilities() returns ownership/modes per family; Core verifies it.
+getAetheriusCombatShadow() returns a JSON string only on request: last 1024 samples,
+profile revisions, components, status/reason, Q16/refinement and conversion counter.
+Hit code uses no JSON, I/O or per-hit logging. Buffer sequence is not hit identity:
+HOST_RECEIVED_NO_UNIQUENESS_CLAIM. Existing splash/CanHit protection remains; real
+client hit identity is a DS-7 prerequisite (DS-5a order, addendum 1).
+
+Native acceptance: aetherius-shadow-test --ds5a <loadorder-manifest>. Benchmark
+reports median/p99 of 20,001 individual hits after warmup, with the full real legacy chain.
+Core source mirror: modules/damage-system/server/server/cpp/server_guest_lib/aetherius_combat/ds5a/.
+The isolated local-server script runtime/tests/ds5a-host.mjs is prepared for Opus;
+no local server or Skyrim game session was run by the implementer.
+
+---
+
+## Historical S3 documentation (superseded above)
+
 # A6-S3: physical damage shadow spike
 
 This disposable spike wraps the existing TES5 -> DamageMult -> SweetPieDamage ->

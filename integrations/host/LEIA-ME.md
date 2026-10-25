@@ -1,3 +1,5 @@
+> DS-5a (25/10/2026): veja [DS5A.md](DS5A.md) para o catálogo/perfil nativo, famílias em shadow, rollback e limites atuais. O spike neutro anterior é histórico.
+
 # Pacote do host — mudanças do GameplayCore no `aetherius-server`
 
 > **Pacote gerado em 12/10/2026**, depois da ordem C3d, com `make-package.mjs`. Core no commit `c50c735`.

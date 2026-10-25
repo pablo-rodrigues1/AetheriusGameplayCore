@@ -252,10 +252,37 @@ void Run(const std::filesystem::path& manifestPath) {
 #include "WeaponPoisonNpcTest.h" // FIX-1010 hosted NPC reproduction.
 #include "WeaponPoisonIntentTest.h" // D-P1-fix2 actual command, no OnEquip assumption.
 #include "DevAttributesTest.h" // AETHERIUS DEV-A1: native resource acceptance, no sockets.
+#include "NpcObservationTest.h"
+#include "CombatProbeTest.h" // AETHERIUS DS-0b: development combat probe, no sockets.
+
+#include "NpcEquipmentTest.h" // DS-0k real host respawn and namespace regression.
+#include "Ds5aTest.h"
+#include "NpcEntryInventoryTest.h"
+#include "NpcAreaContainerDiffTest.h" // DS-0k-fix1 entry wire/override investigation.
+
+#ifdef _MSC_VER
+#include "NpcAreaItemsTest.h" // DS-0k-fix3: MSVC static CRT entropy seam.
+#endif
 
 #ifdef AETHERIUS_SHADOW_STANDALONE
 int main(int argc, char** argv) {
   try {
+    if (argc == 3 && std::string(argv[1]) == "--ds5a") { RunDs5aTests(argv[2]); return 0; }
+    if (argc == 4 && std::string(argv[1]) == "--npc-entry-area-items") {
+#ifdef _MSC_VER
+      ExtractNpcAreaItems(argv[2], argv[3]); return 0;
+#else
+      throw std::runtime_error("UNSUPPORTED: paired entropy extractor requires MSVC static CRT");
+#endif
+    }
+    if (argc == 3 && std::string(argv[1]) == "--npc-entry-inventory") { RunNpcEntryInventoryTests(argv[2]); return 0; }
+    if (argc == 3 && std::string(argv[1]) == "--npc-entry-audit") { AuditInstalledNpcContainerIds(argv[2]); return 0; }
+    if (argc == 4 && std::string(argv[1]) == "--npc-entry-area-diff") { AuditNpcAreaContainerDiff(argv[2], argv[3]); return 0; }
+    if (argc == 3 && std::string(argv[1]) == "--npc-entry-area") { AuditNpcEntryArea(argv[2]); return 0; }
+    if (argc == 3 && std::string(argv[1]) == "--npc-equipment") { RunNpcEquipmentTests(argv[2]); return 0; }
+    if (argc == 3 && std::string(argv[1]) == "--npc-equipment-namespace") { RunNpcEquipmentTests(argv[2], true); return 0; }
+    if (argc == 3 && std::string(argv[1]) == "--npc-observation") { RunNpcObservationTests(argv[2]); return 0; }
+    if (argc == 3 && std::string(argv[1]) == "--combat-probe") { RunCombatProbeTests(argv[2]); return 0; } // AETHERIUS DS-0b
     if (argc == 3 && std::string(argv[1]) == "--dev-attributes") { RunDevAttributesTests(argv[2]); return 0; } // AETHERIUS DEV-A1
     if (argc == 4 && std::string(argv[1]) == "--poison-intent") { RunWeaponPoisonIntentTests(argv[2], argv[3]); return 0; }
     if (argc == 3 && std::string(argv[1]) == "--npc") { RunWeaponPoisonNpcTests(argv[2]); return 0; }

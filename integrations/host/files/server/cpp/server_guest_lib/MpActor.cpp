@@ -1,11 +1,14 @@
 #include "MpActor.h"
+#include "aetherius_combat/NpcObservation.h"
 #include "ActiveMagicEffectsMap.h"
+#include "gamemode_events/CustomEvent.h"
 #include "ActorValues.h"
 #include "ChangeFormGuard.h"
 #include "CropRegeneration.h"
 #include "EvaluateTemplate.h"
 #include "FormCallbacks.h"
 #include "GetBaseActorValues.h"
+#include "aetherius_combat/CombatProbe.h" // DS-0d: observe existing reads only
 #include "LeveledListUtils.h"
 #include "LocationalDataUtils.h"
 #include "MathUtils.h"
@@ -28,7 +31,9 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <random>
 #include <string>
@@ -138,7 +143,7 @@ void MpActor::SetConsoleCommandsAllowedFlag(bool newValue)
   });
 }
 
-void MpActor::EquipBestWeapon()
+void MpActor::EquipBestWeapon(std::optional<uint32_t> previousNumChanges)
 {
   if (!GetParent()->HasEspm()) {
     return;
@@ -150,7 +155,8 @@ void MpActor::EquipBestWeapon()
   const Equipment eq = GetEquipment();
 
   Equipment newEq;
-  newEq.numChanges = eq.numChanges + 1;
+  // A rebuilt outfit starts at zero; advance from the last published equipment.
+  newEq.numChanges = previousNumChanges.value_or(eq.numChanges) + 1;
   for (auto& entry : eq.inv.entries) {
     bool isEquipped = entry.GetWorn() != Inventory::Worn::None;
     bool isWeap =
@@ -374,6 +380,8 @@ void MpActor::VisitProperties(CreateActorMessage& message,
   }
 
   message.props.learnedSpells = changeForm.learnedSpells.GetLearnedSpells();
+  if (npcObservationNeeded) message.customPropsJsonDumps.push_back({"aetheriusNpcObservation",
+    nlohmann::json({{"generation", npcGeneration}}).dump()});
 
   if (!changeForm.templateChain.empty()) {
     std::vector<uint32_t> templateChain;
@@ -513,7 +521,20 @@ bool MpActor::OnEquip(uint32_t baseId)
   }
 
   bool spellLearned = false;
-  if (isIngredient || isPotion) {
+  // Aetherius: veneno equipado vai para a arma (o jogo pergunta e aplica no
+  // cliente); não é bebido. Antes o servidor aplicava os efeitos do veneno no
+  // próprio jogador. Só sai uma unidade do inventário.
+  bool isPoison = false;
+  if (isPotion) {
+    auto& compressedFieldsCache = GetParent()->GetEspmCache();
+    isPoison = espm::Convert<espm::ALCH>(lookupRes.rec)
+                 ->GetData(compressedFieldsCache)
+                 .isPoison;
+  }
+
+  if (isPoison) {
+    // no EatItem / no effects on self
+  } else if (isIngredient || isPotion) {
     EatItem(baseId, recordType);
 
     std::vector<std::optional<
@@ -602,8 +623,10 @@ void MpActor::ApplyChangeForm(const MpChangeForm& newChangeForm)
       if (GetParent() && GetParent()->HasEspm()) {
         EnsureTemplateChainEvaluated(GetParent()->GetEspm(),
                                      Mode::NoRequestSave);
+        RestoreNpcObservation();
         changeForm.actorValues = GetBaseActorValues(
-          GetParent(), GetBaseId(), GetRaceId(), changeForm.templateChain);
+          GetParent(), GetBaseId(), GetRaceId(), changeForm.templateChain,
+          npcConfirmed || npcObservationNeeded ? std::optional<uint16_t>(npcConfirmed ? npcLevel : 0) : std::nullopt);
       }
     },
     Mode::NoRequestSave);
@@ -742,8 +765,72 @@ void MpActor::NetSendChangeValues(
 
 void MpActor::NetSetPercentages(
   const ActorValues& actorValues, MpActor* aggressor,
-  const std::optional<std::vector<espm::ActorValue>>& avFilter)
+  const std::optional<std::vector<espm::ActorValue>>& avFilter,
+  uint32_t source)
 {
+  // Aetherius SkySocial: dano (vida, magicka ou vigor) de outro ator e cura vinda de
+  // outro ator passam pela regra de grupo antes do SkyDeath.
+  if (aggressor && aggressor != this) {
+    const auto& current = GetActorValues();
+    if (actorValues.healthPercentage < current.healthPercentage ||
+        actorValues.magickaPercentage < current.magickaPercentage ||
+        actorValues.staminaPercentage < current.staminaPercentage) {
+      CustomEvent socialDamage(GetFormId(), "onSkySocialDamage",
+                               "[" + std::to_string(aggressor->GetFormId()) +
+                                 "," + std::to_string(source) + "]");
+      if (!socialDamage.Fire(GetParent())) {
+        NetSendChangeValues(GetActorValues(), avFilter);
+        return;
+      }
+    }
+    if (actorValues.healthPercentage > current.healthPercentage) {
+      CustomEvent socialHealth(
+        GetFormId(), "onSkySocialHealth",
+        "[" + std::to_string(actorValues.healthPercentage) + "," +
+          std::to_string(current.healthPercentage) + "," +
+          std::to_string(GetMaximumValues().health) + "," +
+          std::to_string(aggressor->GetFormId()) + "," + std::to_string(source) +
+          "]");
+      if (!socialHealth.Fire(GetParent())) {
+        NetSendChangeValues(GetActorValues(), avFilter);
+        return;
+      }
+    }
+  }
+
+  // Aetherius SkyDeath: toda mudança de vida passa pelo gamemode antes de chegar
+  // ao cliente ou à morte vanilla. Se ele recusar (jogador fica ferido em 1 HP),
+  // o cliente recebe de volta a vida atual. O guarda evita recursão quando o
+  // próprio gamemode grava "percentages" dentro do evento.
+  static thread_local bool insideSkyDeathHook = false;
+  const float previous = GetActorValues().healthPercentage;
+  if (!insideSkyDeathHook && actorValues.healthPercentage != previous) {
+    struct Guard
+    {
+      bool& flag;
+      explicit Guard(bool& value)
+        : flag(value)
+      {
+        flag = true;
+      }
+      ~Guard() { flag = false; }
+    } guard(insideSkyDeathHook);
+    const float maximum = GetMaximumValues().health;
+    if (std::isfinite(actorValues.healthPercentage) && std::isfinite(previous) &&
+        std::isfinite(maximum)) {
+      const std::string arguments = "[" +
+        std::to_string(actorValues.healthPercentage) + "," +
+        std::to_string(previous) + "," + std::to_string(maximum) + "," +
+        std::to_string(aggressor ? aggressor->GetFormId() : 0) + "," +
+        std::to_string(source) + "]";
+      CustomEvent healthEvent(GetFormId(), "onSkyDeathHealth", arguments);
+      if (!healthEvent.Fire(GetParent())) {
+        NetSendChangeValues(GetActorValues(), avFilter);
+        return;
+      }
+    }
+  }
+
   NetSendChangeValues(actorValues, avFilter);
   SetPercentages(actorValues, aggressor);
 }
@@ -854,7 +941,8 @@ bool MpActor::IsSpellLearnedFromBase(const uint32_t spellId) const
   const auto npcData = espm::GetData<espm::NPC_>(GetBaseId(), GetParent());
   const auto npc = GetParent()->GetEspm().GetBrowser().LookupById(GetBaseId());
 
-  const uint32_t raceId = npc.ToGlobalId(npcData.race);
+  // Aetherius: raça da aparência (a do personagem), como no knownSpells.
+  const uint32_t raceId = GetRaceId();
 
   const auto raceData = espm::GetData<espm::RACE>(raceId, GetParent());
   const auto race = GetParent()->GetEspm().GetBrowser().LookupById(raceId);
@@ -1005,6 +1093,11 @@ void MpActor::SendAndSetDeathState(bool isDead, bool shouldTeleport)
     "MpActor::SendAndSetDeathState {:x} - isDead: {}, shouldTeleport: {}",
     GetFormId(), isDead, shouldTeleport);
 
+  if (isDead && !IsDead()) {
+    if (auto* probe = aetherius::combat::ActiveCombatProbe())
+      probe->RecordNpcEquipment(*this, "BEFORE_DEATH", aetherius::combat::CombatProbeNowMs());
+  }
+  if (!isDead && IsDead()) ResetNpcObservation();
   auto position = GetSpawnPoint();
 
   auto respawnMsg = GetDeathStateMsg(position, isDead, shouldTeleport);
@@ -1316,6 +1409,7 @@ void MpActor::Init(WorldState* worldState, uint32_t formId, bool hasChangeForm)
   if (worldState->HasEspm()) {
     auto& espm = worldState->GetEspm();
     EnsureTemplateChainEvaluated(espm);
+    RestoreNpcObservation();
     EnsureBaseContainerAdded(espm); // template chain needed here
 
     // TODO: implement "gearedUpWeapons" flag
@@ -1403,7 +1497,11 @@ void MpActor::RespawnWithDelay(bool shouldTeleport)
                   changeForm.baseContainerAdded = false;
                 },
                 Mode::NoRequestSave);
+              const auto previousNumChanges = GetEquipment().numChanges;
               EnsureBaseContainerAdded(worldState->GetEspm());
+              EquipBestWeapon(previousNumChanges);
+              if (auto* probe = aetherius::combat::ActiveCombatProbe())
+                probe->RecordNpcEquipment(*this, "RESPAWN_REBUILT", aetherius::combat::CombatProbeNowMs());
               spdlog::info("MpActor::RespawnWithDelay {:x} - {} inventory "
                            "entries with keyword kept",
                            GetFormId(), inventoryToKeep.entries.size());
@@ -1415,6 +1513,8 @@ void MpActor::RespawnWithDelay(bool shouldTeleport)
                        "after {} seconds",
                        GetFormId(), respawnTime);
           Respawn(shouldTeleport);
+          if (auto* probe = aetherius::combat::ActiveCombatProbe())
+            probe->RecordNpcEquipment(*this, "AFTER_RESPAWN", aetherius::combat::CombatProbeNowMs());
         }
       }
     });
@@ -1576,7 +1676,13 @@ void MpActor::DamageActorValue(espm::ActorValue av, float value)
 BaseActorValues MpActor::GetBaseValues() const // AETHERIUS DEV-A1
 {
   return GetBaseActorValues(GetParent(), GetBaseId(), GetRaceId(),
-                            ChangeForm().templateChain);
+                            ChangeForm().templateChain,
+                            npcConfirmed || npcObservationNeeded ? std::optional<uint16_t>(npcConfirmed ? npcLevel : 0) : std::nullopt);
+}
+
+const std::string& MpActor::GetCombatProbeAppearanceDump() const
+{
+  return ChangeForm().appearanceDump;
 }
 
 BaseActorValues MpActor::GetMaximumValues() const // AETHERIUS DEV-A1
@@ -1584,6 +1690,27 @@ BaseActorValues MpActor::GetMaximumValues() const // AETHERIUS DEV-A1
   auto values = GetBaseValues();
   if (HasDevAttributes()) ApplyDevAttributes(values); // AETHERIUS DEV-A1 unchanged
   else if (HasAttributeBonuses()) aetheriusAttributeBonuses->Apply(values); // AETHERIUS C3d
+  const float probeUnweakenedHealth = values.health; // DS-0d: scalar observation only
+  // Aetherius SkyDeath: quem foi erguido fica com metade dos máximos (depois dos
+  // bônus de classe) até o prazo gravado pelo gamemode.
+  const auto weakness = nlohmann::json::parse(
+    GetDynamicFields().GetValueDump("skyDeathAidWeakness"), nullptr, false);
+  if (weakness.is_object() && weakness.contains("until") &&
+      weakness["until"].is_number()) {
+    const double now = std::chrono::duration<double, std::milli>(
+                         std::chrono::system_clock::now().time_since_epoch())
+                         .count();
+    if (weakness["until"].get<double>() > now) {
+      values.health *= 0.5f;
+      values.magicka *= 0.5f;
+      values.stamina *= 0.5f;
+    }
+  }
+  if (auto* probe = aetherius::combat::ActiveCombatProbe()) {
+    const double until = weakness.is_object() && weakness.contains("until") && weakness["until"].is_number()
+      ? weakness["until"].get<double>() : 0.0;
+    probe->RecordMaximum(*this, values.health, aetherius::combat::CombatProbeNowMs(), probeUnweakenedHealth, until);
+  }
   return values;
 }
 
@@ -1925,7 +2052,13 @@ void MpActor::ApplyMagicEffects(std::vector<espm::Effects::Effect>& effects,
                                 bool hasSweetpie, bool durationOverriden)
 {
   for (auto& effect : effects) {
-    ApplyMagicEffect(effect, hasSweetpie, durationOverriden);
+    // Aetherius: one bad effect must not cancel the item's other effects.
+    try {
+      ApplyMagicEffect(effect, hasSweetpie, durationOverriden);
+    } catch (std::exception& e) {
+      spdlog::error("MpActor::ApplyMagicEffects {:x} - effect {:x}: {}",
+                    GetFormId(), effect.effectId, e.what());
+    }
   }
 }
 
@@ -2081,4 +2214,156 @@ std::array<std::optional<Inventory::Entry>, 2> MpActor::GetEquippedShield()
     }
   }
   return wornEntries;
+}
+
+// DS-0g uses the existing changeform serializer, without a second ledger.
+namespace {
+constexpr auto kNpcObservation = "private.aetheriusNpcObservation";
+bool worldCaseInsensitiveBase(const std::string& a, const std::string& b) {
+  return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(),
+    [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
+}
+}
+void MpActor::RefreshNpcObservationContext()
+{
+  auto* world = GetParent();
+  npcObservationNeeded = false; npcTraitsProvider = {}; npcStatsProvider = {};
+  if (!world || !world->HasEspm() || GetBaseId() == 0 || IsCreatedAsPlayer()) return;
+  auto& browser = world->GetEspm().GetBrowser();
+  auto portable = [&](const auto& lookup, const auto&) {
+    return FormDesc::FromFormId(lookup.ToGlobalId(lookup.rec->GetId()), world->pluginIndexMapping);
+  };
+  npcStatsProvider = EvaluateTemplate<espm::NPC_::UseStats>(world, GetBaseId(), GetTemplateChain(), portable);
+  npcTraitsProvider = EvaluateTemplate<espm::NPC_::UseTraits>(world, GetBaseId(), GetTemplateChain(), portable);
+  const auto fields = aetherius::npc::ReadNpc(browser.LookupById(npcStatsProvider.ToFormId(world->pluginIndexMapping)), world->GetEspmCache());
+  npcObservationNeeded = LeveledListUtils::HasLeveledTemplate(browser, GetBaseId()) || fields.pcMult;
+  if (!npcConfirmed) npcLevel = fields.pcMult ? 0 : fields.level;
+}
+const char* MpActor::AdoptNpcObservation(const FormDesc& base, uint32_t level,
+    uint64_t generation, ChangeFormGuard::Mode mode)
+{
+  if (!npcObservationNeeded) return "NOT_AN_OBSERVABLE_NPC";
+  if (generation != npcGeneration) return "STALE_GENERATION";
+  if (npcConfirmed) return base.shortFormId == npcReportedBase.shortFormId &&
+    worldCaseInsensitiveBase(base.file, npcReportedBase.file) && level == npcLevel ? "DUPLICATE" : "CONFIRMED_CREATURE_CONFLICT";
+  auto* world = GetParent();
+  const auto& mapping = world->pluginIndexMapping;
+  if (mapping.GetEspmFileIndexByFilename(base.file) == PluginIndexMapping::kInvalidFileIndex) return "BASE_PLUGIN_ABSENT";
+  uint32_t runtimeBase;
+  try { runtimeBase = base.ToFormId(mapping); }
+  catch (const std::runtime_error&) { return "INVALID_BASE_KEY"; }
+  auto result = LeveledListUtils::ValidateObservation(world->GetEspm().GetBrowser(), GetBaseId(), runtimeBase, level);
+  if (!result.accepted) return result.reason;
+  std::vector<FormDesc> chain;
+  for (const auto id : result.chain) chain.push_back(FormDesc::FromFormId(id, world->pluginIndexMapping));
+  return AdoptNpcObservationChain(FormDesc::FromFormId(runtimeBase, mapping), chain, level, mode);
+}
+const char* MpActor::AdoptNpcRaceObservation(const FormDesc& race, uint32_t level,
+    uint64_t generation, uint32_t* candidates, ChangeFormGuard::Mode mode)
+{
+  if (!npcObservationNeeded) return "NOT_AN_OBSERVABLE_NPC";
+  if (generation != npcGeneration) return "STALE_GENERATION";
+  auto* world = GetParent(); const auto& mapping = world->pluginIndexMapping;
+  if (mapping.GetEspmFileIndexByFilename(race.file) == PluginIndexMapping::kInvalidFileIndex) return "RACE_PLUGIN_ABSENT";
+  uint32_t runtimeRace;
+  try { runtimeRace = race.ToFormId(mapping); }
+  catch (const std::runtime_error&) { return "INVALID_RACE_KEY"; }
+  const auto result = LeveledListUtils::ValidateRaceObservation(world->GetEspm().GetBrowser(), GetBaseId(), runtimeRace, level);
+  if (candidates) *candidates = result.candidates;
+  if (!result.accepted) return result.reason;
+  std::vector<FormDesc> chain;
+  for (const auto id : result.chain) chain.push_back(FormDesc::FromFormId(id, mapping));
+  if (npcConfirmed) return chain == GetTemplateChain() && level == npcLevel ? "DUPLICATE" : "CONFIRMED_CREATURE_CONFLICT";
+  const auto canonicalRace = FormDesc::FromFormId(runtimeRace, mapping);
+  // Terminal identity is diagnostic only. v2 restoration re-resolves race+level
+  // and never treats a shared terminal as the selected list entry.
+  return AdoptNpcObservationChain(chain.back(), chain, level, mode, &canonicalRace);
+}
+const char* MpActor::AdoptNpcObservationChain(const FormDesc& canonicalBase,
+    const std::vector<FormDesc>& chain, uint32_t level, ChangeFormGuard::Mode mode, const FormDesc* race)
+{
+  auto* world = GetParent();
+  const auto stats = EvaluateTemplate<espm::NPC_::UseStats>(world, GetBaseId(), chain,
+    [&](const auto& lookup, const auto&) { return aetherius::npc::ReadNpc(lookup, world->GetEspmCache()); });
+  if (!aetherius::npc::LevelCompatible(stats, level)) return "INCOMPATIBLE_NPC_LEVEL";
+  try { (void)GetBaseActorValues(world, GetBaseId(), 0, chain, static_cast<uint16_t>(level)); }
+  catch (const std::exception& e) {
+    if (std::string_view(e.what()).find("UNSUPPORTED:") == 0) return "UNSUPPORTED_NPC_STATS";
+    throw;
+  }
+  auto saved = nlohmann::json{{"base", canonicalBase.ToString()}, {"level", level}, {"generation", npcGeneration}};
+  if (race) { saved["v"] = 2; saved["race"] = race->ToString(); }
+  const auto dump = saved.dump();
+  EditChangeForm([&](MpChangeForm& form) {
+    form.templateChain = chain; form.dynamicFields.SetValueDump(kNpcObservation, dump);
+  }, mode);
+  npcConfirmed = true; npcReportedBase = canonicalBase; npcLevel = static_cast<uint16_t>(level);
+  ++aetheriusDevAttributesRevision; RefreshNpcObservationContext();
+  // Refresh diagnostic maximum outside OnHit after changing the inputs.
+  if (aetherius::combat::ActiveCombatProbe()) (void)GetMaximumValues();
+  return "ACCEPTED";
+}
+void MpActor::RestoreNpcObservation()
+{
+  npcConfirmed = false; npcReportedBase = {};
+  const auto dump = GetDynamicFields().GetValueDump(kNpcObservation);
+  if (dump == "null") { RefreshNpcObservationContext(); return; }
+
+  const char* reason = "INVALID_PERSISTED_NPC_OBSERVATION";
+  std::string validationError;
+  try {
+    const auto saved = nlohmann::json::parse(dump, nullptr, false);
+    if (saved.is_object() && saved.contains("generation") &&
+        saved["generation"].is_number_unsigned() && saved["generation"].get<uint64_t>() != 0) {
+      npcGeneration = saved["generation"].get<uint64_t>();
+      // A generation-only marker is the persisted unconfirmed state.
+      if (!saved.contains("base") && saved.size() == 1) { RefreshNpcObservationContext(); return; }
+      if (saved.contains("base") && saved["base"].is_string() &&
+          saved.contains("level") && saved["level"].is_number_unsigned() &&
+          saved["level"].get<uint64_t>() <= std::numeric_limits<uint32_t>::max()) {
+        RefreshNpcObservationContext();
+        if (!saved.contains("v"))
+          reason = AdoptNpcObservation(FormDesc::FromString(saved["base"].get<std::string>()),
+            saved["level"].get<uint32_t>(), npcGeneration, Mode::NoRequestSave);
+        else if (saved["v"] == 2 && saved.contains("race") && saved["race"].is_string())
+          reason = AdoptNpcRaceObservation(FormDesc::FromString(saved["race"].get<std::string>()),
+            saved["level"].get<uint32_t>(), npcGeneration, nullptr, Mode::NoRequestSave);
+        if (std::string_view(reason) == "ACCEPTED") return;
+      }
+    }
+  } catch (const std::exception& e) {
+    validationError = e.what();
+    // A persisted choice must never abort actor loading, even when revalidation
+    // fails unexpectedly. The diagnostic remains explicit; no choice is trusted.
+    reason = "PERSISTED_NPC_OBSERVATION_VALIDATION_EXCEPTION";
+  }
+
+  // Discard both the old choice and its chain. Re-evaluate the existing host
+  // baseline before allowing the hoster to report a new creature (Q11).
+  npcConfirmed = false; npcReportedBase = {}; npcLevel = 0;
+  npcGeneration = npcGeneration == std::numeric_limits<uint64_t>::max() ? 1 : npcGeneration + 1;
+  ++aetheriusDevAttributesRevision;
+  EditChangeForm([](MpChangeForm& form) { form.templateChain.clear(); }, Mode::NoRequestSave);
+  EnsureTemplateChainEvaluated(GetParent()->GetEspm(), Mode::NoRequestSave);
+  RefreshNpcObservationContext();
+  EditChangeForm([&](MpChangeForm& form) {
+    form.dynamicFields.SetValueDump(kNpcObservation, nlohmann::json({{"generation", npcGeneration}}).dump());
+  });
+  if (!npcObservationRestoreWarned) {
+    npcObservationRestoreWarned = true;
+    spdlog::warn("MpActor::RestoreNpcObservation {:x} - discarded persisted choice: {}; validation detail: {}; unconfirmed generation {}",
+      GetFormId(), reason, validationError, npcGeneration);
+  }
+  if (auto* probe = aetherius::combat::ActiveCombatProbe()) probe->RecordNpcRestoreFailure(reason);
+}
+void MpActor::ResetNpcObservation()
+{
+  if (!npcObservationNeeded) return;
+  npcConfirmed = false; npcReportedBase = {}; ++npcGeneration; ++aetheriusDevAttributesRevision;
+  EditChangeForm([&](MpChangeForm& form) {
+    form.dynamicFields.SetValueDump(kNpcObservation, nlohmann::json({{"generation", npcGeneration}}).dump());
+  });
+  RefreshNpcObservationContext();
+  auto msg = PreparePropertyMessage_(this, "aetheriusNpcObservation", nlohmann::json({{"generation", npcGeneration}}).dump());
+  SendMessageToActorListeners(msg, true);
 }

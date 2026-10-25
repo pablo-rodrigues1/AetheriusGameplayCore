@@ -16,6 +16,8 @@ Este documento não cobre a instalação do pacote (compilar o Core, compilar o 
 
 ## 2. Tabelas, por migration
 
+DS-5a (25/10): nenhuma migration/tabela nova. Catálogo nativo e snapshots de perfil são projeções em memória; usa as fontes já existentes, sem pool, ledger ou store novo.
+
 **DS-2:** catálogo combat estático, sem migration, tabela, pool ou ledger novo. A reconciliação lê arquivos de plugins somente no boot. Testes automatizados de persistência usam apenas aetherius_test.
 
 
@@ -96,6 +98,21 @@ npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
 **O servidor não aplica migrations sozinho.** Se faltar alguma, o Core sobe, deixa indisponíveis os sistemas que dependem do banco, e escreve no log o comando a rodar. O servidor do jogo não cai por isso.
 
 ## 4. Opções de configuração
+
+DS-5a: no server-settings.json do host, aetheriusCombat.families tem melee,
+ranged e unarmed, cada uma off|shadow|active (ausente = off). Para avaliação,
+usar shadow nas três. aetheriusCombat.multipliers.pve/pvp são finitos em 0..100,
+padrão 1. active é reconhecido mas BLOQUEADO com ACTIVE_REQUIRES_DS7. A chave
+antiga shadow/physicalRecords é histórica e não habilita a DS-5a. Nenhum arquivo
+de configuração local foi alterado pelo executor desta ordem.
+
+Exemplo a ser aplicado pelo revisor, com o servidor parado:
+```json
+{"aetheriusCombat":{"families":{"melee":"shadow","ranged":"shadow","unarmed":"shadow"},"multipliers":{"pve":1,"pvp":1}}}
+```
+Rollback: retirar families ou colocar todas em off e reiniciar em janela autorizada.
+O addon precisa ser o build DS-5a e o bundle do Core precisa publicar o catálogo.
+
 
 **DS-2:** nenhuma opção nova ou alteração local. Recompilar o bundle do Core inclui catalog/combat.json em BUILD_DOMAINS. O modo damage mantém off como padrão; configurar outro modo não entrega perfil nem ponte nativa. O C++ do spike ainda exige physicalRecords quando shadow é ligado: a DS-2 não altera/ativa esse caminho (ver integrations/host/COMBAT_DS2.md).
 
@@ -216,6 +233,19 @@ Fora dessa combinação, **a presença da opção, inclusive vazia ou `false`, �
 A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolvimento: ela transferiu para o sistema novo a pedra de um personagem de teste que vinha do protótipo. O servidor oficial não tem dados do protótipo e não precisa dela.
 
 ## 5. O que cada sistema faz quando ligado
+
+DS-5a: Core entrega o catálogo preparado no boot por setAetheriusCombatCatalog;
+o binding aetheriusCombatProfile converte uma vez por revisão, invisível aos
+clientes. O host calcula físico sem perks em shadow e aplica a cadeia atual.
+getAetheriusCombatCapabilities expõe owner/modo por família; o Core confere
+systems.damage.nativeCombat. getAetheriusCombatShadow serializa sob pedido um
+buffer de 1.024 hits com revisões/componentes/status e contribuição Q16 zero
+UNSUPPORTED. NPCs são preparados fora do hit por fila limitada e timer de 250 ms;
+primeiro hit sem perfil permanece UNSUPPORTED. AutoCalcStats/raças não cobertas
+pelo perfil DS-4 continuam declaradas. Bloqueio exige flag + estado nativo,
+sem certificar geometria. Não há deduplicação própria: adendo 1 aceita splash/CanHit
+na DS-5a; identidade real do HitMessage é pré-requisito da DS-7.
+
 
 **DS-2 — definições de combate:** o boot usa createFileHost para conferir os plugins relevantes e resolver WEAP/ARMO/AMMO/RACE/KYWD por StableFormKey. damage.catalog.domain passa a combat; catálogo SUPPORTED significa apenas reconciliação. O DS-4 agora publica aetheriusCombatProfile, mas isso é uma projeção de fontes com estados explícitos: dados de perfil ausentes e magnitudes Q15/Q16 continuam UNSUPPORTED. damage.status continua UNSUPPORTED com NATIVE_COMBAT_CATALOG_BRIDGE_NOT_DELIVERED (DS-5); a projeção não calcula dano nem altera ownership ou spawn (Q13). Lacunas de ENCH, herança e AttackData ficam explícitas no catálogo.
 
@@ -592,6 +622,18 @@ Exija `NODE_ENV=production` no ambiente efetivo do processo. O servidor oficial 
 - **Se o Core ou o banco falhar com o sistema ligado,** o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
 
 ## 9. O que foi feito no ambiente local, como referência
+
+DS-5a, 25/10: somente build isolado em aetherius-server/build/ds5a-server pelo
+caminho sem espaços C:/Code/AetheriusSkyMP/aetherius-server. Nenhum addon instalado,
+nenhuma configuração/.env alterada, nenhum servidor iniciado/parado, nenhum record
+instalado no jogo/MO2. O estado real de execução do servidor do dono não foi
+inspecionado nem alterado. Roteiro do revisor: node runtime/tests/ds5a-host.mjs --help
+mostra porta, pasta vazia isolada, addon, plugins e StableFormKeys obrigatórias.
+Este roteiro exige host local e NÃO foi executado pelo implementador. Saídas dos
+aceites e falhas estão em _work/evidence/DS-5a e no relatório da ordem. Antes de
+qualquer instalação, o revisor deve conferir a árvore atual do mantenedor e reaplicar
+o pacote por patch, sem substituir arquivos inteiros. Active continua bloqueado.
+
 
 **DS-2 (24/10/2026, Sol 6.1):** domínio combat gerado dos exports combat-20261024, runtime e documentação preparados para revisão. Saídas dos aceites, inclusive falhas/interrupções, em _work/evidence/DS-2/; resultados e roteiro nativo em _work/orders/DS-2-catalogo-combat.result.md. Nenhum servidor iniciado/parado, jogo/MO2, .env/settings/STATE ou aetherius_dev alterado. Bundle de build local recompilado, sem implantação ou ativação a desfazer. real-host.ts e sessão em jogo não executados pelo implementador; Opus executa o ensaio parametrizado em porta/pasta isoladas.
 

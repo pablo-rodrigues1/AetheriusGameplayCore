@@ -1,4 +1,5 @@
 #include "ActionListener.h"
+#include "aetherius_combat/NpcObservation.h"
 #include "AnimationSystem.h"
 #include "ConditionsEvaluator.h"
 #include "ConsoleCommands.h"
@@ -12,6 +13,7 @@
 #include "MsgType.h"
 #include "Overloaded.h"
 #include "WorldState.h"
+#include "aetherius_combat/CombatProbe.h" // AETHERIUS DS-0b: dev-only, inert unless installed
 #include "gamemode_events/CustomEvent.h"
 #include "gamemode_events/EatItemEvent.h"
 #include "gamemode_events/UpdateAppearanceAttemptEvent.h"
@@ -20,6 +22,7 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <spdlog/spdlog.h>
+#include <chrono>
 #include <unordered_set>
 
 #include "CustomPacketMessage.h"
@@ -28,6 +31,77 @@
 #include "SpSnippet.h"
 #include "UpdateAnimVariablesMessage.h"
 #include "UpdateEquipmentMessage.h"
+
+namespace {
+// DS-0d: copies fixed scalar state only; no lookup/loading/maximum calculation.
+void ProbeRejectedHit(WorldState& world, const HitData& hit, const char* reason,
+                      const MpActor* aggressor, const MpObjectReference* target)
+{
+  if (auto* probe = aetherius::combat::ActiveCombatProbe()) {
+    probe->RecordRejection(reason, aggressor ? aggressor->GetFormId() : hit.aggressor,
+      target ? target->GetFormId() : hit.target, hit.source, hit.projectile,
+      probe->CaptureState(aggressor, world), probe->CaptureState(target, world),
+      aetherius::combat::CombatProbeNowMs(),
+      std::string_view(reason) == "WEAPON_NOT_EQUIPPED" ? aggressor : nullptr);
+  }
+}
+
+bool ProbeHitPermission(bool allowed, WorldState& world, const HitData& hit,
+                        const char* reason, const MpActor* aggressor,
+                        const MpObjectReference* target)
+{
+  if (!allowed) ProbeRejectedHit(world, hit, reason, aggressor, target);
+  return allowed;
+}
+
+// Aetherius SkyDeath: fase gravada pelo gamemode (systems/skydeath). Ferido,
+// espírito ou morto não equipa, atira, conjura, fabrica nem usa console.
+bool SkyDeathBlocksActions(MpActor* actor)
+{
+  if (!actor) {
+    return false;
+  }
+  const auto state = nlohmann::json::parse(
+    actor->GetDynamicFields().GetValueDump("skyDeath"), nullptr, false);
+  if (!state.is_object()) {
+    return false;
+  }
+  const auto phase = state.value("phase", std::string("ALIVE"));
+  return phase == "GHOST" || phase == "DOWNED" || phase == "DEAD";
+}
+
+// Aetherius SkyDeath: golpe aceito (anfitrião, origem e distância já conferidos).
+// O gamemode decide se ele segue: no ferido, o golpe final o leva ao cemitério.
+bool SkyDeathAllowsHit(MpActor* aggressor, MpObjectReference* target)
+{
+  CustomEvent finishingHit(target->GetFormId(), "onSkyDeathHit",
+                           "[" + std::to_string(aggressor->GetFormId()) + "]");
+  return finishingHit.Fire(target->GetParent());
+}
+
+// Aetherius SkySocial: inventário travado enquanto o diário de trocas/roubos se recupera.
+bool SkySocialInventoryLocked(MpActor* actor)
+{
+  if (!actor) {
+    return false;
+  }
+  const auto locked = nlohmann::json::parse(
+    actor->GetDynamicFields().GetValueDump("skySocialInventoryLocked"), nullptr,
+    false);
+  return locked.is_boolean() && locked.get<bool>();
+}
+
+// Aetherius SkySocial: golpe em alguém do mesmo grupo é recusado antes dos scripts,
+// dos efeitos e do golpe final do SkyDeath.
+bool SkySocialAllowsHit(WorldState& worldState, MpActor* aggressor,
+                        MpObjectReference* target, uint32_t source)
+{
+  CustomEvent socialHit(aggressor->GetFormId(), "onSkySocialHit",
+                        "[" + std::to_string(target->GetFormId()) + "," +
+                          std::to_string(source) + "]");
+  return socialHit.Fire(&worldState);
+}
+}
 
 namespace FormIdCasts {
 uint32_t LongToNormal(uint64_t longFormId)
@@ -108,6 +182,13 @@ void ActionListener::OnCustomPacket(const RawMessageData& rawMsgData,
 {
   simdjson::dom::parser parser;
   auto content = parser.parse(msg.contentJsonDump).value();
+  auto channel = content["channel"].get_string();
+  if (!channel.error() && channel.value() == "aetherius.npc.observation") {
+    OnNpcObservation(rawMsgData, msg.contentJsonDump); return;
+  }
+  if (!channel.error() && channel.value() == "aetherius.npc.observation.unavailable") {
+    OnNpcObservationUnavailable(rawMsgData, msg.contentJsonDump); return;
+  }
   for (auto& listener : partOne.GetListeners()) {
     listener->OnCustomPacket(rawMsgData.userId, content);
   }
@@ -139,7 +220,11 @@ void ActionListener::OnUpdateMovement(const RawMessageData& rawMsgData,
             ? kInfinityPos
             : NiPoint3{ msg.data.pos[0], msg.data.pos[1], msg.data.pos[2] },
           FormDesc::FromFormId(msg.data.worldOrCell, pluginIndexMapping),
-          rawMsgData.userId, actor, pluginIndexMapping)) {
+          rawMsgData.userId, actor, pluginIndexMapping, &npcMovementCorrections,
+          MovementValidation::NpcCorrections::Clock::now(), teleportFlag)) {
+      if (auto* probe = aetherius::combat::ActiveCombatProbe()) {
+        probe->RecordMovementAttempt(*actor, msg.data.pos, msg.data.worldOrCell, false, aetherius::combat::CombatProbeNowMs());
+      }
       return;
     }
 
@@ -152,6 +237,10 @@ void ActionListener::OnUpdateMovement(const RawMessageData& rawMsgData,
     actor->SetPos(
       NiPoint3{ msg.data.pos[0], msg.data.pos[1], msg.data.pos[2] },
       SetPosMode::CalledByUpdateMovement);
+    if (auto* probe = aetherius::combat::ActiveCombatProbe()) {
+      probe->RecordMovementAttempt(*actor, msg.data.pos, msg.data.worldOrCell, true, aetherius::combat::CombatProbeNowMs());
+      probe->RecordMovement(*actor, partOne.worldState, aetherius::combat::CombatProbeNowMs());
+    }
     actor->SetAngle(
       NiPoint3{ msg.data.rot[0], msg.data.rot[1], msg.data.rot[2] },
       SetAngleMode::CalledByUpdateMovement);
@@ -197,6 +286,12 @@ void ActionListener::OnUpdateAnimation(const RawMessageData& rawMsgData,
     return;
   }
 
+  // AETHERIUS DS-0b: every animation the host accepted (own or hosted actor).
+  if (auto* probe = aetherius::combat::ActiveCombatProbe()) {
+    probe->RecordAnimation(targetActor->GetFormId(), msg.data.animEventName,
+                           aetherius::combat::CombatProbeNowMs());
+  }
+
   // Only process animation system and set last anim event for player's actor
   if (targetActor != myActor) {
     return;
@@ -230,6 +325,13 @@ void ActionListener::OnUpdateAppearance(const RawMessageData& rawMsgData,
 void ActionListener::OnUpdateEquipment(const RawMessageData& rawMsgData,
                                        const UpdateEquipmentMessage& msg)
 {
+  // Aetherius SkyDeath/SkySocial: ferido, espírito ou inventário em recuperação
+  // não usa esta ação.
+  if (SkyDeathBlocksActions(partOne.serverState.ActorByUser(rawMsgData.userId)) ||
+      SkySocialInventoryLocked(partOne.serverState.ActorByUser(rawMsgData.userId))) {
+    return;
+  }
+
   MpActor* actor = partOne.serverState.ActorByUser(rawMsgData.userId);
   if (!actor) {
     return;
@@ -375,6 +477,11 @@ void ActionListener::OnUpdateEquipment(const RawMessageData& rawMsgData,
     if (msg.idx != actor->GetIdx() || !actor->ReconcileWeaponPoisonEquipment(data)) {
       SendToNeighbours(msg.idx, rawMsgData, true);
       actor->SetEquipment(data);
+    }
+    // AETHERIUS DS-0b: accepted transition, as the host now holds it.
+    if (auto* probe = aetherius::combat::ActiveCombatProbe()) {
+      probe->RecordEquipment(actor->GetFormId(), actor->GetEquipment(),
+                             aetherius::combat::CombatProbeNowMs());
     }
   } else {
     actor->SendInventoryUpdate();
@@ -576,6 +683,13 @@ void ActionListener::OnDropItem(const RawMessageData& rawMsgData,
 void ActionListener::OnPlayerBowShot(const RawMessageData& rawMsgData,
                                      const PlayerBowShotMessage& msg)
 {
+  // Aetherius SkyDeath/SkySocial: ferido, espírito ou inventário em recuperação
+  // não usa esta ação.
+  if (SkyDeathBlocksActions(partOne.serverState.ActorByUser(rawMsgData.userId)) ||
+      SkySocialInventoryLocked(partOne.serverState.ActorByUser(rawMsgData.userId))) {
+    return;
+  }
+
   MpActor* ac = partOne.serverState.ActorByUser(rawMsgData.userId);
   if (!ac) {
     return spdlog::error("Unable to shot from user with id: {}.",
@@ -622,6 +736,13 @@ void ActionListener::OnFinishSpSnippet(const RawMessageData& rawMsgData,
 void ActionListener::OnEquip(const RawMessageData& rawMsgData,
                              const OnEquipMessage& msg)
 {
+  // Aetherius SkyDeath/SkySocial: ferido, espírito ou inventário em recuperação
+  // não usa esta ação.
+  if (SkyDeathBlocksActions(partOne.serverState.ActorByUser(rawMsgData.userId)) ||
+      SkySocialInventoryLocked(partOne.serverState.ActorByUser(rawMsgData.userId))) {
+    return;
+  }
+
   MpActor* actor = partOne.serverState.ActorByUser(rawMsgData.userId);
   if (!actor) {
     throw std::runtime_error(
@@ -635,6 +756,13 @@ void ActionListener::OnEquip(const RawMessageData& rawMsgData,
 void ActionListener::OnConsoleCommand(const RawMessageData& rawMsgData,
                                       const ConsoleCommandMessage& msg)
 {
+  // Aetherius SkyDeath/SkySocial: ferido, espírito ou inventário em recuperação
+  // não usa esta ação.
+  if (SkyDeathBlocksActions(partOne.serverState.ActorByUser(rawMsgData.userId)) ||
+      SkySocialInventoryLocked(partOne.serverState.ActorByUser(rawMsgData.userId))) {
+    return;
+  }
+
   MpActor* me = partOne.serverState.ActorByUser(rawMsgData.userId);
   if (me) {
     std::vector<ConsoleCommands::Argument> consoleArgs;
@@ -649,6 +777,13 @@ void ActionListener::OnConsoleCommand(const RawMessageData& rawMsgData,
 void ActionListener::OnCraftItem(const RawMessageData& rawMsgData,
                                  const CraftItemMessage& msg)
 {
+  // Aetherius SkyDeath/SkySocial: ferido, espírito ou inventário em recuperação
+  // não usa esta ação.
+  if (SkyDeathBlocksActions(partOne.serverState.ActorByUser(rawMsgData.userId)) ||
+      SkySocialInventoryLocked(partOne.serverState.ActorByUser(rawMsgData.userId))) {
+    return;
+  }
+
   craftService->OnCraftItem(rawMsgData, msg.data.craftInputObjects,
                             msg.data.workbench, msg.data.resultObjectId);
 }
@@ -687,12 +822,14 @@ void ActionListener::OnHostAttempt(const RawMessageData& rawMsgData,
         hostResetTimeout) {
     partOne.GetLogger().info("Hoster changed from {0:x} to {0:x}", prevHoster,
                              me->GetFormId());
+    if (prevHoster != me->GetFormId()) npcMovementCorrections.Reset(remoteId);
     hoster = me->GetFormId();
     remote.UpdateHoster(hoster);
 
     // Prevents too fast host switch
-    // AETHERIUS FIX-1010: the vector only grows on movement updates (see
-    // OnUpdateMovement); hosting a form with no movement yet wrote past its end.
+    // Aetherius (FIX-1010 do GameplayCore): o vetor só cresce em OnUpdateMovement;
+    // hospedar uma forma que ainda não mandou movimento escrevia além do fim
+    // (corrupção do heap nativo, crash 0xC0000005 no V8).
     if (partOne.worldState.lastMovUpdateByIdx.size() <= remoteIdx) {
       partOne.worldState.lastMovUpdateByIdx.resize(
         static_cast<size_t>(remoteIdx) + 1);
@@ -822,6 +959,22 @@ void ActionListener::OnChangeValues(const RawMessageData& rawMsgData,
     if (!MathUtils::IsNearlyEqual(newVal, *inputVal)) {
       outVal = newVal;
       sendOutMsg = true;
+    }
+
+    // Aetherius SkyDeath: vida informada pelo cliente (queda, afogamento,
+    // regeneração) passa pelo gancho de NetSetPercentages, como o dano.
+    if (av == espm::ActorValue::Health) {
+      ActorValues updated = actor->GetActorValues();
+      updated.healthPercentage = newVal;
+      actor->NetSetPercentages(
+        updated, nullptr, std::vector<espm::ActorValue>{ espm::ActorValue::Health });
+      // AETHERIUS DS-0b: accepted client-reported health change.
+      if (auto* probe = aetherius::combat::ActiveCombatProbe()) {
+        probe->RecordHealth(actor->GetFormId(), currentVal, *inputVal,
+                            actor->GetActorValues().healthPercentage,
+                            aetherius::combat::CombatProbeNowMs());
+      }
+      return;
     }
 
     actor->SetPercentage(av, newVal);
@@ -1018,6 +1171,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
   MpActor* myActor = partOne.serverState.ActorByUser(rawMsgData.userId);
 
   if (!myActor) {
+    ProbeRejectedHit(partOne.worldState, msg.data, "NO_USER_ACTOR", nullptr, nullptr);
     return spdlog::error(
       "ActionListener::OnHit - no Actor attached to userId {}",
       rawMsgData.userId);
@@ -1037,6 +1191,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
       spdlog::error("SendToNeighbours - No permission to send OnHit with "
                     "aggressor actor {:x}",
                     aggressor->GetFormId());
+      ProbeRejectedHit(partOne.worldState, hitData, "NO_HOST_PERMISSION", aggressor, nullptr);
       return;
     }
   }
@@ -1049,6 +1204,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
   MpObjectReference* targetRef =
     targetForm ? targetForm->AsObjectReference() : nullptr;
   if (!targetRef) {
+    ProbeRejectedHit(partOne.worldState, hitData, "TARGET_NOT_FOUND", aggressor, nullptr);
     spdlog::error("ActionListener::OnHit - MpObjectReference not found for "
                   "hitData.target {:x}",
                   hitData.target);
@@ -1059,6 +1215,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
   const FormDesc& targetCellOrWorld = targetRef->GetCellOrWorld();
 
   if (aggressorCellOrWorld != targetCellOrWorld) {
+    ProbeRejectedHit(partOne.worldState, hitData, "DIFFERENT_CELL", aggressor, targetRef);
     const PluginIndexMapping& pluginIndexMapping = partOne.worldState.pluginIndexMapping;
     spdlog::error(
       "ActionListener::OnHit - aggressor and targetRef are in different cells "
@@ -1077,6 +1234,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
     constexpr float kExteriorCellWidthUnits = 4096.f;
     if ((aggressorPos - targetPos).SqrLength() >
         kExteriorCellWidthUnits * kExteriorCellWidthUnits) {
+      ProbeRejectedHit(partOne.worldState, hitData, "TOO_DISTANT", aggressor, targetRef);
       spdlog::error("ActionListener::OnHit - aggressor and targetRef are too "
                     "distant. Aggressor: {:x}, targetRef: {:x}",
                     aggressor->GetFormId(), targetRef->GetFormId());
@@ -1085,6 +1243,7 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
   }
 
   if (aggressor->IsDead()) {
+    ProbeRejectedHit(partOne.worldState, hitData, "AGGRESSOR_DEAD", aggressor, targetRef);
     spdlog::debug(fmt::format("{:x} actor is dead and can't attack. "
                               "requesting respawn in order to fix death state",
                               aggressor->GetFormId()));
@@ -1101,6 +1260,11 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
   const auto equipment = aggressor->GetEquipment();
 
   if (isSourceSpell && equipment.IsSpellEquipped(hitData.source)) {
+    if (!ProbeHitPermission(SkySocialAllowsHit(partOne.worldState, aggressor, targetRef,
+                            hitData.source), partOne.worldState, hitData, "SKYSOCIAL_DENIED", aggressor, targetRef) ||
+        !ProbeHitPermission(SkyDeathAllowsHit(aggressor, targetRef), partOne.worldState, hitData, "SKYDEATH_DENIED", aggressor, targetRef)) {
+      return;
+    }
     OnSpellHit(aggressor, targetRef, hitData);
     return;
   }
@@ -1108,10 +1272,16 @@ void ActionListener::OnHit(const RawMessageData& rawMsgData,
   const bool isUnarmed = IsUnarmedAttack(hitData.source);
 
   if (equipment.inv.HasItem(hitData.source) || isUnarmed) {
+    if (!ProbeHitPermission(SkySocialAllowsHit(partOne.worldState, aggressor, targetRef,
+                            hitData.source), partOne.worldState, hitData, "SKYSOCIAL_DENIED", aggressor, targetRef) ||
+        !ProbeHitPermission(SkyDeathAllowsHit(aggressor, targetRef), partOne.worldState, hitData, "SKYDEATH_DENIED", aggressor, targetRef)) {
+      return;
+    }
     OnWeaponHit(aggressor, targetRef, hitData, isUnarmed);
     return;
   }
 
+  ProbeRejectedHit(partOne.worldState, hitData, "WEAPON_NOT_EQUIPPED", aggressor, targetRef);
   if (aggressor->GetInventory().HasItem(hitData.source) == false) {
     spdlog::debug("{:x} actor has no {:x} weapon and can't attack",
                   hitData.aggressor, hitData.source);
@@ -1135,6 +1305,13 @@ void ActionListener::OnUpdateAnimVariables(
 void ActionListener::OnSpellCast(const RawMessageData& rawMsgData,
                                  const SpellCastMessage& msg)
 {
+  // Aetherius SkyDeath/SkySocial: ferido, espírito ou inventário em recuperação
+  // não usa esta ação.
+  if (SkyDeathBlocksActions(partOne.serverState.ActorByUser(rawMsgData.userId)) ||
+      SkySocialInventoryLocked(partOne.serverState.ActorByUser(rawMsgData.userId))) {
+    return;
+  }
+
   MpActor* myActor = partOne.serverState.ActorByUser(rawMsgData.userId);
 
   if (!myActor) {
@@ -1184,6 +1361,21 @@ void ActionListener::OnSpellCast(const RawMessageData& rawMsgData,
     return;
   }
 
+  // Aetherius SkySocial: conjuração já autenticada (dono e magia equipada). Magias de
+  // cura são resolvidas pelo gamemode, que pode redirecionar para um aliado do grupo.
+  const auto socialMaximum = caster->GetMaximumValues();
+  const std::string socialArgs = "[" + std::to_string(spellCastData.spell) +
+    "," + std::to_string(spellCastData.target) + "," +
+    (spellCastData.interruptCast ? "true" : "false") + "," +
+    (spellCastData.isDualCasting ? "true" : "false") + "," +
+    std::to_string(spellCastData.castingSource) + "," +
+    std::to_string(socialMaximum.magicka) + "]";
+  CustomEvent socialCast(caster->GetFormId(), "onSkySocialSpellCast",
+                         socialArgs);
+  if (!socialCast.Fire(&partOne.worldState)) {
+    return;
+  }
+
   SendToNeighbours(myActor->idx, rawMsgData);
 
   if (spellCastData.interruptCast) {
@@ -1218,18 +1410,105 @@ void ActionListener::OnUnknown(const RawMessageData& rawMsgData)
   spdlog::warn("ActionListener::OnUnknown - Got unhandled message");
 }
 
+namespace {
+// Aetherius: modo invulnerável do painel da staff. O gamemode grava no ator
+// "aetheriusInvulnerableUntil" (epoch em ms) e renova a cada poucos segundos
+// enquanto o modo estiver ativo; sem renovação (staff saiu, servidor caiu) a
+// proteção vence sozinha. Golpes de arma e magia nesse alvo não causam dano.
+bool IsAetheriusInvulnerable(const MpObjectReference& target)
+{
+  const auto& dump =
+    target.GetDynamicFields().GetValueDump("aetheriusInvulnerableUntil");
+  if (dump == "null") {
+    return false;
+  }
+  double until = 0.0;
+  try {
+    const auto value = nlohmann::json::parse(dump);
+    if (!value.is_number()) {
+      return false;
+    }
+    until = value.get<double>();
+  } catch (...) {
+    return false;
+  }
+  const double now = std::chrono::duration<double, std::milli>(
+                       std::chrono::system_clock::now().time_since_epoch())
+                       .count();
+  return until > now;
+}
+
+// AETHERIUS DS-0b: copies an accepted hit into the development probe. Called
+// only when the probe is installed; reads host state, changes nothing.
+void ProbeAcceptedHit(aetherius::combat::CombatProbe& probe, WorldState& world,
+                      const MpActor& aggressor, const MpActor& target,
+                      const HitData& hit, bool clientBlocked, bool magic,
+                      float damage, float healthBefore, float healthCandidate, float maximumHealth)
+{
+  using Family = aetherius::combat::CombatProbe::Family;
+  aetherius::combat::CombatProbe::HitInput input;
+  input.aggressor = aggressor.GetFormId();
+  input.target = target.GetFormId();
+  input.source = hit.source;
+  input.projectile = hit.projectile;
+  input.family = magic ? Family::Magic
+    : IsUnarmedAttack(hit.source)
+    ? Family::Unarmed
+    : (IsBowOrCrossbowShot(hit, &world) ? Family::Ranged : Family::Melee);
+  input.power = hit.isPowerAttack;
+  input.sneak = hit.isSneakAttack;
+  input.bash = hit.isBashAttack;
+  input.blocked = hit.isHitBlocked;
+  input.clientBlocked = clientBlocked;
+  input.damage = damage;
+  if (!magic) input.cadence = probe.LatestCadence(aggressor.GetFormId());
+  input.targetMaximumHealth = maximumHealth;
+  input.healthBefore = healthBefore;
+  input.healthCandidate = healthCandidate;
+  // Effective value after NetSetPercentages and its hooks (SkyDeath).
+  input.healthAfter = target.GetActorValues().healthPercentage;
+  input.aggressorBlockActive = aggressor.IsBlockActive();
+  input.aggressorIsBlocking = aggressor.GetAnimationVariableBool("IsBlocking");
+  input.targetBlockActive = target.IsBlockActive();
+  input.targetIsBlocking = target.GetAnimationVariableBool("IsBlocking");
+  input.aggressorSneaking = aggressor.GetAnimationVariableBool("IsSneaking");
+  input.aggressorState = probe.CaptureState(&aggressor, world);
+  input.targetState = probe.CaptureState(&target, world);
+  probe.RecordHit(input, aetherius::combat::CombatProbeNowMs());
+}
+}
+
 void ActionListener::OnSpellHit(MpActor* aggressor,
                                 MpObjectReference* targetRef,
                                 const HitData& hitData)
 {
+  // Aetherius SkySocial: magia de cura não entra no caminho de dano.
+  CustomEvent socialSpellHit(aggressor->GetFormId(), "onSkySocialSpellHit",
+                             "[" + std::to_string(hitData.source) + "," +
+                               std::to_string(targetRef ? targetRef->GetFormId() : 0) +
+                               "]");
+  if (!socialSpellHit.Fire(&partOne.worldState)) {
+    ProbeRejectedHit(partOne.worldState, hitData, "SKYSOCIAL_SPELL_DENIED", aggressor, targetRef);
+    return;
+  }
+
   SendPapyrusOnHitEvent(aggressor, targetRef, hitData);
 
   auto* targetActorPtr = targetRef ? targetRef->AsActor() : nullptr;
   if (!targetActorPtr) {
+    ProbeRejectedHit(partOne.worldState, hitData, "TARGET_NOT_ACTOR", aggressor, targetRef);
     return; // Not an actor, damage calculation is not needed
   }
 
+  if (IsAetheriusInvulnerable(*targetActorPtr)) {
+    ProbeRejectedHit(partOne.worldState, hitData, "TARGET_INVULNERABLE", aggressor, targetRef);
+    spdlog::info("OnSpellHit - Target {:x} is invulnerable (staff mode)",
+                 targetActorPtr->GetFormId());
+    return;
+  }
+
   auto targetActorValues = targetActorPtr->GetChangeForm().actorValues;
+  const float probeHealthBefore = targetActorValues.healthPercentage; // AETHERIUS DS-0b
 
   SpellCastData spellCastData{ aggressor->GetFormId(),
                                targetActorPtr->GetFormId(),
@@ -1242,14 +1521,20 @@ void ActionListener::OnSpellHit(MpActor* aggressor,
     partOne.CalculateDamage(*aggressor, *targetActorPtr, spellCastData);
   damage = damage <= 0.f ? 0.f : damage;
 
+  float probeMaximumHealth = 0; // DS-0d: reuse the existing maximum calculation
   targetActorValues.healthPercentage = CalculateCurrentHealthPercentage(
-    *targetActorPtr, damage, targetActorValues.healthPercentage, nullptr);
+    *targetActorPtr, damage, targetActorValues.healthPercentage, &probeMaximumHealth);
 
   static const auto kHealthAvFilter =
     std::vector<espm::ActorValue>{ espm::ActorValue::Health };
 
   targetActorPtr->NetSetPercentages(targetActorValues, aggressor,
-                                    kHealthAvFilter);
+                                    kHealthAvFilter, hitData.source);
+  if (auto* probe = aetherius::combat::ActiveCombatProbe()) { // AETHERIUS DS-0b
+    ProbeAcceptedHit(*probe, partOne.worldState, *aggressor, *targetActorPtr,
+                     hitData, hitData.isHitBlocked, true, damage,
+                     probeHealthBefore, targetActorValues.healthPercentage, probeMaximumHealth);
+  }
 
   spdlog::info("OnSpellHit - Target {0:x} is hit by {1:x} spell on {2} "
                "damage. By caster: {3:x})",
@@ -1262,20 +1547,36 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
                                  [[maybe_unused]] bool isUnarmed)
 {
   const auto currentHitTime = std::chrono::steady_clock::now();
+  const bool probeClientBlocked = hitData.isHitBlocked; // AETHERIUS DS-0b
 
   SendPapyrusOnHitEvent(aggressor, targetRef, hitData);
 
   auto* targetActorPtr = targetRef ? targetRef->AsActor() : nullptr;
   if (!targetActorPtr) {
+    ProbeRejectedHit(partOne.worldState, hitData, "TARGET_NOT_ACTOR", aggressor, targetRef);
     return; // Not an actor, damage calculation is not needed
   }
 
   auto& targetActor = *targetActorPtr;
 
+  if (IsAetheriusInvulnerable(targetActor)) {
+    ProbeRejectedHit(partOne.worldState, hitData, "TARGET_INVULNERABLE", aggressor, targetRef);
+    spdlog::info("OnWeaponHit - Target {:x} is invulnerable (staff mode)",
+                 targetActor.GetFormId());
+    return;
+  }
+
   const auto lastHitTimeAnyTarget = aggressor->GetLastHitTime(std::nullopt);
   const std::chrono::duration<float> timePassedAnyTarget =
     currentHitTime - lastHitTimeAnyTarget;
 
+  if (auto* probe = aetherius::combat::ActiveCombatProbe()) {
+    const auto lookup = aggressor->GetParent()->GetEspm().GetBrowser().LookupById(hitData.source);
+    const auto* weapon = espm::Convert<espm::WEAP>(lookup.rec);
+    const auto speed = weapon ? weapon->GetData(aggressor->GetParent()->GetEspmCache()).weapDNAM : nullptr;
+    probe->RecordAttackAttempt(aggressor->GetFormId(), speed ? speed->speed : 0, speed != nullptr,
+      timePassedAnyTarget.count() * 1000.f, lastHitTimeAnyTarget != std::chrono::steady_clock::time_point{}, currentHitTime);
+  }
   constexpr float kSplashTimeWindow = 0.1f;
   constexpr size_t kMaxSplashTargets = 4;
 
@@ -1294,6 +1595,7 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
 
     // If the specific target was hit faster than the splash window
     if (timeSinceSpecific.count() < kSplashTimeWindow) {
+      ProbeRejectedHit(partOne.worldState, hitData, "SPLASH_TARGET_COOLDOWN", aggressor, targetRef);
       spdlog::warn("Splash attack from {:x} to {:x} ignored, target hit "
                    "too recently",
                    aggressor->GetFormId(), targetActor.GetFormId());
@@ -1302,12 +1604,14 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
 
     if (aggressor->CountRecentHits(std::chrono::duration<float>(
           kSplashTimeWindow)) >= kMaxSplashTargets) {
+      ProbeRejectedHit(partOne.worldState, hitData, "SPLASH_TARGET_LIMIT", aggressor, targetRef);
       spdlog::warn("Splash attack from {:x} to {:x} ignored, too many "
                    "targets hit recently",
                    aggressor->GetFormId(), targetActor.GetFormId());
       return;
     }
   } else if (!CanHit(*aggressor, hitData, timePassedAnyTarget)) {
+    ProbeRejectedHit(partOne.worldState, hitData, "ATTACK_COOLDOWN", aggressor, targetRef);
     WorldState* espmProvider = targetActor.GetParent();
     auto weapDNAM =
       espm::GetData<espm::WEAP>(hitData.source, espmProvider).weapDNAM;
@@ -1407,8 +1711,13 @@ void ActionListener::OnWeaponHit(MpActor* aggressor,
 
   targetActor.NetSetPercentages(
     currentActorValues, aggressor,
-    std::vector<espm::ActorValue>{ espm::ActorValue::Health });
+    std::vector<espm::ActorValue>{ espm::ActorValue::Health }, hitData.source);
   aggressor->SetLastHitTime(targetActor.GetFormId(), currentHitTime);
+  if (auto* probe = aetherius::combat::ActiveCombatProbe()) { // AETHERIUS DS-0b
+    ProbeAcceptedHit(*probe, partOne.worldState, *aggressor, targetActor,
+                     hitData, probeClientBlocked, false, damage,
+                     healthPercentage, currentActorValues.healthPercentage, outBaseHealth);
+  }
   // AETHERIUS D-P1: accepted physical hit; damage calculation above is untouched.
   if (partOne.worldState.aetheriusWeaponPoison) {
     aggressor->ApplyWeaponPoisonHit(targetActor, hitData.source, hitData.isHitBlocked,
@@ -1437,4 +1746,100 @@ void ActionListener::SendPapyrusOnHitEvent(MpActor* aggressor,
   args[5] = VarValue(hitData.isBashAttack);  // abBashAttack
   args[6] = VarValue(hitData.isHitBlocked);  // abHitBlocked
   target->SendPapyrusEvent("OnHit", args.data(), args.size());
+}
+
+void ActionListener::OnNpcObservation(const RawMessageData& raw, const std::string& dump)
+{
+  uint32_t actorId = 0, level = 0, version = 0;
+  uint32_t candidates = std::numeric_limits<uint32_t>::max();
+  FormDesc key;
+  uint64_t generation = 0;
+  auto record = [&](const char* reason) {
+    if (auto* probe = aetherius::combat::ActiveCombatProbe())
+      probe->RecordNpcReport(actorId, version == 1 ? key : FormDesc{}, level, generation,
+        reason, aetherius::combat::CombatProbeNowMs(), version, version == 2 ? key : FormDesc{}, candidates);
+  };
+  if (dump.size() > 1024) { record("INVALID_PACKET_SIZE"); return; }
+  size_t keys = 0;
+  const auto p = nlohmann::json::parse(dump, [&](int, nlohmann::json::parse_event_t event, nlohmann::json&) {
+    if (event == nlohmann::json::parse_event_t::key) ++keys;
+    return true;
+  }, false);
+  auto uint = [&](const char* field, uint64_t max) {
+    return p.contains(field) && p[field].is_number_unsigned() && p[field].get<uint64_t>() <= max;
+  };
+  if (p.is_object() && uint("v", 2) && p["v"] != 0) version = p["v"].get<uint32_t>();
+  const auto* field = version == 2 ? "race" : "base";
+  if (!p.is_object() || p.size() != 6 || keys != 6 || !version ||
+      p.value("channel", nlohmann::json()) != "aetherius.npc.observation" ||
+      !uint("actor", std::numeric_limits<uint32_t>::max()) || !uint("level", 65535) || p["level"] == 0 ||
+      !uint("generation", 9007199254740991ull) || p["generation"] == 0 ||
+      !p.contains(field) || !p[field].is_string()) { record("INVALID_PACKET"); return; }
+  actorId = p["actor"].get<uint32_t>(); level = p["level"].get<uint32_t>(); generation = p["generation"].get<uint64_t>();
+  auto* myActor = partOne.serverState.ActorByUser(raw.userId);
+  const auto ref = partOne.worldState.LookupFormById(actorId);
+  auto* actor = ref ? ref->AsActor() : nullptr;
+  if (!myActor) { record("NO_SESSION_ACTOR"); return; }
+  if (!actor || actor->IsCreatedAsPlayer()) { record("NOT_AN_NPC"); return; }
+  if (partOne.serverState.UserByActor(actor) != Networking::InvalidUserId) { record("ACTOR_OWNED_BY_USER"); return; }
+  const auto hoster = partOne.worldState.hosters.find(actorId);
+  if (hoster == partOne.worldState.hosters.end() || hoster->second != myActor->GetFormId()) { record("NOT_CURRENT_HOSTER"); return; }
+  if (actor->IsDead()) { record("NPC_DEAD"); return; }
+  const auto text = p[field].get<std::string>();
+  const auto* invalidKey = version == 2 ? "INVALID_RACE_KEY" : "INVALID_BASE_KEY";
+  const auto colon = text.find(':');
+  if (colon == std::string::npos || colon == 0 || colon > 6 || text.size() > 268 ||
+      text.find_first_of("/\\") != std::string::npos ||
+      !std::all_of(text.begin(), text.begin() + colon, [](unsigned char c) { return std::isxdigit(c); }) ||
+      text.find(':', colon + 1) != std::string::npos || text.find('\0') != std::string::npos) { record(invalidKey); return; }
+  try { key = FormDesc::FromString(text); }
+  catch (const std::exception&) { record(invalidKey); return; }
+  if (key.file.empty() || !key.shortFormId || key.shortFormId > 0xffffff) { record(invalidKey); return; }
+  const char* reason;
+  try { reason = version == 2 ? actor->AdoptNpcRaceObservation(key, level, generation, &candidates)
+                            : actor->AdoptNpcObservation(key, level, generation); }
+  catch (const std::out_of_range&) { record(version == 2 ? "RACE_PLUGIN_ABSENT" : "BASE_PLUGIN_ABSENT"); return; }
+  record(reason);
+}
+
+// DS-0g-fix2: diagnostic evidence only. Never adopts or writes actor state.
+void ActionListener::OnNpcObservationUnavailable(const RawMessageData& raw, const std::string& dump)
+{
+  uint32_t actorId = 0;
+  uint64_t generation = 0;
+  std::string reason;
+  auto record = [&](const char* result) {
+    if (auto* probe = aetherius::combat::ActiveCombatProbe())
+      probe->RecordNpcUnavailable(actorId, generation, reason, result, aetherius::combat::CombatProbeNowMs());
+  };
+  if (dump.size() > 1024) { record("INVALID_PACKET_SIZE"); return; }
+  size_t keys = 0;
+  const auto p = nlohmann::json::parse(dump, [&](int, nlohmann::json::parse_event_t event, nlohmann::json&) {
+    if (event == nlohmann::json::parse_event_t::key) ++keys;
+    return true;
+  }, false);
+  auto uint = [&](const char* key, uint64_t max) {
+    return p.contains(key) && p[key].is_number_unsigned() && p[key].get<uint64_t>() <= max;
+  };
+  if (!p.is_object() || p.size() != 5 || keys != 5 ||
+      p.value("channel", nlohmann::json()) != "aetherius.npc.observation.unavailable" ||
+      !uint("v", 1) || p["v"] != 1 || !uint("actor", std::numeric_limits<uint32_t>::max()) ||
+      !uint("generation", 9007199254740991ull) || p["generation"] == 0 ||
+      !p.contains("reason") || !p["reason"].is_string()) { record("INVALID_PACKET"); return; }
+  actorId = p["actor"].get<uint32_t>(); generation = p["generation"].get<uint64_t>();
+  const auto reportedReason = p["reason"].get<std::string>();
+  if (!aetherius::npc::IsUnavailableReason(reportedReason)) { record("INVALID_REASON"); return; }
+  reason = reportedReason; // Only the closed vocabulary reaches the probe.
+  auto* myActor = partOne.serverState.ActorByUser(raw.userId);
+  const auto ref = partOne.worldState.LookupFormById(actorId);
+  auto* actor = ref ? ref->AsActor() : nullptr;
+  if (!myActor) { record("NO_SESSION_ACTOR"); return; }
+  if (!actor || actor->IsCreatedAsPlayer()) { record("NOT_AN_NPC"); return; }
+  if (partOne.serverState.UserByActor(actor) != Networking::InvalidUserId) { record("ACTOR_OWNED_BY_USER"); return; }
+  const auto hoster = partOne.worldState.hosters.find(actorId);
+  if (hoster == partOne.worldState.hosters.end() || hoster->second != myActor->GetFormId()) { record("NOT_CURRENT_HOSTER"); return; }
+  if (actor->IsDead()) { record("NPC_DEAD"); return; }
+  if (!actor->NeedsNpcObservation()) { record("NOT_AN_OBSERVABLE_NPC"); return; }
+  if (generation != actor->GetNpcGeneration()) { record("STALE_GENERATION"); return; }
+  record("ACCEPTED");
 }
