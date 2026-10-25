@@ -79,7 +79,7 @@ Sessões em jogo de 23 e 24/10/2026 (registros em `_work\evidence\H\` do workspa
     significa retorno da chamada nativa; RAGDOLL_PENDING sem APPLIED continua sendo investigação, sem timeout novo.
     ragdollService, CanHit, fórmulas, filtro do golpe, limite e respawn nativo permanecem intocados.
   - Recomendações fora da DS-0i: encaminhar movimento a vizinhos só após validação; tratar limite de velocidade por pacote.
-- **Arma após respawn nativo (DS-0k, entrega para revisão; sessão em jogo pendente):**
+  - **Arma após respawn nativo (DS-0k, entrega para revisão; sessão em jogo pendente):**
   - No ramo nativo que recompõe inventário/outfit, o host chama o mesmo EquipBestWeapon da inicialização, lendo
     exclusivamente o inventário interno e os WEAP vencedores. Publica UpdateEquipmentMessage confiável pelo canal
     existente, com o idx do NPC; numChanges avança a partir do equipamento anterior à reconstrução, mesmo que o
@@ -108,7 +108,21 @@ Sessões em jogo de 23 e 24/10/2026 (registros em `_work\evidence\H\` do workspa
   - Sem novos pacotes diagnósticos, alteração do payload, conversão de 803/C5F2 em desarmado, HUD, notificação,
     mensagem ou som ao jogador. logTrace usa o log de console técnico existente. OnHit mantém a exigência de
     equipamento do host; CanHit, fórmulas e distância permanecem intactos. Não decide quando renascer nem a criatura (Q13).
-- **Observação da criatura** (DS-0g):
+  - **Investigação do crash de entrada (DS-0k-fix1, 25/10/2026):** a aprovação automatizada da DS-0k acima não
+    comprova estabilidade em jogo. O A/B do dono registrou duas quedas com o host DS-0k e entrada normal com DS-0i.
+    A causa continua **não provada**; não foi aplicada correção especulativa ao host. O teste nativo
+    `--npc-entry-inventory` usa Loader/PartOne reais, plugins binários em TEMP, provider movido e sobrescrito:
+    360 verificações de CreateActor, propriedades de inventário e UpdateEquipment, incluindo o contador herdado,
+    sem reproduzir ID inválido. `--npc-entry-audit` conferiu 11.583 NPCs vencedores e 25.632 CNTO instalados,
+    sem alvo ausente ou divergência do callback. `--npc-entry-area` inicializou as bases de 55 ACHR das 25 células
+    próximas à posição do A/B e conferiu 370 entradas publicadas contra a identidade do record vencedor, sem
+    reproduzir ID inválido. Essa amostra usa uma escolha nativa de template por base e não restaura o changeform
+    da sessão; não cobre todas as escolhas de LVLN nem a aplicação no motor. As hipóteses de conversão dupla e
+    contador incorreto não se reproduziram nos casos cobertos; não estão descartadas para toda sessão possível.
+    Evidências e delta DS-0i → DS-0k em `_work/evidence/DS-0k-fix1/` do workspace. O addon isolado
+    `build/ds0k-fix1-server/scam_native.node` recompila o comportamento DS-0k existente; **não é um fix de crash**
+    e não foi instalado. Teste em jogo/A-B e identificação causal continuam com o dono e o revisor.
+  - **Observação da criatura** (DS-0g):
   - `ActionListener::OnCustomPacket` intercepta o canal `aetherius.npc.observation` e valida tamanho, formato exato,
     sessão, NPC, hoster atual, vivo, chave estável `plugin:ID` (nunca FormID de runtime) e geração.
   - `MpActor::AdoptNpcObservation` valida a criatura pela cadeia de records (`LeveledListUtils::ValidateObservation`),
