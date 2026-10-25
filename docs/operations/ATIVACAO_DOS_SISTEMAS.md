@@ -217,8 +217,21 @@ A ferramenta `runtime/adopt-standing-stone.mjs` também é só de desenvolviment
 
 ## 5. O que cada sistema faz quando ligado
 
-**DS-2 — definições de combate:** o boot usa createFileHost para conferir os plugins relevantes e resolver WEAP/ARMO/AMMO/RACE/KYWD por StableFormKey. damage.catalog.domain passa a combat; catálogo SUPPORTED significa apenas reconciliação. damage.status permanece UNSUPPORTED com COMBAT_PROFILE_PROJECTION_NOT_DELIVERED (DS-4) e NATIVE_COMBAT_CATALOG_BRIDGE_NOT_DELIVERED (DS-5), além de dependências ausentes no ambiente. Não muda fórmula, ownership ou spawn (Q13); lacunas de ENCH, herança e AttackData ficam explícitas no catálogo.
+**DS-2 — definições de combate:** o boot usa createFileHost para conferir os plugins relevantes e resolver WEAP/ARMO/AMMO/RACE/KYWD por StableFormKey. damage.catalog.domain passa a combat; catálogo SUPPORTED significa apenas reconciliação. O DS-4 agora publica aetheriusCombatProfile, mas isso é uma projeção de fontes com estados explícitos: dados de perfil ausentes e magnitudes Q15/Q16 continuam UNSUPPORTED. damage.status continua UNSUPPORTED com NATIVE_COMBAT_CATALOG_BRIDGE_NOT_DELIVERED (DS-5); a projeção não calcula dano nem altera ownership ou spawn (Q13). Lacunas de ENCH, herança e AttackData ficam explícitas no catálogo.
 
+### Perfil de combate (DS-4)
+
+Quando há ao menos uma fonte de perfil com capability SUPPORTED em active/canary, a propriedade invisível aetheriusCombatProfile contém uma versão completa do perfil player/NPC e a revisão do snapshot. O player é recomposto pelo ActorComposition quando classe, nível, raça ou grants mudam; atributos máximos são lidos na mesma composição. A revisão cresce por CharacterKey no processo e é preservada numa reconexão no mesmo processo. A leitura pública readCombatProfile(binding) só consulta a propriedade em memória e valida o SessionBinding; inspectNpcCombatProfile(actorId) usa apenas a observação do host e o catálogo. Nenhum deles faz I/O de banco/arquivo/rede.
+
+Os dados de classe vêm de stages[].skills cumulativos; perks preservam sourceKind/sourceKey e passam pelo compilador DS-3. A cobertura real depende das condições completas presentes no catálogo PERK: quando faltam, o item fica UNSUPPORTED. O perfil NPC requer StableFormKey confirmado; o marcador DS-0g atual, que só informa geração, não cria identidade. Auto-cálculo, perks NPC, máximos NPC e efeitos Q15/Q16 sem magnitude de instância ficam UNSUPPORTED. Fortify Sneak Attacks fica INACTIVE por Q9. Q13: DamageSystem não decide spawn.
+
+Esta etapa não adiciona opção, tabela, migration ou ativação no .env; não há ação para ligar ou desfazer. O perfil é projeção de estado, não resultado aplicado. A integração nativa ao hit continua DS-5; não declarar cálculo de dano disponível até essa etapa.
+
+#### Teste com host local (Opus; não executado pela Luna)
+
+Após o build do Core, usar somente uma porta UDP isolada diferente de 7777, uma pasta de trabalho vazia, o addon compilado e o diretório de plugins já disponível. O StableFormKey de --actor-base deve ser escolhido da NPC_.jsonl pelo FormID; o harness confirma o winner contra a load order fornecida e resolve o FormID de runtime dinamicamente. O script lê apenas AETHERIUS_TEST_DATABASE_URL de _work/db.env, valida aetherius_test local, cria um schema gc_ único e o remove no finally.
+
+Comando do revisor: node runtime/tests/combat-profile-host.mjs --port <porta-isolada> --work-dir <pasta-vazia> --addon <scam_native.node> --data-dir <pasta-de-plugins> --actor-base "<plugin|FormID-local>". O teste verifica a propriedade real, skills cumulativas, origem de grants, máximos explícitos e revisão após troca de classe. O script não testa o consumidor nativo do hit nem a interface do Skyrim; ambos continuam pendentes da DS-5 e do dono do projeto.
 
 ### DS-0i: correção de posição de NPC hospedado
 
@@ -637,6 +650,7 @@ e sessão de jogo ficam para Opus/dono; snapshot e relatório não marcam gate.
 | 10/10/2026 | FIX-1010 | nenhuma migration nova; testes do Core somente em schemas descartáveis de aetherius_test | proteção de veneno e revisão derivada; rebuild Release e bundle; servidor mantido parado; weaponPoison desligado; queda não reproduzida; servidor e jogo pendentes do revisor/dono |
 | 08/10/2026 | classes (C3a) | migrations 0006 e 0007; classe do personagem de teste definida como `viper` pela ferramenta `runtime/set-character-class.mjs` | `GAMEPLAY_CORE_MODE_CLASSES=active` e, **só neste ambiente de teste**, `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` |
 | 09/10/2026 | perks no cliente B5b | nenhuma alteração em aetherius_dev; migration 0008 somente em schemas descartáveis de aetherius_test | nenhuma opção local alterada; bundle do cliente em evidência, sem instalação; addon e jogo não executados pelo Sol |
+| 24/10/2026 | perfil de combate (DS-4) | nenhuma migration ou tabela; nenhum banco acessado | sem opção ou alteração de .env; servidor, cliente, jogo e MO2 não alterados nem iniciados; propriedade de perfil preparada para revisão |
 
 As linhas acima registram a configuração histórica anterior à B1-fix1; não comprovam ativação com a trava nova. **Para o revisor manter o teste local:** definir `NODE_ENV=local` e `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS=true`; deixar `GAME_ACCESS_CONTROL` ausente (ou `false`). `GAMEPLAY_CORE_DEV_CLASS_LEVEL=40` pode permanecer somente nesse teste. Com login oficial, remover `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY`: o host novo exige sessão oficial mesmo quando ela está presente. Para harness com host antigo sem identidade oficial, conservar essa opção com a trava local.
 

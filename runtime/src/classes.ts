@@ -4,7 +4,7 @@ import { classGrants, readClass, createClassCommands, withDevelopmentLevel } fro
 import { levelingLevelPort } from '../../modules/leveling-system/src/persistence/durable.ts';
 import type { AttributeSystem } from './attribute-system.ts';
 import { readProgress } from '../../modules/leveling-system/src/persistence/durable.ts';
-import { readAllocation } from '../../modules/class-progression-system/src/index.ts';
+import { readAllocation, readAttributeState } from '../../modules/class-progression-system/src/index.ts';
 import { lockCharacter } from '../../shared/persistence/src/transaction.ts';
 import type { SystemContext } from './index.ts';
 import { DevelopmentClassSweep } from './class-sweep.ts';
@@ -18,10 +18,15 @@ export class ClassSystem {
   constructor(private context:SystemContext,private data:DomainData,private devLevel:number|undefined,private schema:string,private canCompose:(key:string)=>boolean=()=>true,private sweepEnabled=false,private sweepAttempts?:Set<string>,private attributes?:AttributeSystem){}
   start(){
     const ctx=this.context,port=withDevelopmentLevel(levelingLevelPort,this.devLevel);
-    if(['active','canary'].includes(ctx.mode))ctx.composition.register({id:'classes',read:async(tx,key)=>{
+    if(['active','canary'].includes(ctx.mode))ctx.composition.register({id:'classes',read:async(tx,key,binding)=>{
       if(!this.canCompose(key))return {revision:0,grants:[]};
       const fact=await readClass(tx,key),actual=await port.read(tx,key),level={...actual,level:this.sweep?.level(key)??actual.level},revision=(fact?.revision??0)+level.revision;
-      return {revision,grants:classGrants(this.data,ctx.catalog,fact,level.level,revision)};
+      const attributeState=await readAttributeState(tx,key,port);
+      const attributeMaximum=this.attributes?.combatProfileMaximums(binding,attributeState)
+        ??{status:'UNSUPPORTED' as const,value:null,reason:'ATTRIBUTE_SYSTEM_UNAVAILABLE'};
+      return {revision,grants:classGrants(this.data,ctx.catalog,fact,level.level,revision),combatProfile:{kind:'classes' as const,
+        classId:fact?.classId??null,level:level.level,classRevision:fact?.revision??0,levelRevision:actual.revision,
+        attributeAllocationRevision:attributeState.revision,attributeMaximum}};
     }});
     if(this.sweepEnabled){
       if(!ctx.persistence||ctx.projection.capability().perks.status!=='SUPPORTED'||!['active','canary'].includes(ctx.mode)){

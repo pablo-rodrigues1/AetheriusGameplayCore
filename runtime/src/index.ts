@@ -19,6 +19,10 @@ export { ClientDelivery } from './client-delivery.ts';
 export { PerkDelivery } from './projection/perks.ts';
 export { perkMigration } from './projection/migration.ts';
 import { ActorComposition, nativeStonePerkKeys } from './composition.ts';
+import { CombatProfileProjectionPort, composeNpcCombatProfile, findCatalogEntry } from './combat-profile.ts';
+import type { CombatProfileCompositionFacts } from './combat-profile.ts';
+export { CombatProfileProjectionPort, composePlayerCombatProfile, composeNpcCombatProfile, COMBAT_PROFILE_PROPERTY } from './combat-profile.ts';
+export type { CombatProfileCompositionFacts, ClassCombatProfileFacts, RaceCombatProfileFacts, NpcObservation, PlayerCombatProfileInput } from './combat-profile.ts';
 export {nativeStonePerkKeys} from './composition.ts';
 import { StandingStoneSystem } from './standing-stones.ts';
 import { RaceSystem } from './races.ts';
@@ -128,6 +132,7 @@ export function createGameplayCore(host: HostContext) {
   let spike: ReturnType<typeof createStandingStoneSpike> | undefined;
   let projection: SpellProjection | undefined;
   let composition: ActorComposition | undefined;
+  let combatProfiles: CombatProfileProjectionPort | undefined;
   let standingStones: StandingStoneSystem | undefined;
   let races: RaceSystem | undefined;
   let classes: ClassSystem | undefined;
@@ -203,7 +208,8 @@ export function createGameplayCore(host: HostContext) {
     await leveling?.shutdown(); leveling = undefined;
     for (const stop of stops.splice(0).reverse()) { try { await stop(); } catch { warn('system shutdown failed'); } }
     await attributes?.shutdown(); attributes=undefined;
-    await composition?.shutdown(); composition = undefined; standingStones = undefined; races = undefined; classes=undefined;
+    await composition?.shutdown(); composition = undefined;
+    combatProfiles?.shutdown(); combatProfiles=undefined; standingStones = undefined; races = undefined; classes=undefined;
     await projection?.shutdown(); projection = undefined; clientDelivery=undefined;
   }
   async function boot(ticket: number) {
@@ -242,7 +248,7 @@ export function createGameplayCore(host: HostContext) {
     try{devCombatProbe=developmentCombatProbe(env);
       if(devCombatProbe)warn(`DEV COMBAT PROBE ENABLED: DEVELOPMENT ONLY, NEVER ON THE OFFICIAL SERVER; polls mp.getAetheriusCombatProbe every 2 s into ${devCombatProbe.file}`);
     }catch(error){warn(`ERROR ${(error as Error).message}; DEV combat probe refused`);}
-    failures.set('damage', 'COMBAT_PROFILE_PROJECTION_NOT_DELIVERED (DS-4); NATIVE_COMBAT_CATALOG_BRIDGE_NOT_DELIVERED (DS-5): catalog definitions do not certify a damage calculation');
+    failures.set('damage', 'NATIVE_COMBAT_CATALOG_BRIDGE_NOT_DELIVERED (DS-5): catalog definitions and the DS-4 profile do not certify a damage calculation; Q15/Q16 effect magnitudes remain UNSUPPORTED');
     failures.set('leveling','SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED: runtime awardLevelingXp entry available after boot; no caller/event source connected');
     for (const spec of specs.values()) mode(spec.id);
     if (devEnabled('ENABLE_STANDING_STONE_SPIKE') && ['canary', 'active'].includes(mode('standing-stones'))) {
@@ -340,11 +346,37 @@ export function createGameplayCore(host: HostContext) {
     }
     if(host.mp?.getServerSettings().aetheriusCombat?.weaponPoison===true)
       actors.onReady(({binding})=>{void composition?.inspect(binding).catch(()=>warn('poison dose UNSUPPORTED: composition unavailable'));});
+    const profileSources=['standing-stones','races','classes'] as const;
+    const availableProfileSources=profileSources.filter(id=>{
+      const spec=specs.get(id);
+      return !!spec&&['active','canary'].includes(mode(id))&&capability(spec).status==='SUPPORTED';
+    });
+    if(availableProfileSources.length){
+      const profileCanPublish=(binding:SessionBinding)=>availableProfileSources.some(id=>
+        mode(id)==='active'||mode(id)==='canary'&&canary.has(binding.characterKey));
+      combatProfiles=new CombatProfileProjectionPort({mp:host.mp,
+        current:binding=>current()&&actors.isCurrent(binding)&&profileCanPublish(binding),warn});
+      scope.add(actors.onUnbound(binding=>combatProfiles?.clear(binding)));
+    }
+    const profileClassData=BUILD_DOMAINS.find(domain=>domain.domain==='classes');
     composition = new ActorComposition({ pool: db.status === 'SUPPORTED' ? pool : undefined,
       schema: env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public',
       check: binding => { if (!current() || !actors.isCurrent(binding)) throw Object.assign(Error('STALE_BINDING'), { code: 'STALE_BINDING' }); },
       publish: (binding, set) => commonProjection.publish({ binding, set }),
-      onComposed:(binding,set)=>poisonProjection.publish(binding,set) });
+      onComposed:(binding,set,outputs)=>{
+        try{
+          const classFacts=outputs.find(output=>output.combatProfile?.kind==='classes')?.combatProfile;
+          const raceFacts=outputs.find(output=>output.combatProfile?.kind==='races')?.combatProfile;
+          const facts:CombatProfileCompositionFacts={
+            ...(classFacts?.kind==='classes'?{classes:classFacts}:{}),
+            ...(raceFacts?.kind==='races'?{races:raceFacts}:{})
+          };
+          const profileCatalogs=[...catalogs.values()];
+          combatProfiles?.publishPlayer({binding,set,facts,classData:profileClassData,
+            lookupPerk:key=>findCatalogEntry(profileCatalogs,key)});
+        }catch{warn('combat profile composition UNSUPPORTED: PROFILE_COMPOSITION_FAILED');}
+        poisonProjection.publish(binding,set);
+      } });
     if(pool&&db.status==='SUPPORTED'&&!failures.has('classes')){
       attributes=new AttributeSystem({mp:host.mp,pool,schema:env.GAMEPLAY_CORE_DATABASE_SCHEMA??'public',actors,devLevel:devClassLevel,devValues:devAttributes,warn,
         current:binding=>current()&&actors.isCurrent(binding)&&(mode('classes')==='active'||mode('classes')==='canary'&&canary.has(binding.characterKey))});
@@ -444,13 +476,28 @@ export function createGameplayCore(host: HostContext) {
       reason: failures.get('standing-stones') ?? 'STANDING_STONES_NOT_STARTED', committed: false }),
     observeRace: (binding: SessionBinding) => races?.observe(binding) ?? Promise.resolve({status:'UNSUPPORTED' as const,raceKey:null,reason:'RACES_NOT_STARTED'}),
     setCharacterClass:(input:{binding:SessionBinding;requestId:string;classId:string})=>classes?.set(input)??Promise.resolve({status:'UNSUPPORTED' as const,reason:failures.get('classes')??'CLASSES_NOT_STARTED'}),
-    allocateAttributes:(input:{binding:SessionBinding;requestId:string}&AttributeValues)=>classes?.isSweeping(input.binding)
-      ?Promise.resolve({status:'UNSUPPORTED' as const,reason:'DEV_SWEEP_IN_PROGRESS',committed:false})
-      :attributes?.allocate(input)??Promise.resolve({status:'UNSUPPORTED' as const,reason:failures.get('classes')??'ATTRIBUTES_NOT_STARTED',committed:false}),
+    allocateAttributes:async(input:{binding:SessionBinding;requestId:string}&AttributeValues)=>{
+      if(classes?.isSweeping(input.binding))return {status:'UNSUPPORTED' as const,reason:'DEV_SWEEP_IN_PROGRESS',committed:false};
+      const result=await attributes?.allocate(input)
+        ??{status:'UNSUPPORTED' as const,reason:failures.get('classes')??'ATTRIBUTES_NOT_STARTED',committed:false};
+      if(result.status==='SUPPORTED'&&result.committed===true){
+        try{await composition?.inspect(input.binding);}
+        catch{warn('combat profile refresh UNSUPPORTED after attribute allocation');}
+      }
+      return result;
+    },
     attributeState:async(binding:SessionBinding)=>{try{return await attributes?.state(binding)??{status:'UNSUPPORTED' as const,reason:'ATTRIBUTES_NOT_STARTED'};}
       catch(error){return {status:'UNSUPPORTED' as const,reason:(error as Error).message};}},
     awardLevelingXp:(input:XpEventInput)=>leveling?.award(input)??Promise.reject(Error('LEVELING_RUNTIME_UNAVAILABLE')),
     inspectActor:(binding:SessionBinding)=>composition?.inspect(binding)??Promise.reject(Error('COMPOSITION_UNAVAILABLE')),
+    readCombatProfile:(binding:SessionBinding)=>combatProfiles?.read(binding)
+      ??{status:'UNSUPPORTED' as const,value:null,reason:'COMBAT_PROFILE_NOT_INITIALIZED'},
+    inspectNpcCombatProfile:(actorId:number)=>{
+      const npcs=catalogs.get('npcs'),raceCatalog=catalogs.get('races'),profileCatalogs=[...catalogs.values()];
+      const lookup=(key:import('../../shared/contracts/src/identity.js').StableFormKey)=>findCatalogEntry(profileCatalogs,key);
+      return combatProfiles?.inspectNpc(actorId,npcs,raceCatalog,lookup)
+        ??composeNpcCombatProfile(undefined,npcs,raceCatalog,lookup);
+    },
     refreshClass:(binding:SessionBinding)=>classes?.refresh(binding)??Promise.resolve({status:'UNSUPPORTED' as const,reason:failures.get('classes')??'CLASSES_NOT_STARTED'}),
     get identity() { return actors; },
     get actorEvents() { return actors; },

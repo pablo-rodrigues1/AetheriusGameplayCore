@@ -18,7 +18,11 @@ export class RaceSystem {
     if (['active','canary'].includes(this.context.mode) && this.context.catalog?.status === 'SUPPORTED' && this.context.persistence) {
       this.stops.push(this.context.composition.register({id:'races', read:async(tx,key)=>{
         const fact = await readRace(tx,key);
-        return {grants:raceGrants(this.context.catalog,fact),revision:fact?.revision??0};
+        const race=fact?.status==='SUPPORTED'&&fact.raceKey
+          ?{status:'SUPPORTED' as const,value:fact.raceKey}
+          :{status:'UNSUPPORTED' as const,value:null,reason:fact?.reason??'RACE_FACT_UNAVAILABLE'};
+        return {grants:raceGrants(this.context.catalog,fact),revision:fact?.revision??0,
+          combatProfile:{kind:'races' as const,race,revision:fact?.revision??0}};
       }}));
     }
     this.stops.push(this.context.actors.onReady(({binding})=>{void this.observe(binding);}));

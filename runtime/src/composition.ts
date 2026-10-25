@@ -5,6 +5,7 @@ import type { PoolPort, QueryExecutor } from '../../shared/persistence/src/index
 import type { ProjectionResult } from './projection/index.ts';
 import { scopedPool } from './persistence-scope.ts';
 import type { DomainData } from '../../shared/record-catalog/src/types.ts';
+import type { CombatProfileCompositionFacts } from './combat-profile.ts';
 
 /** PerkToApply is native magical delivery. Do not add the same PERK separately,
  * even if another source also lists it. Conditions stay owned by the engine. */
@@ -22,9 +23,15 @@ export function nativeStonePerkKeys(set:GrantSet, data:DomainData|undefined):Rea
   return keys;
 }
 
+export interface CompositionOutput {
+  readonly providerId: string;
+  readonly grants: readonly Grant[];
+  readonly revision: number;
+  readonly combatProfile?: CombatProfileCompositionFacts['classes'] | CombatProfileCompositionFacts['races'];
+}
 export interface CompositionProvider {
   readonly id: string;
-  read(tx: QueryExecutor, key: CharacterKey): Promise<{ readonly grants: readonly Grant[]; readonly revision: number }>;
+  read(tx: QueryExecutor, key: CharacterKey, binding:SessionBinding): Promise<Omit<CompositionOutput,'providerId'>>;
 }
 /** Runtime delivery boundary: native race records suppress every source of the
  * same record. Previous native records also remain protected for this transition.
@@ -50,7 +57,7 @@ export class ActorComposition {
     readonly schema: string;
     readonly check: (binding: SessionBinding) => void;
     readonly publish: (binding: SessionBinding, set: ReturnType<typeof compose>) => Promise<ProjectionResult>;
-    readonly onComposed?: (binding:SessionBinding,set:ReturnType<typeof compose>)=>void;
+    readonly onComposed?: (binding:SessionBinding,set:ReturnType<typeof compose>,outputs:readonly CompositionOutput[])=>void;
   }) {}
   register(provider: CompositionProvider): () => void {
     if (this.closed || this.providers.has(provider.id)) throw new Error('Duplicate/closed composition provider');
@@ -69,12 +76,15 @@ export class ActorComposition {
     const task = (this.tails.get(binding.characterKey) ?? Promise.resolve()).catch(() => {}).then(async () => {
       const check = () => { if (this.closed) throw Error('COMPOSITION_CLOSED'); this.options.check(binding); };
       check(); if (!this.options.pool) throw Error('DATABASE_UNAVAILABLE');
+      let outputsForCallback:readonly CompositionOutput[]=[];
       const set = await withTransaction(scopedPool(this.options.pool, this.options.schema, check), async tx => {
         await lockCharacter(tx, binding.characterKey); check();
-        const outputs = [];
+        const outputs:CompositionOutput[] = [];
         for (const provider of [...this.providers.values()].sort((a,b) => a.id.localeCompare(b.id))) {
-          outputs.push(await provider.read(tx, binding.characterKey)); check();
+          const output=await provider.read(tx, binding.characterKey,binding);check();
+          outputs.push(Object.freeze({providerId:provider.id,...output}));
         }
+        outputsForCallback=Object.freeze([...outputs]);
         const revision = outputs.reduce((sum, output) => sum + output.revision, 0);
         const next = compose(binding.characterKey, outputs.map(output => output.grants), {
           facts: revision, grants: revision, equipment: 0, effects: 0, catalog: 1
@@ -102,7 +112,7 @@ export class ActorComposition {
           catalog: previous.revision.catalog + (catalogChanged ? 1 : 0)
         });
       });
-      check(); this.derived.set(binding.characterKey,set); this.options.onComposed?.(binding,set); return action(set);
+      check(); this.derived.set(binding.characterKey,set); this.options.onComposed?.(binding,set,outputsForCallback); return action(set);
     });
     const tail = task.finally(() => { if (this.tails.get(binding.characterKey) === tail) this.tails.delete(binding.characterKey); });
     this.tails.set(binding.characterKey, tail); return tail;

@@ -1,8 +1,8 @@
-import type { SessionBinding } from '../../shared/contracts/src/index.ts';
+import type { CombatProfileValue, SessionBinding } from '../../shared/contracts/src/index.ts';
 import type { PoolPort } from '../../shared/persistence/src/index.ts';
 import { withTransaction } from '../../shared/persistence/src/index.ts';
 import { lockCharacter } from '../../shared/persistence/src/transaction.ts';
-import { createAttributeCommands, readAttributeState, withDevelopmentLevel, type AttributeValues } from '../../modules/class-progression-system/src/index.ts';
+import { createAttributeCommands, readAttributeState, withDevelopmentLevel, type AttributeState, type AttributeValues } from '../../modules/class-progression-system/src/index.ts';
 import { levelingLevelPort } from '../../modules/leveling-system/src/persistence/durable.ts';
 import type { Actors } from './actors.ts';
 import type { RuntimeMp } from './host.ts';
@@ -42,6 +42,22 @@ export class AttributeSystem {
     });
     if(!value||!valid(value.base)||!valid(value.maximum))throw Error('ATTRIBUTE_NATIVE_PROPERTY_UNAVAILABLE');
     return value as {base:AttributeValues;maximum:AttributeValues;origin:string};
+  }
+  /** Called inside ActorComposition's character-locked transaction; reads only the current host base maximum. */
+  combatProfileMaximums(binding:SessionBinding,state:AttributeState):CombatProfileValue<Readonly<AttributeValues>>{
+    try{
+      this.check(binding);
+      if(this.options.devValues)return {status:'UNSUPPORTED',value:null,reason:'DEVELOPMENT_ATTRIBUTE_OVERRIDE'};
+      const native=this.native(binding);
+      const maximum=state.applicable?{
+        health:native.base.health+state.spent.health,
+        magicka:native.base.magicka+state.spent.magicka,
+        stamina:native.base.stamina+state.spent.stamina
+      }:native.base;
+      if(Object.values(maximum).some(value=>!Number.isFinite(value)||value<=0))
+        return {status:'UNSUPPORTED',value:null,reason:'ATTRIBUTE_MAXIMUM_INVALID'};
+      return {status:'SUPPORTED',value:Object.freeze({...maximum})};
+    }catch(error){return {status:'UNSUPPORTED',value:null,reason:(error as Error).message||'ATTRIBUTE_MAXIMUM_UNAVAILABLE'};}
   }
   async state(binding:SessionBinding){
     this.check(binding);

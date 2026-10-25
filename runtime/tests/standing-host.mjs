@@ -10,7 +10,7 @@ export function standingHost({catalogAvailable=true,shift=0}={}) {
   const data=JSON.parse(readFileSync(new URL('../../catalog/standing-stones.json',import.meta.url),'utf8'));
   const originalGet=mp.get, originalId=mp.getIdFromDesc;
   const ids=new Map(), descs=new Map(), references=new Map(), properties=new Map(), values=new Map(), learned=new Map();
-  const calls=[], notices=[];let missingNoticePropertyReads=0;
+  const calls=[], writes=[], notices=[];let missingNoticePropertyReads=0;
   const desc=key=>{const [plugin,hex]=key.split('|');return `${hex.toLowerCase()}:${plugin}`;};
   mp.getIdFromDesc=d=>{const id=originalId(d)+shift;descs.set(id,d);return id;};
   for(const r of data.records) ids.set(r.stableFormKey,mp.getIdFromDesc(desc(r.stableFormKey)));
@@ -24,7 +24,14 @@ export function standingHost({catalogAvailable=true,shift=0}={}) {
     return originalGet(actor,name);
   };
   mp.makeProperty=(name,definition)=>{if(properties.has(name))throw Error("'propertyName' must be unique");properties.set(name,definition);};
-  mp.set=(actor,name,value)=>{assert(properties.has(name));values.set(actor,structuredClone(value));notices.push({actor,name,value:structuredClone(value)});};
+  mp.set=(actor,name,value)=>{
+    assert(properties.has(name));
+    const write={actor,name,value:structuredClone(value)};
+    values.set(actor,write.value);writes.push(write);
+    // DS-4 also publishes aetheriusCombatProfile through mp.set. Keep this
+    // channel limited to the standing-stone notification the tests await.
+    if(name==='gcStandingStoneNotice')notices.push(write);
+  };
   mp.callPapyrusFunction=(type,cls,method,self,args)=>{
     assert.equal(type,'method');assert.equal(cls,'Actor');assert.equal(self.type,'form');
     const actor=Number(self.desc.slice(8)), spells=own(actor);calls.push({actor,method,args:structuredClone(args)});
@@ -35,7 +42,7 @@ export function standingHost({catalogAvailable=true,shift=0}={}) {
     if(method==='RemoveSpell')return spells.delete(id);
     throw Error('unsupported native method');
   };
-  const host=Object.assign(mp,{data,ids,calls,notices,properties,learned:own,
+  const host=Object.assign(mp,{data,ids,calls,writes,notices,properties,learned:own,
     reference(stoneKey){const id=90000+references.size;references.set(id,desc(stoneKey));return id;},
     mutations:()=>calls.filter(c=>['AddSpell','RemoveSpell'].includes(c.method)),
     clearNoticeProperty(){properties.clear();}

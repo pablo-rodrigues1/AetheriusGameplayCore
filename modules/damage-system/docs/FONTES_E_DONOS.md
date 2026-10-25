@@ -349,3 +349,22 @@ REQUISITO_ENCANTAMENTOS_E_POCOES.md. O DamageSystem não cria esse dado nem acei
 magnitude do cliente. Não há crafting, consumo, cronômetro, store de efeitos ou
 ActorCombatState adicional nesta entrega. Nenhuma família muda de owner agora:
 activation=UNSUPPORTED; o catálogo fornece definições para DS-4/DS-5.
+
+## 13. CombatProfileProjection — fontes e donos dos campos (DS-4)
+
+O perfil é uma projeção imutável, versionada (version=1) e publicada como uma única propriedade do host (aetheriusCombatProfile) somente quando uma fonte elegível está em active/canary. Ele não persiste um novo fato, não calcula nem aplica dano e não altera os owners da seção 7. A revisão é mantida por personagem em memória durante o processo e avança quando muda o conteúdo; reconectar o mesmo CharacterKey no processo conserva a revisão. Não há promessa de continuidade da revisão após reiniciar o processo, nem consumidor de hit integrado nesta etapa.
+
+| Campo | Fonte autoritativa / dono do fato | Estado DS-4 e limite |
+|---|---|---|
+| subject.characterKey e revisão de vínculo | SessionBinding e ActorState | Player usa CharacterKey; epoch só valida o vínculo de sessão. A revisão do perfil é local ao processo, sem migration. |
+| nível | Leveling / fato de classe capturado por ActorComposition | Player lê nível e revisão da mesma composição; ausente = UNSUPPORTED. NPC usa nível observado confirmado ou NPC_.level fixo. PC_LEVEL_MULT sem nível observado = UNSUPPORTED. |
+| raça | Race + RecordCatalog | StableFormKey do RACE vencedor; sem record ou revisão = UNSUPPORTED. |
+| skills de combate do player | Class + catalog/classes.json | Valores cumulativos de stages[].skills no nível atual (Q1/Q14), sem bônus racial. Skills ausentes = UNSUPPORTED. O perfil não aplica skills ao motor. |
+| skills de NPC | record NPC_ vencedor e seu template Stats | Só valores explícitos do record com AutoCalcStats=false; auto-cálculo sem CLAS/GMSTs vencedores = UNSUPPORTED. |
+| perks efetivos e origem | grants do ActorState (sourceKind + sourceKey) e compilador DS-3 | Compilação de origem CLASS; grava rank, StableFormKey, condições e resultado por regra. O catálogo PERK compacto usado em runtime omite condições CTDA completas de records como os da classe; nesses casos o compilador retorna UNSUPPORTED. Não se lê export de desenvolvimento em runtime nem se inventa regra. Outras origens não certificadas = UNSUPPORTED, preservando a origem. |
+| perks do NPC | NPC_ Perks e PERK winner | A presença/proveniência do record pode ser relatada; compilador DS-3 só certifica grants CLASS, portanto perks NPC ficam UNSUPPORTED. Campo não exportado = UNSUPPORTED. |
+| máximos de vida, magia e vigor | AttributeSystem e host SkyMP, lidos durante a composição | Snapshot sincronizado com a composição do personagem; override de desenvolvimento ou getter ausente = UNSUPPORTED. Para NPC, máximos ainda não resolvidos = UNSUPPORTED. |
+| variáveis Q15/Q16 | instâncias ativas do ActorState do servidor | Dez famílias físicas declaradas; nesta ordem suas fontes de magnitude ativa não existem no ActorState, então cada valor é UNSUPPORTED com null. Fortify Sneak Attacks permanece INACTIVE (Q9). Record/descrição não substituem magnitude de instância; nunca aceitar valor do cliente. |
+| identidade/cadeia do NPC | observação DS-0g + NPC_ e RecordCatalog | Exige observação confirmada com StableFormKey. O marcador DS-0g atualmente disponível fornece apenas geração; sem chave estável o perfil inteiro é UNSUPPORTED. Resolver/relatar a criatura observada não escolhe, troca, cria nem remove NPC (Q13). |
+
+Leitura do perfil consulta somente a propriedade em memória; composição usa o snapshot produzido pelo ActorComposition. A troca publica um snapshot completo em um único mp.set, com revisão, para não expor campos de composições diferentes. Isso não prova que um hit consome essa revisão: consumo nativo e garantia no caminho de hit são DS-5.
