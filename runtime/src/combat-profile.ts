@@ -14,6 +14,7 @@ import type { RuntimeMp } from './host.ts';
 
 export const COMBAT_PROFILE_PROPERTY = 'aetheriusCombatProfile';
 export const NPC_OBSERVATION_PROPERTY = 'aetheriusNpcObservation';
+const NPC_PROFILE_CACHE_LIMIT = 2048;
 const SKILLS: readonly CombatSkill[] = ['OneHanded', 'TwoHanded', 'Marksman', 'Block', 'HeavyArmor', 'LightArmor'];
 const EFFECT_SOURCE_UNAVAILABLE = 'ACTIVE_EFFECT_INSTANCE_MAGNITUDE_UNAVAILABLE';
 
@@ -241,6 +242,17 @@ export function composePlayerCombatProfile(input:PlayerCombatProfileInput,revisi
 function isStableKey(value:unknown):value is StableFormKey {
   return typeof value==='string'&&stableKeyPattern.test(value);
 }
+function npcObservationKey(observation:unknown):string {
+  const raw=observation&&typeof observation==='object'&&!Array.isArray(observation)
+    ?observation as Record<string,unknown>:undefined;
+  return JSON.stringify([
+    typeof raw?.status==='string'?raw.status:null,
+    isStableKey(raw?.stableFormKey)?raw.stableFormKey:null,
+    typeof raw?.generation==='string'&&raw.generation.length>0?raw.generation:null,
+    validNpcLevel(raw?.level)?raw.level:null,
+    typeof raw?.reason==='string'?raw.reason:null
+  ]);
+}
 function parseProvider(data:JsonObject,category:typeof NPC_TEMPLATE_CATEGORIES[number]):CombatProfileTemplateCategory {
   try {
     const result=npcTemplateProvider(data,category) as JsonObject;
@@ -315,8 +327,8 @@ function npcPerks(record:CatalogEntry|undefined,lookup:PerkCatalogLookup,sourceK
     items.push(Object.freeze({sourceKind:'NPC_RECORD',sourceKey,stableFormKey:key,rank:item[1],status:'UNSUPPORTED',
       reason:'DS3_COMPILER_SOURCE_KIND_UNSUPPORTED',compiled:null}));
   }
-  return Object.freeze({status:items.length?'UNSUPPORTED':'PARTIAL',value:Object.freeze(items),
-    reason:items.length?'NPC_PERKS_NOT_COMPILED':'NPC_PERK_ROW_UNSUPPORTED'});
+  return Object.freeze({status:'UNSUPPORTED',value:Object.freeze(items),
+    reason:items.length?'NPC_PERKS_NOT_COMPILED':'NPC_PERK_ROWS_UNRESOLVED'});
 }
 
 function npcUnsupportedFields(reason:string) {
@@ -389,14 +401,31 @@ function contentWithoutRevision(profile:CombatProfileProjection):string {
   return JSON.stringify(content);
 }
 
+interface NpcProfileCacheEntry {
+  readonly observationKey:string;
+  readonly npcs:DomainCatalog|undefined;
+  readonly npcsSignature:DomainCatalog['signature']|undefined;
+  readonly races:DomainCatalog|undefined;
+  readonly racesSignature:DomainCatalog['signature']|undefined;
+  readonly lookupPerk:PerkCatalogLookup;
+  readonly profile:NpcCombatProfileProjection;
+}
+
 export class CombatProfileProjectionPort {
   private registered=false;
   private playerProfiles=new Map<CharacterKey,PlayerCombatProfileProjection>();
   private playerBindings=new Map<number,SessionBinding>();
-  private npcProfiles=new Map<number,NpcCombatProfileProjection>();
-  constructor(private options:{readonly mp:RuntimeMp|undefined;readonly current:(binding:SessionBinding)=>boolean;readonly warn:(message:string)=>void}) {
+  private npcProfiles=new Map<number,NpcProfileCacheEntry>();
+  private npcRevisionWatermark=0;
+  private npcCompositions=0;
+  private readonly npcProfileCacheLimit:number;
+  constructor(private options:{readonly mp:RuntimeMp|undefined;readonly current:(binding:SessionBinding)=>boolean;readonly warn:(message:string)=>void;
+    readonly npcProfileCacheLimit?:number}) {
+    this.npcProfileCacheLimit=options.npcProfileCacheLimit??NPC_PROFILE_CACHE_LIMIT;
+    if(!Number.isSafeInteger(this.npcProfileCacheLimit)||this.npcProfileCacheLimit<1)throw Error('NPC_PROFILE_CACHE_LIMIT_INVALID');
     this.register();
   }
+  get npcCompositionCount():number { return this.npcCompositions; }
   private register():void {
     const mp=this.options.mp;
     if(!mp?.makeProperty||!mp.set)return;
@@ -445,16 +474,38 @@ export class CombatProfileProjectionPort {
     if(!Number.isSafeInteger(actorId)||actorId<=0)return composeNpcCombatProfile({status:'UNSUPPORTED',reason:'NPC_ACTOR_REF_INVALID'},npcs,races,lookupPerk);
     let observation:unknown;
     try { observation=this.options.mp?.get(actorId,NPC_OBSERVATION_PROPERTY); } catch { observation=undefined; }
+    const observationKey=npcObservationKey(observation);
     const previous=this.npcProfiles.get(actorId);
-    const candidate=composeNpcCombatProfile(observation,npcs,races,lookupPerk,previous?.revision??1);
-    const unchanged=previous&&contentWithoutRevision(previous)===contentWithoutRevision(candidate);
-    const revision=unchanged?previous.revision:(previous?previous.revision+1:1);
-    const profile=unchanged?previous:freezeDeep({...candidate,revision}) as NpcCombatProfileProjection;
-    if(this.registered&&this.options.mp?.set&&Number.isSafeInteger(actorId)&&actorId>0) {
-      try { this.options.mp.set(actorId,COMBAT_PROFILE_PROPERTY,profile); }
-      catch { this.options.warn('combat profile publish UNSUPPORTED: NPC_PROFILE_PUBLICATION_FAILED'); }
+    if(previous&&previous.observationKey===observationKey&&previous.npcs===npcs
+      &&previous.npcsSignature===npcs?.signature&&previous.races===races
+      &&previous.racesSignature===races?.signature&&previous.lookupPerk===lookupPerk) {
+      this.npcProfiles.delete(actorId);
+      this.npcProfiles.set(actorId,previous);
+      return previous.profile;
     }
-    if(Number.isSafeInteger(actorId)&&actorId>0)this.npcProfiles.set(actorId,profile);
+    this.npcCompositions++;
+    const candidateRevision=previous?.profile.revision??this.npcRevisionWatermark+1;
+    if(!Number.isSafeInteger(candidateRevision))throw Error('COMBAT_PROFILE_REVISION_EXHAUSTED');
+    const candidate=composeNpcCombatProfile(observation,npcs,races,lookupPerk,candidateRevision);
+    const unchanged=previous&&contentWithoutRevision(previous.profile)===contentWithoutRevision(candidate);
+    const revision=unchanged?previous.profile.revision:(previous?previous.profile.revision+1:candidateRevision);
+    if(!Number.isSafeInteger(revision))throw Error('COMBAT_PROFILE_REVISION_EXHAUSTED');
+    const profile=unchanged?previous.profile:freezeDeep({...candidate,revision}) as NpcCombatProfileProjection;
+    if(!unchanged) {
+      this.npcRevisionWatermark=Math.max(this.npcRevisionWatermark,revision);
+      if(this.registered&&this.options.mp?.set) {
+        try { this.options.mp.set(actorId,COMBAT_PROFILE_PROPERTY,profile); }
+        catch { this.options.warn('combat profile publish UNSUPPORTED: NPC_PROFILE_PUBLICATION_FAILED'); }
+      }
+    }
+    this.npcProfiles.delete(actorId);
+    this.npcProfiles.set(actorId,{observationKey,npcs,npcsSignature:npcs?.signature,races,racesSignature:races?.signature,lookupPerk,profile});
+    while(this.npcProfiles.size>this.npcProfileCacheLimit) {
+      const oldestActorId=this.npcProfiles.keys().next().value as number|undefined;
+      if(oldestActorId===undefined)break;
+      this.npcProfiles.delete(oldestActorId);
+      try { this.options.mp?.set?.(oldestActorId,COMBAT_PROFILE_PROPERTY,null); } catch { /* actor already left */ }
+    }
     return profile;
   }
   clear(binding:SessionBinding):void {

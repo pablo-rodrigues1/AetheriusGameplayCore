@@ -49,7 +49,7 @@ function entryFromRecord(record){
 }
 function domainCatalog(data){
   const byKey=new Map(data.records.map(record=>[record.stableFormKey,record]));
-  return {status:'SUPPORTED',byKey(key){const record=byKey.get(key);return record?entryFromRecord(record):undefined;}};
+  return {status:'SUPPORTED',signature:data.signature,byKey(key){const record=byKey.get(key);return record?entryFromRecord(record):undefined;}};
 }
 const classData=domainFile('classes');
 const raceData=domainFile('races');
@@ -286,6 +286,108 @@ function confirmedNpcFixture(){
   }
   throw new Error('No exported NPC_ FormID has resolved fixed level, Stats, and Traits data');
 }
+function npcBaseDataFixture(perksKind){
+  const data=domainFile('npcs'),npcs=domainCatalog(data);
+  const npcExports=readJsonl('NPC_.jsonl').filter(row=>typeof row.formid==='string'&&row.type==='Npc');
+  const byFormId=new Map(npcExports.map(row=>[row.formid.toLowerCase(),row]));
+  const recordsByKey=new Map(data.records.filter(record=>record.recordType==='NPC_').map(record=>[record.stableFormKey,record]));
+  for(const record of recordsByKey.values()){
+    const selected=byFormId.get(formIdFromStable(record.stableFormKey).toLowerCase());
+    if(!selected||String(selected.winner).toLowerCase()!==record.winnerPlugin.toLowerCase())continue;
+    const provider=stableCatalogProvider(record.data,'BaseData');
+    if(!provider)continue;
+    const baseData=recordsByKey.get(provider.provider);
+    if(!baseData)continue;
+    const baseExport=byFormId.get(formIdFromStable(baseData.stableFormKey).toLowerCase());
+    if(!baseExport||String(baseExport.winner).toLowerCase()!==baseData.winnerPlugin.toLowerCase())continue;
+    if(perksKind==='NULL'&&baseData.data.perks!==null)continue;
+    if(perksKind==='ROWS'&&!Array.isArray(baseData.data.perks))continue;
+    if(perksKind==='NULL'){
+      const byCatalogKey=npcs.byKey.bind(npcs);
+      const knownNullNpcs={...npcs,byKey(key){
+        const entry=byCatalogKey(key);
+        if(key!==baseData.stableFormKey||!entry)return entry;
+        const unavailable=Array.isArray(entry.data.unavailable)?entry.data.unavailable.filter(field=>field!=='Perks'):[];
+        return {...entry,data:{...entry.data,unavailable}};
+      }};
+      return {record,npcs:knownNullNpcs,races:domainCatalog(raceData)};
+    }
+    return {record,npcs,races:domainCatalog(raceData)};
+  }
+  throw new Error('No exported NPC_ FormID has the requested BaseData perks shape: '+perksKind);
+}
+test('NPC profile composition cache skips repeat work and publication until content changes',()=>{
+  const npcFixture=confirmedNpcFixture();
+  const actorId=81,observation={status:'CONFIRMED',generation:'npc-generation-cache',
+    stableFormKey:npcFixture.record.stableFormKey,level:npcFixture.record.data.level.value};
+  const values=new Map([[actorId+':aetheriusNpcObservation',observation]]),writes=[];
+  const mp={makeProperty(){},set(id,name,value){values.set(id+':'+name,value);writes.push({id,name,value});},get(id,name){return values.get(id+':'+name);}};
+  const port=new api.CombatProfileProjectionPort({mp,current:()=>true,warn:()=>{}});
+
+  const first=port.inspectNpc(actorId,npcFixture.npcs,npcFixture.races,lookupPerk);
+  const repeated=port.inspectNpc(actorId,npcFixture.npcs,npcFixture.races,lookupPerk);
+  assert.equal(port.npcCompositionCount,1,'same observation and catalog identities compose once');
+  assert.equal(repeated,first);
+  assert.equal(repeated.revision,first.revision);
+  assert.equal(writes.length,1,'repeat inspection does not call mp.set');
+
+  values.set(actorId+':aetheriusNpcObservation',{...observation,generation:'npc-generation-next',level:observation.level+1});
+  const changed=port.inspectNpc(actorId,npcFixture.npcs,npcFixture.races,lookupPerk);
+  assert.equal(port.npcCompositionCount,2);
+  assert.equal(changed.revision,first.revision+1,'changed observation advances the revision once');
+  assert.equal(writes.length,2,'changed content publishes one complete profile');
+
+  const replacementNpcs={...npcFixture.npcs};
+  const replacementRaces={...npcFixture.races};
+  const replacementLookup=key=>lookupPerk(key);
+  assert.equal(port.inspectNpc(actorId,replacementNpcs,npcFixture.races,lookupPerk),changed);
+  assert.equal(port.inspectNpc(actorId,npcFixture.npcs,replacementRaces,lookupPerk),changed);
+  assert.equal(port.inspectNpc(actorId,npcFixture.npcs,npcFixture.races,replacementLookup),changed);
+  assert.equal(port.npcCompositionCount,5,'swapped catalogs and perk lookup each force recomposition');
+  assert.equal(writes.length,2,'same profile content does not publish a new revision');
+  port.shutdown();
+});
+
+test('NPC profile cache evicts least recently inspected entries and clears their host property',()=>{
+  const npcFixture=confirmedNpcFixture(),writes=[];
+  const values=new Map();
+  for(const actorId of [91,92,93])values.set(actorId+':aetheriusNpcObservation',{
+    status:'CONFIRMED',generation:'npc-generation-'+actorId,stableFormKey:npcFixture.record.stableFormKey,
+    level:npcFixture.record.data.level.value
+  });
+  const mp={makeProperty(){},set(id,name,value){values.set(id+':'+name,value);writes.push({id,name,value});},get(id,name){return values.get(id+':'+name);}};
+  const port=new api.CombatProfileProjectionPort({mp,current:()=>true,warn:()=>{},npcProfileCacheLimit:2});
+  const first=port.inspectNpc(91,npcFixture.npcs,npcFixture.races,lookupPerk);
+  const second=port.inspectNpc(92,npcFixture.npcs,npcFixture.races,lookupPerk);
+  port.inspectNpc(91,npcFixture.npcs,npcFixture.races,lookupPerk);
+  port.inspectNpc(93,npcFixture.npcs,npcFixture.races,lookupPerk);
+  assert.equal(port.npcCompositionCount,3);
+  assert.equal(values.get('92:aetheriusCombatProfile'),null,'least recently inspected actor property is cleared');
+  assert.ok(writes.some(write=>write.id===92&&write.name==='aetheriusCombatProfile'&&write.value===null));
+  assert.equal(port.inspectNpc(91,npcFixture.npcs,npcFixture.races,lookupPerk),first,'most recently inspected entry remains cached');
+  assert.equal(port.npcCompositionCount,3);
+  const afterEviction=port.inspectNpc(92,npcFixture.npcs,npcFixture.races,lookupPerk);
+  assert.equal(port.npcCompositionCount,4,'evicted actor is recomposed when observed again');
+  assert.ok(afterEviction.revision>second.revision,'revision remains monotonic across bounded-cache eviction');
+  port.shutdown();
+});
+
+test('NPC perks distinguish an explicit null list from rows that resolve to no perks',()=>{
+  const rows=npcBaseDataFixture('ROWS');
+  const unresolved=api.composeNpcCombatProfile({status:'CONFIRMED',generation:'npc-perks-rows',stableFormKey:rows.record.stableFormKey},
+    rows.npcs,rows.races,()=>undefined,1);
+  assert.equal(unresolved.perks.status,'UNSUPPORTED');
+  assert.deepEqual(unresolved.perks.value,[]);
+  assert.equal(unresolved.perks.reason,'NPC_PERK_ROWS_UNRESOLVED');
+
+  const noPerks=npcBaseDataFixture('NULL');
+  const explicitEmpty=api.composeNpcCombatProfile({status:'CONFIRMED',generation:'npc-perks-null',stableFormKey:noPerks.record.stableFormKey},
+    noPerks.npcs,noPerks.races,lookupPerk,1);
+  assert.equal(explicitEmpty.perks.status,'SUPPORTED');
+  assert.deepEqual(explicitEmpty.perks.value,[]);
+  assert.equal(explicitEmpty.perks.reason,null);
+});
+
 test('confirmed NPC profile uses the adopted NPC_ winner; unconfirmed observation stays unsupported',()=>{
   const npcFixture=confirmedNpcFixture();
   const confirmed=api.composeNpcCombatProfile({

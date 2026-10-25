@@ -20,7 +20,7 @@ export { PerkDelivery } from './projection/perks.ts';
 export { perkMigration } from './projection/migration.ts';
 import { ActorComposition, nativeStonePerkKeys } from './composition.ts';
 import { CombatProfileProjectionPort, composeNpcCombatProfile, findCatalogEntry } from './combat-profile.ts';
-import type { CombatProfileCompositionFacts } from './combat-profile.ts';
+import type { CombatProfileCompositionFacts, PerkCatalogLookup } from './combat-profile.ts';
 export { CombatProfileProjectionPort, composePlayerCombatProfile, composeNpcCombatProfile, COMBAT_PROFILE_PROPERTY } from './combat-profile.ts';
 export type { CombatProfileCompositionFacts, ClassCombatProfileFacts, RaceCombatProfileFacts, NpcObservation, PlayerCombatProfileInput } from './combat-profile.ts';
 export {nativeStonePerkKeys} from './composition.ts';
@@ -115,6 +115,22 @@ export function createGameplayCore(host: HostContext) {
   const specs = new Map(defaults.map(spec => [spec.id, spec]));
   const featureModes = new Map<string, FeatureMode>();
   const catalogs = new Map<string, DomainCatalog>();
+  let npcPerkLookupCatalogs:readonly DomainCatalog[]=[];
+  let npcPerkLookupSignatures:readonly DomainCatalog['signature'][]=[];
+  let npcPerkLookup:PerkCatalogLookup|undefined;
+  const currentNpcPerkLookup=():PerkCatalogLookup=>{
+    const currentCatalogs=[...catalogs.values()];
+    const signatures=currentCatalogs.map(catalog=>catalog.signature);
+    const unchanged=npcPerkLookup&&currentCatalogs.length===npcPerkLookupCatalogs.length
+      &&currentCatalogs.every((catalog,index)=>catalog===npcPerkLookupCatalogs[index]
+        &&signatures[index]===npcPerkLookupSignatures[index]);
+    if(!unchanged) {
+      npcPerkLookupCatalogs=currentCatalogs;
+      npcPerkLookupSignatures=signatures;
+      npcPerkLookup=key=>findCatalogEntry(npcPerkLookupCatalogs,key);
+    }
+    return npcPerkLookup!;
+  };
   const catalogFailures = new Map<string, readonly string[]>();
   let db = { status: 'UNSUPPORTED', missing: ['Runtime has not initialized'] as readonly string[] };
   let pool: PoolPort | undefined;
@@ -493,8 +509,7 @@ export function createGameplayCore(host: HostContext) {
     readCombatProfile:(binding:SessionBinding)=>combatProfiles?.read(binding)
       ??{status:'UNSUPPORTED' as const,value:null,reason:'COMBAT_PROFILE_NOT_INITIALIZED'},
     inspectNpcCombatProfile:(actorId:number)=>{
-      const npcs=catalogs.get('npcs'),raceCatalog=catalogs.get('races'),profileCatalogs=[...catalogs.values()];
-      const lookup=(key:import('../../shared/contracts/src/identity.js').StableFormKey)=>findCatalogEntry(profileCatalogs,key);
+      const npcs=catalogs.get('npcs'),raceCatalog=catalogs.get('races'),lookup=currentNpcPerkLookup();
       return combatProfiles?.inspectNpc(actorId,npcs,raceCatalog,lookup)
         ??composeNpcCombatProfile(undefined,npcs,raceCatalog,lookup);
     },
