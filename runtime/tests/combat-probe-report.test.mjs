@@ -151,3 +151,27 @@ test('DS-0i reports movement rejection reasons and last authoritative NPC correc
     '0x9 | 1800 | 7 | 0xA | DISTANCE | 100, 200, 300 | 0, 0, 90 | abc:Location.esp','não comprova recebimento'])assert(md.includes(value),value);
   assert(render('old',{rows:[{kind:'hit',sequence:1,timeMs:1,aggressorState:{actor:9}}],invalid:[]}).includes('INDISPONÍVEL'));
 });
+
+test('DS-0k NPC equipment snapshots deduplicate polls, expose lost rows and restart after host reset', () => {
+  const item={key:'801:Provider.esp',count:2,hand:'RIGHT'};
+  const sample={sequence:3,timeMs:100,actor:42,generation:7,hoster:19,phase:'RESPAWN_REBUILT',numChanges:2,equipment:[item],inventoryWeapons:[{...item,hand:'NONE'}],equipmentOmitted:0,inventoryWeaponsOmitted:1,spells:[null,null,null,null]};
+  const counter=samples=>({kind:'counters',counters:{npcEquipment:{total:3,overwritten:2,samples}}});
+  const parsed={rows:[counter([sample]),counter([sample]),{kind:'rejection',sequence:4,aggressor:42,reason:'WEAPON_NOT_EQUIPPED',npcEquipmentSequence:3},{kind:'reset'},counter([{...sample,sequence:1,phase:'AFTER_RESPAWN',generation:8}])],invalid:[]};
+  const result=analyze(parsed.rows);
+  assert.deepEqual(result.npcEquipment.map(s=>[s.epoch,s.sequence]),[[0,3],[1,1]]);
+  assert.deepEqual(result.npcEquipmentGaps,[{epoch:0,from:1,to:2,lost:2}]);
+  const md=render('ds0k',parsed);
+  assert.match(md,/Armas de NPC antes da morte e após respawn/);
+  assert.match(md,/Lacunas próprias do anel de equipamento: 2 amostras/);
+  assert.match(md,/801:Provider.esp ×2 RIGHT/);
+  assert.match(md,/801:Provider.esp ×2 NONE/);
+  assert.match(md,/RESPAWN_REBUILT/);assert.match(md,/AFTER_RESPAWN/);
+  assert.match(md,/\| 4 \| 0x2A \| 3 \|/);
+});
+
+test('DS-0k historical and missing stable keys stay explicitly unavailable', () => {
+  const md=render('old',{rows:[{kind:'rejection',sequence:1,aggressor:42,reason:'WEAPON_NOT_EQUIPPED'}],invalid:[]});
+  assert.match(md,/Formato antigo = indisponível/);assert.match(md,/\| 1 \| 0x2A \| INDISPONÍVEL \|/);
+  const unavailable=render('new',{rows:[{kind:'counters',counters:{npcEquipment:{samples:[{sequence:1,equipment:[{key:null,count:1,hand:'RIGHT'}]}]}}}],invalid:[]});
+  assert.match(unavailable,/UNSUPPORTED ×1 RIGHT/);
+});

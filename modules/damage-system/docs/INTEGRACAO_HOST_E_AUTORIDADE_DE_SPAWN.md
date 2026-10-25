@@ -76,6 +76,35 @@ Sessões em jogo de 23 e 24/10/2026 (registros em `_work\evidence\H\` do workspa
     significa retorno da chamada nativa; RAGDOLL_PENDING sem APPLIED continua sendo investigação, sem timeout novo.
     ragdollService, CanHit, fórmulas, filtro do golpe, limite e respawn nativo permanecem intocados.
   - Recomendações fora da DS-0i: encaminhar movimento a vizinhos só após validação; tratar limite de velocidade por pacote.
+- **Arma após respawn nativo (DS-0k, entrega para revisão; sessão em jogo pendente):**
+  - No ramo nativo que recompõe inventário/outfit, o host chama o mesmo EquipBestWeapon da inicialização, lendo
+    exclusivamente o inventário interno e os WEAP vencedores. Publica UpdateEquipmentMessage confiável pelo canal
+    existente, com o idx do NPC; numChanges avança a partir do equipamento anterior à reconstrução, mesmo que o
+    outfit recém-criado tenha zerado o contador. O ramo que conserva o inventário não é alterado.
+  - O CNTO do provider de UseInventory é convertido uma vez pelo próprio lookup do provider, antes de resolver
+    item direto ou LVLI aninhada. O teste nativo demonstrou o erro anterior movendo o plugin; não muda contagem,
+    conteúdo, posse ou serviços de economia. CONT permanece fora deste ajuste.
+  - Com a sonda DEV, counters.npcEquipment contém total, overwritten e até 64 samples de equipamento e
+    armas no inventário. Cada amostra guarda ator, geração, hoster, fase, contador, slots mágicos, StableFormKeys,
+    contagens e mão. Até 32 entradas de cada conjunto; excedentes são declarados em equipmentOmitted e
+    inventoryWeaponsOmitted; chave sem resolução é nula (UNSUPPORTED). Nenhum inventário paralelo de gameplay.
+  - Fases: BEFORE_DEATH antes da mudança de morte; RESPAWN_REBUILT imediatamente após recompor/reequipar, ainda na
+    geração anterior; AFTER_RESPAWN após o retorno nativo, com a geração que o ciclo de observação já mantém
+    (incrementada só para NPCs observáveis; base fixa conserva a geração). Em cada recusa WEAPON_NOT_EQUIPPED
+    de NPC, a sonda copia o equipamento corrente e a recusa referencia sua npcEquipmentSequence. O anel é comum;
+    se a sequência já não estiver retida, o diagnóstico está indisponível, não deve ser reconstruído por suposição.
+  - As cópias usam arrays fixos, getters da changeform e o índice ESPM já em memória: sem I/O, cálculo de máximos,
+    parsing de campos de records ou JSON no hit. Serialização apenas na leitura da sonda. O gravador já preserva
+    os contadores completos, sem mudança em runtime/src; relatório §7.1 deduplica snapshots entre polls, separa
+    resets e declara lacunas próprias do anel. Hoster/ator runtime são apenas contexto da evidência.
+  - HitService registra via logTrace a entrada do evento hit que Skyrim Platform entrega a partir do TESHitEvent
+    e cada descarte/envio: source ID/tipo, agressor/alvo locais e remotos, presença em hosted, horário e motivo.
+    Motivos: TES_HIT_EVENT, AGGRESSOR_NOT_LOCAL_NPC_OR_PLAYER, AGGRESSOR_NOT_HOSTED, TARGET_STATIC,
+    SOURCE_NOT_WEAPON_SPELL_OR_SCROLL, MAGIC_DUPLICATE e SEND_RELIABLE. Falha da leitura diagnóstica fica UNAVAILABLE.
+    A entrada nativa anterior à entrega em TypeScript permanece sem captura nesta ordem (arquivo fora dos caminhos).
+  - Sem novos pacotes diagnósticos, alteração do payload, conversão de 803/C5F2 em desarmado, HUD, notificação,
+    mensagem ou som ao jogador. logTrace usa o log de console técnico existente. OnHit mantém a exigência de
+    equipamento do host; CanHit, fórmulas e distância permanecem intactos. Não decide quando renascer nem a criatura (Q13).
 - **Observação da criatura** (DS-0g):
   - `ActionListener::OnCustomPacket` intercepta o canal `aetherius.npc.observation` e valida tamanho, formato exato,
     sessão, NPC, hoster atual, vivo, chave estável `plugin:ID` (nunca FormID de runtime) e geração.

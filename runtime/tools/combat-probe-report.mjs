@@ -45,6 +45,22 @@ export function analyze(rows) {
   const resets = rows.filter(r => r.kind === 'reset');
   const counters = rows.filter(r => r.kind === 'counters').at(-1) ?? null;
   const equipment = rows.filter(r => r.kind === 'equipment');
+  // DS-0k: the existing recorder preserves counters verbatim. Samples have
+  // their own fixed ring; deduplicate repeated polls, restart on host reset.
+  const npcEquipment = [], npcEquipmentGaps = [];
+  let equipmentSequence = 0, equipmentEpoch = 0;
+  for (const row of rows) {
+    if (row.kind === 'reset') { equipmentSequence = 0; equipmentEpoch++; }
+    if (row.kind !== 'counters') continue;
+    const samples = row.counters?.npcEquipment?.samples;
+    if (!Array.isArray(samples)) continue;
+    for (const sample of [...samples].sort((a,b) => a.sequence - b.sequence)) {
+      if (!Number.isSafeInteger(sample.sequence) || sample.sequence <= equipmentSequence) continue;
+      if (sample.sequence > equipmentSequence + 1) npcEquipmentGaps.push({ epoch: equipmentEpoch,
+        from: equipmentSequence + 1, to: sample.sequence - 1, lost: sample.sequence - equipmentSequence - 1 });
+      npcEquipment.push({ ...sample, epoch: equipmentEpoch }); equipmentSequence = sample.sequence;
+    }
+  }
   const writer = rows.filter(r => r.kind === 'writer').at(-1) ?? null;
   const lostByReason = {};
   for (const g of gaps) {
@@ -99,7 +115,7 @@ export function analyze(rows) {
     return state ? [{ event, role, state, ageMs: state.movementMatches && Number.isFinite(state.lastMovementMs)
       && event.timeMs >= state.lastMovementMs ? event.timeMs - state.lastMovementMs : null }] : [];
   }));
-  return { npcUnavailable, npcReports, rejections, refusalsByReason, refusalsByActor, events, positions, hits, animations, health, gaps, resets, counters, equipment, writer, lostByReason, unavailableHealth, families, power, drops, altered, names, hostNames, allNames };
+  return { npcEquipment, npcEquipmentGaps, npcUnavailable, npcReports, rejections, refusalsByReason, refusalsByActor, events, positions, hits, animations, health, gaps, resets, counters, equipment, writer, lostByReason, unavailableHealth, families, power, drops, altered, names, hostNames, allNames };
 }
 
 export function render(file, parsed) {
@@ -112,7 +128,7 @@ export function render(file, parsed) {
 
   out.push('## 1. Integridade dos buffers', '');
   const c = a.counters?.counters;
-  out.push(c ? table(['contador', 'valor'], Object.entries(c).map(([k, v]) => [k, v && typeof v === 'object' ? counterPairs(v).join(', ') || '—' : fmt(v)])) : '_sem linha de contadores no arquivo_', '');
+  out.push(c ? table(['contador', 'valor'], Object.entries(c).map(([k, raw]) => { const v = k === 'npcEquipment' && raw ? {total: raw.total, overwritten: raw.overwritten} : raw; return [k, v && typeof v === 'object' ? counterPairs(v).join(', ') || '—' : fmt(v)]; })) : '_sem linha de contadores no arquivo_', '');
   out.push(`Lacunas (anel sobrescrito entre leituras): ${a.gaps.length}.`, '');
   if (a.gaps.length) out.push(table(['buffer', 'de', 'até', 'perdidas', 'motivo'],
     a.gaps.map(g => [g.buffer, g.from, g.to, fmt(g.lost ?? (g.to - g.from + 1)), g.reason])), '');
@@ -160,6 +176,18 @@ export function render(file, parsed) {
       : (e.equipped ?? []).map(i => [e.source ?? '—', e.sequence ?? '—', e.timeMs, e.characterKey ?? hex(e.actorId), e.change ?? '—', i.baseDesc ?? hex(i.baseId), i.hand, fmt(i.health), hex(i.enchantmentId),
         i.enchantment ? (i.enchantment.status === 'SUPPORTED' ? `SUPPORTED (${(i.enchantment.effects ?? []).map(x => `MGEF ${hex(x.mgef)} mag ${fmt(x.magnitude)} AV ${x.actorValue}`).join('; ')})` : `UNSUPPORTED: ${i.enchantment.reason}`) : '—',
         hex(i.poisonId)]))), '');
+
+  out.push('### 7.1 Armas de NPC antes da morte e após respawn (DS-0k)', '');
+  out.push('Snapshots do equipamento autoritativo e das armas no inventário do host. BEFORE_DEATH é anterior à mudança de morte; RESPAWN_REBUILT é imediatamente após recompor/reequipar (geração anterior); AFTER_RESPAWN usa a geração vigente após o ciclo nativo (só NPCs observáveis incrementam; base fixa conserva). WEAPON_NOT_EQUIPPED aponta o snapshot por npcEquipmentSequence. Não prova aplicação no motor nem confirma a criatura. Formato antigo = indisponível.', '');
+  out.push('Lacunas próprias do anel de equipamento: ' + a.npcEquipmentGaps.reduce((n,g) => n + g.lost, 0) + ' amostras.', '');
+  out.push(table(['época', 'de', 'até', 'perdidas'], a.npcEquipmentGaps.map(g => [g.epoch,g.from,g.to,g.lost])), '');
+  const describeItems = items => Array.isArray(items) ? items.map(i => (i.key ?? 'UNSUPPORTED') + ' ×' + fmt(i.count) + ' ' + i.hand).join('; ') || '(vazio)' : 'INDISPONÍVEL';
+  out.push(table(['época/seq', 'tempo', 'ator', 'geração', 'hoster', 'fase', 'numChanges', 'equipamento', 'armas no inventário', 'omitidos equipamento/inventário', 'slots de magia'],
+    a.npcEquipment.map(s => [s.epoch + '/' + s.sequence, s.timeMs, hex(s.actor), s.generation, hex(s.hoster), s.phase, s.numChanges,
+      describeItems(s.equipment), describeItems(s.inventoryWeapons), fmt(s.equipmentOmitted) + '/' + fmt(s.inventoryWeaponsOmitted),
+      Array.isArray(s.spells) ? s.spells.map(k => k ?? '—').join('; ') : 'INDISPONÍVEL'])), '');
+  out.push(table(['recusa seq', 'agressor', 'snapshot equipamento seq'], a.rejections.filter(r => r.reason === 'WEAPON_NOT_EQUIPPED')
+    .map(r => [r.sequence, hex(r.aggressor), r.npcEquipmentSequence ?? 'INDISPONÍVEL'])), '');
 
   out.push('## 8. Recusas por motivo e por ator', '');
   out.push('Sem registros de recusa no formato antigo significa medição indisponível; não significa zero recusas.', '');
