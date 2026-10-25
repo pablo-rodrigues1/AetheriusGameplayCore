@@ -1,0 +1,456 @@
+diff --git a/client/meridian/indexed-teleport.test.cjs b/client/meridian/indexed-teleport.test.cjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..4b5ea760e88e92fb642bf8890863260dede350f1
+--- /dev/null
++++ b/client/meridian/indexed-teleport.test.cjs
+@@ -0,0 +1,85 @@
++const {test}=require('node:test');
++const assert=require('node:assert/strict');
++const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript');
++// Tests the real RemoteServer handler. Object shapes follow IdManager,
++// worldViewMisc.getObjectReference and RagdollService's completion callback.
++// Native stubs test handler decisions, not Skyrim engine convergence.
++function harness() {
++  const updates=[],logs=[],moves=[],completed=[];
++  let ragdollCallback,missing=false,throwApply=false,destination=true;
++  const npc={getFormID:()=>901},player={getFormID:()=>0x14};
++  let reference=npc,view={},mappedId=1;
++  const forms=[{refrId:40},{refrId:91}];
++  const storage={worldModel:{forms,playerCharacterFormIdx:0,playerCharacterRefrId:40},
++    idManager:{getId:idx=>idx===7?mappedId:-1}};
++  const sp={storage,on:()=>{},once:(_e,cb)=>updates.push(cb),
++    Actor:{from:r=>r},ObjectReference:{from:r=>r},
++    Cell:{from:r=>r?.kind==='cell'?r:null},WorldSpace:{from:r=>r?.kind==='world'?r:null},
++    Game:{getPlayer:()=>player,getFormEx:id=>id===100&&destination?{kind:'world'}:id===200&&destination?{kind:'cell'}:id===901?reference:null},
++    TESModPlatform:{moveRefrToPosition:(...args)=>{if(throwApply)throw Error('native failure');moves.push(args);}}};
++  const exports={};
++  const source=ts.transpileModule(fs.readFileSync(path.join(__dirname,'../src/services/services/remoteServer.ts'),'utf8'),
++    {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2017}}).outputText;
++  vm.runInNewContext('(function(exports,require){'+source+'\n})',{})(exports,name=>{
++    if(name==='skyrimPlatform')return sp;
++    if(name==='../../logging')return {logTrace:(_self,...args)=>logs.push(args),logError:()=>{}};
++    if(name==='./clientListener')return {ClientListener:class{}};
++    if(name==='./skyDeathTravel')return {skyDeathCemeteryMarker:()=>null,skyDeathKeepsPhysics:()=>false};
++    if(name==='../../view/worldViewMisc')return {getObjectReference:()=>missing?null:reference,
++      getViewFromStorage:()=>({getFormViews:()=>({getNthFormView:()=>view})})};
++    return new Proxy({},{get:()=>class{}});
++  });
++  const server=Object.create(exports.RemoteServer.prototype);
++  server.sp=sp;server.controller={lookupListener:()=>({safeRemoveRagdollFromWorld:(_actor,cb)=>{ragdollCallback=cb;}})};
++  const message={idx:7,pos:[1,2,3],rot:[4,5,6],worldOrCell:100};
++  return {forms,storage,message,moves,logs,completed,
++    receive:(msg=message)=>server.onTeleportMessage({message:msg},{complete:(_task,ok)=>completed.push(ok)}),
++    update:()=>updates.splice(0).forEach(cb=>cb()),finish:()=>ragdollCallback(),
++    statuses:()=>logs.filter(x=>x[0]==='indexedTeleport').map(x=>x[1]),
++    missing:()=>{missing=true;},unmap:()=>{mappedId=-1;},mapToPlayer:()=>{mappedId=0;},
++    replaceModel:()=>{forms[1]={refrId:92};},replaceView:()=>{view={};},
++    replaceReference:()=>{reference={getFormID:()=>902};},
++    failApply:()=>{throwApply=true;},missingDestination:()=>{destination=false;}};
++}
++test('indexed NPC teleport records receipt, local resolution, pending callback and native completion',()=>{
++  const h=harness();h.receive();assert.deepEqual(h.statuses(),['RECEIVED']);h.update();
++  assert.deepEqual(h.statuses(),['RECEIVED','RESOLVED','RAGDOLL_PENDING']);assert.equal(h.moves.length,0);
++  h.finish();assert.equal(h.moves.length,1);assert.equal(h.moves[0][0].getFormID(),901);
++  assert.deepEqual(h.moves[0].slice(3),[1,2,3,4,5,6]);assert.deepEqual(h.completed,[true]);
++  assert.equal(h.statuses().at(-1),'APPLIED');
++  const resolved=h.logs.find(x=>x[1]==='RESOLVED')[2];assert.equal(resolved.idx,7);assert.equal(resolved.remoteId,91);assert.equal(resolved.refrId,901);
++});
++test('indexed interior destination uses the same handler',()=>{
++  const h=harness();h.message.worldOrCell=200;h.receive();h.update();h.finish();
++  assert.equal(h.moves[0][1].kind,'cell');assert.equal(h.moves[0][2],null);
++});
++test('unknown idx logs failure without falling through to the player',()=>{
++  const h=harness();h.unmap();h.receive();h.update();assert.equal(h.moves.length,0);
++  assert.equal(h.statuses().at(-1),'IDX_UNRESOLVED');assert.deepEqual(h.completed,[false]);
++});
++test('missing local reference logs failure before ragdoll',()=>{
++  const h=harness();h.missing();h.receive();h.update();assert.equal(h.moves.length,0);
++  assert.equal(h.statuses().at(-1),'REFERENCE_ABSENT');assert.deepEqual(h.completed,[false]);
++});
++test('idx reuse between receipt and update cannot teleport the player',()=>{
++  const h=harness();h.receive();h.mapToPlayer();h.update();assert.equal(h.moves.length,0);
++  assert.equal(h.statuses().at(-1),'IDENTITY_CHANGED');assert.deepEqual(h.completed,[false]);
++});
++for(const change of ['unmap','mapToPlayer','replaceModel','replaceView','replaceReference','missing']) {
++  test('callback rejects changed identity: '+change,()=>{
++    const h=harness();h.receive();h.update();h[change]();h.finish();
++    assert.equal(h.moves.length,0);assert.equal(h.statuses().at(-1),'IDENTITY_CHANGED');assert.deepEqual(h.completed,[false]);
++  });
++}
++test('unresolved destination is reported explicitly',()=>{
++  const h=harness();h.receive();h.update();h.missingDestination();h.finish();
++  assert.equal(h.moves.length,0);assert.equal(h.statuses().at(-1),'DESTINATION_ABSENT');assert.deepEqual(h.completed,[false]);
++});
++test('native application exception records failure instead of success',()=>{
++  const h=harness();h.receive();h.update();h.failApply();h.finish();
++  assert.equal(h.moves.length,0);assert.equal(h.statuses().at(-1),'APPLY_FAILED');assert.deepEqual(h.completed,[false]);
++});
++test('Teleport2 continues to target only the player',()=>{
++  const h=harness();const {idx,...msg}=h.message;h.receive(msg);h.update();h.finish();
++  assert.equal(h.moves.length,1);assert.deepEqual(h.statuses(),[]);
++});
+diff --git a/client/meridian/npc-observation.test.cjs b/client/meridian/npc-observation.test.cjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..f9120ad95ae11e836e7d6c4d0f06552211cc5b8b
+--- /dev/null
++++ b/client/meridian/npc-observation.test.cjs
+@@ -0,0 +1,143 @@
++const {test}=require('node:test');
++const assert=require('node:assert/strict');
++const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript');
++// Shape: remoteServer.ts hostStart/hostStop/createActor/updateProperty;
++// sendInputsService.ts hosted refs; Skyrim Platform 2.8.0 declarations.
++// ActionListener.cpp OnHostAttempt adds 0x100000000 only to placed actor IDs;
++// worldViewMisc.ts maps the hosted ID to a separate local reference.
++function harness({hostedId=91,localId=hostedId}={}) {
++  const events=new Map(), native=new Map(), sent=[], logs=[], forms=[], actors=new Map(), remoteReads=[], formReads=[];let now=1000;
++  class ClientListener{} class NetworkingService{} class RemoteServer{}
++  const sp={storage:{hosted:[hostedId]},Actor:{from:a=>a},Game:{getFormEx:id=>{formReads.push(id);return actors.get(id);},getModName:slot=>({1:'Creature.esp',4:'Creature.esp'})[slot],getLightModName:slot=>({2:'Light.esl',7:'Light.esl'})[slot]}};
++  const controller={on:(e,f)=>native.set(e,f),emitter:{on:(e,f)=>events.set(e,f),emit:(e,p)=>sent.push([e,p])},lookupListener:type=>type===NetworkingService?{isConnected:()=>true}:{getWorldModel:()=>({forms})}};
++  const exports={};const code=ts.transpileModule(fs.readFileSync(path.join(__dirname,'../src/services/services/npcObservationService.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2017}}).outputText;
++  const localDate=class extends Date{static now(){return now;}};
++  vm.runInNewContext('(function(exports,require){'+code+'\n})',{Date:localDate})(exports,name=>{
++    if(name==='../../messages')return {MsgType:{CustomPacket:1}};
++    if(name==='../../logging')return {logTrace:(...args)=>logs.push(args.slice(1))};
++    if(name==='../../view/worldViewMisc')return {remoteIdToLocalId:id=>{remoteReads.push(id);return id===hostedId?localId:0;}};
++    if(name==='./clientListener')return {ClientListener};if(name==='./networkingService')return {NetworkingService};if(name==='./remoteServer')return {RemoteServer};throw Error(name);
++  });
++  new exports.NpcObservationService(sp,controller);
++  const model={refrId:hostedId,aetheriusNpcObservation:{generation:1}};forms.push(model);
++  let base=1*2**24+0xabc,level=2,loaded=true,fail=false,template=null,templateReads=0,race=null;
++  const actor={is3DLoaded:()=>loaded,getLeveledActorBase:()=>{if(fail)throw Error('native read');return base===null?null:{getFormID:()=>base,getTemplate:()=>{templateReads++;return template===null?null:{getFormID:()=>template};}};},getLevel:()=>level,getRace:()=>race===null?null:{getFormID:()=>race}};actors.set(localId,actor);
++  return {sp,model,forms,actors,sent,logs,events,remoteReads,formReads,get templateReads(){return templateReads;},set:(data)=>{if('base'in data)base=data.base;if('level'in data)level=data.level;if('loaded'in data)loaded=data.loaded;if('fail'in data)fail=data.fail;if('template'in data)template=data.template;if('race'in data)race=data.race;},tick:()=>{now+=501;native.get('update')();},allPackets:()=>sent.map(([,p])=>JSON.parse(p.message.contentJsonDump)),reports:()=>sent.filter(([,p])=>JSON.parse(p.message.contentJsonDump).channel==='aetherius.npc.observation'),packets:()=>sent.map(([,p])=>JSON.parse(p.message.contentJsonDump)).filter(p=>p.channel==='aetherius.npc.observation')};
++}
++test('one reliable report per loaded host ref, then base/level/generation changes',()=>{
++  const h=harness();h.tick();h.tick();assert.equal(h.reports().length,1);assert.equal(h.sent[0][1].reliability,'reliable');
++  assert.deepEqual(h.packets()[0],{channel:'aetherius.npc.observation',v:1,actor:91,base:'000abc:Creature.esp',level:2,generation:1});
++  h.set({level:3});h.tick();h.model.aetheriusNpcObservation.generation=2;h.tick();h.set({base:4*2**24+0xdef});h.tick();assert.equal(h.reports().length,4);
++});
++test('stable base survives regular and light plugin reordering',()=>{
++  const h=harness();h.tick();h.set({base:4*2**24+0xabc});h.tick();assert.equal(h.reports().length,1);
++  h.set({base:0xfe*2**24+2*0x1000+0xabc});h.tick();assert.equal(h.packets().at(-1).base,'000abc:Light.esl');
++  h.set({base:0xfe*2**24+7*0x1000+0xabc});h.tick();assert.equal(h.reports().length,2);
++});
++test('only hosted refs marked by records are reported; dead NPC waits',()=>{
++  const h=harness();h.sp.storage.hosted=[];h.tick();assert.equal(h.reports().length,0);
++  h.sp.storage.hosted=[91];delete h.model.aetheriusNpcObservation;h.tick();assert.equal(h.reports().length,0);
++  h.model.aetheriusNpcObservation={generation:1};h.model.isDead=true;h.tick();assert.equal(h.reports().length,0);h.model.isDead=false;h.tick();assert.equal(h.reports().length,1);
++});
++test('unload/reload and host transfer release deduplication',()=>{
++  const h=harness();h.tick();h.set({loaded:false});h.tick();h.tick();assert.equal(h.logs.length,1);h.set({loaded:true});h.tick();assert.equal(h.reports().length,2);
++  h.sp.storage.hosted=[];h.tick();h.sp.storage.hosted=[91];h.tick();assert.equal(h.reports().length,3);
++});
++test('connection reset forces a fresh report',()=>{
++  const h=harness();h.tick();h.events.get('connectionAccepted')();h.tick();assert.equal(h.reports().length,2);h.events.get('hostStopMessage')({message:{target:91}});h.tick();assert.equal(h.reports().length,3);
++});
++test('unreadable, dynamic or invalid engine observations send nothing and log reason once',()=>{
++  const h=harness();h.set({fail:true});h.tick();h.tick();assert.equal(h.reports().length,0);assert.equal(h.logs.length,1);
++  h.set({fail:false,base:0xff*2**24+123});h.tick();assert.equal(h.reports().length,0);assert.match(h.logs.at(-1).join(' '),/RACE_ABSENT/);
++  h.set({base:1*2**24+0xabc,level:NaN});h.tick();assert.equal(h.reports().length,0);assert.match(h.logs.at(-1).join(' '),/INVALID_ENGINE_LEVEL/);
++  h.set({level:2});h.tick();assert.equal(h.reports().length,1);
++});
++
++test('unavailable channel uses exact closed reason once per actor, generation and reason',()=>{
++  const h=harness();h.set({loaded:false});h.tick();h.tick();
++  assert.deepEqual(h.allPackets(),[{channel:'aetherius.npc.observation.unavailable',v:1,actor:91,generation:1,reason:'ACTOR_NOT_LOADED'}]);
++  assert.equal(h.sent[0][1].reliability,'reliable');
++  h.set({loaded:true,fail:true});h.tick();
++  h.set({fail:false,loaded:false});h.tick();assert.equal(h.allPackets().length,2,'a previous reason stays deduplicated');
++  h.model.aetheriusNpcObservation.generation=2;h.tick();assert.equal(h.allPackets().length,3);
++  assert.equal(h.allPackets().at(-1).generation,2);
++  assert.equal(h.allPackets()[1].reason,'ENGINE_READ_FAILED');
++  assert(!JSON.stringify(h.allPackets()).includes('native read'),'exception text must not leave the client');
++  h.events.get('connectionAccepted')();h.tick();assert.equal(h.allPackets().length,4);
++});
++test('successful observation does not reset unavailable deduplication in the same generation',()=>{
++  const h=harness();h.set({loaded:false});h.tick();h.set({loaded:true});h.tick();h.set({loaded:false});h.tick();
++  assert.equal(h.allPackets().filter(p=>p.channel.endsWith('.unavailable')).length,1);
++  assert.equal(h.reports().length,1);
++});
++
++test('temporary base with stable root template stays explicitly unsupported: root is not the selected NPC',()=>{
++  const h=harness();h.set({base:0xff*2**24+123,template:1*2**24+0xabc});h.tick();h.tick();
++  assert.equal(h.reports().length,0);assert.equal(h.templateReads,0);
++  assert.deepEqual(h.allPackets(),[{channel:'aetherius.npc.observation.unavailable',v:1,actor:91,generation:1,reason:'RACE_ABSENT'}]);
++});
++test('temporary base without template and absent resolved base emit closed diagnostic reasons',()=>{
++  const h=harness();h.set({base:0xff*2**24+123,template:null});h.tick();h.tick();
++  assert.equal(h.reports().length,0);assert.equal(h.allPackets().length,1);
++  assert.equal(h.allPackets()[0].reason,'RACE_ABSENT');
++  h.set({base:null});h.tick();h.tick();assert.equal(h.allPackets().length,2);
++  assert.equal(h.allPackets()[1].reason,'RESOLVED_BASE_ABSENT');
++});
++
++test('temporary base sends exact v2 race and level; root is never read',()=>{
++  const h=harness();h.set({base:0xff*2**24+123,race:1*2**24+0xabc,template:1*2**24+0xdef});h.tick();h.tick();
++  assert.deepEqual(h.packets(),[{channel:'aetherius.npc.observation',v:2,actor:91,race:'000abc:Creature.esp',level:2,generation:1}]);
++  assert.equal(h.templateReads,0);assert.equal(h.sent[0][1].reliability,'reliable');
++  h.set({race:4*2**24+0xabc});h.tick();assert.equal(h.packets().length,1);
++  h.set({race:0xfe*2**24+2*0x1000+0xabc});h.tick();assert.equal(h.packets().at(-1).race,'000abc:Light.esl');
++  h.set({race:0xfe*2**24+7*0x1000+0xabc});h.tick();assert.equal(h.packets().length,2);
++  h.set({level:3});h.tick();h.model.aetheriusNpcObservation.generation=2;h.tick();assert.equal(h.packets().length,4);
++  h.events.get('connectionAccepted')();h.tick();assert.equal(h.packets().length,5);
++  h.set({base:1*2**24+0xabc});h.tick();assert.equal(h.packets().at(-1).v,1);
++});
++test('v2 missing race, unstable race and invalid engine level use closed deduplicated reasons',()=>{
++  const h=harness();h.set({base:0xff*2**24+123});h.tick();h.tick();
++  assert.equal(h.allPackets()[0].reason,'RACE_ABSENT');
++  h.set({race:0xff*2**24+456});h.tick();h.tick();assert.equal(h.allPackets()[1].reason,'RACE_HAS_NO_STABLE_KEY');
++  h.set({race:1*2**24+0xabc,level:0});h.tick();assert.equal(h.allPackets()[2].reason,'INVALID_ENGINE_LEVEL');
++  h.set({level:2});h.tick();assert.equal(h.packets().length,1);
++  h.set({race:null});h.tick();assert.equal(h.allPackets().length,4,'same generation reason remains deduplicated');
++  h.sp.storage.hosted=[];h.tick();h.sp.storage.hosted=[91];h.tick();assert.equal(h.allPackets().length,5);
++});
++
++for (const [kind,hostedId,serverId] of [
++  ['placed',0x100108307,0x108307],
++  ['placed above signed 32-bit hosted range',0x16e391f8b,0x6e391f8b],
++  ['server-created',0xff000123,0xff000123],
++  ['server-created uint32 maximum',0xffffffff,0xffffffff],
++]) {
++  for (const version of [1,2]) test(kind+' v'+version+' sends server FormID and retains hosted lookup/deduplication',()=>{
++    const localId=0xff123456,h=harness({hostedId,localId});
++    if(version===2)h.set({base:0xff000789,race:1*2**24+0xabc});
++    h.tick();h.tick();
++    const expected={channel:'aetherius.npc.observation',v:version,actor:serverId,
++      [version===1?'base':'race']:'000abc:Creature.esp',level:2,generation:1};
++    assert.deepEqual(h.packets(),[expected]);
++    assert.deepEqual(h.remoteReads,[hostedId,hostedId]);
++    assert.deepEqual(h.formReads,[localId,localId]);
++    assert.deepEqual(h.sp.storage.hosted,[hostedId]);
++    assert.equal(h.model.refrId,hostedId);
++    assert.equal(h.sent[0][1].reliability,'reliable');
++    h.events.get('hostStopMessage')({message:{target:hostedId}});h.tick();
++    assert.deepEqual(h.packets(),[expected,expected],'hostStop releases the original hosted key');
++    h.model.aetheriusNpcObservation.generation=2;h.tick();
++    assert.deepEqual(h.packets().at(-1),{...expected,generation:2});
++  });
++  test(kind+' unavailable sends server FormID and retains hosted failure deduplication',()=>{
++    const localId=0xff123456,h=harness({hostedId,localId});h.set({loaded:false});h.tick();h.tick();
++    const expected={channel:'aetherius.npc.observation.unavailable',v:1,actor:serverId,generation:1,reason:'ACTOR_NOT_LOADED'};
++    assert.deepEqual(h.allPackets(),[expected]);
++    assert.deepEqual(h.remoteReads,[hostedId,hostedId]);
++    assert.deepEqual(h.formReads,[localId,localId]);
++    assert.equal(h.sent[0][1].reliability,'reliable');
++    h.events.get('hostStopMessage')({message:{target:hostedId}});h.tick();
++    assert.deepEqual(h.allPackets(),[expected,expected]);
++    h.model.aetheriusNpcObservation.generation=2;h.tick();
++    assert.deepEqual(h.allPackets().at(-1),{...expected,generation:2});
++  });
++}
+diff --git a/client/src/index.ts b/client/src/index.ts
+index eb49b6882e7a0db86ee90eaeb8f078a48c7d0e4b..993db7bdb2feda6fed447f23e1c2377a6cf0415c 100644
+--- a/client/src/index.ts
++++ b/client/src/index.ts
+@@ -18,6 +18,7 @@ import { MapMarkerService } from './services/services/mapMarkerService';
+ import { BlockPapyrusEventsService } from './services/services/blockPapyrusEventsService';
+ import { EnforceLimitationsService } from './services/services/enforceLimitationsService';
+ import { LoadGameService } from './services/services/loadGameService';
++import { NpcObservationService } from './services/services/npcObservationService';
+ import { SendInputsService } from './services/services/sendInputsService';
+ import { SinglePlayerService } from './services/services/singlePlayerService';
+ import { SpApiInteractor } from './services/spApiInteractor';
+@@ -94,6 +95,7 @@ const main = () => {
+       new SinglePlayerService(sp, controller),
+       new EnforceLimitationsService(sp, controller),
+       new SendInputsService(sp, controller),
++      new NpcObservationService(sp, controller),
+       new SkympClient(sp, controller),
+       new TimeService(sp, controller),
+       new WeatherService(sp, controller),
+diff --git a/client/src/services/services/npcObservationService.ts b/client/src/services/services/npcObservationService.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..ea58b7ac2c2346e86767222ebc569bada5e62acd
+--- /dev/null
++++ b/client/src/services/services/npcObservationService.ts
+@@ -0,0 +1,106 @@
++import { MsgType } from '../../messages';
++import { logTrace } from '../../logging';
++import { remoteIdToLocalId } from '../../view/worldViewMisc';
++import { ClientListener, CombinedController, Sp } from './clientListener';
++import { NetworkingService } from './networkingService';
++import { RemoteServer } from './remoteServer';
++
++type UnavailableReason = 'ACTOR_NOT_LOADED' | 'RESOLVED_BASE_ABSENT' |
++  'RESOLVED_BASE_HAS_NO_STABLE_KEY' | 'RACE_ABSENT' | 'RACE_HAS_NO_STABLE_KEY' |
++  'INVALID_ENGINE_LEVEL' | 'ENGINE_READ_FAILED';
++
++/** DS-0g. Evidence only: no clone, base replacement or actor-value writes.
++ * The host marks the eligible refs from winning records; chain length is never
++ * used to infer an LVLN. Generation changes force a report even for same-base
++ * respawns. Releasing a host or unloading a ref releases its deduplication. */
++export class NpcObservationService extends ClientListener {
++  private lastScan = 0;
++  private sent = new Map<number, string>();
++  private failures = new Map<number, { generation: number; reasons: Set<UnavailableReason> }>();
++  constructor(private sp: Sp, private controller: CombinedController) {
++    super();
++    controller.on('update', () => this.update());
++    const clear = () => { this.sent.clear(); this.failures.clear(); this.lastScan = 0; };
++    controller.on('loadGame', clear);
++    controller.emitter.on('connectionAccepted', clear);
++    controller.emitter.on('connectionDisconnect', clear);
++    controller.emitter.on('hostStopMessage', e => this.forget(e.message.target));
++    controller.emitter.on('destroyActorMessage', () => { this.lastScan = 0; });
++  }
++  private forget(id: number) { this.sent.delete(id); this.failures.delete(id); }
++  // HostStart uses an offset ID for placed actors (ActionListener::OnHostAttempt).
++  // Only packet.actor uses the server FormID; lookups and dedup keep the hosted ID.
++  private serverFormId(id: number): number {
++    return id >= 0x100000000 ? id - 0x100000000 : id;
++  }
++  private unavailable(id: number, generation: number, reason: UnavailableReason) {
++    this.sent.delete(id);
++    let failure = this.failures.get(id);
++    if (failure?.generation !== generation) {
++      failure = { generation, reasons: new Set<UnavailableReason>() };
++      this.failures.set(id, failure);
++    }
++    if (failure.reasons.has(reason)) return;
++    logTrace(this, 'NPC observation UNSUPPORTED', id.toString(16), generation, reason);
++    this.controller.emitter.emit('sendMessage', {
++      message: { t: MsgType.CustomPacket, contentJsonDump: JSON.stringify({
++        channel: 'aetherius.npc.observation.unavailable', v: 1, actor: this.serverFormId(id), generation, reason
++      }) }, reliability: 'reliable'
++    });
++    failure.reasons.add(reason);
++  }
++  private stableBase(id: number): string | undefined {
++    if (!Number.isInteger(id) || id <= 0) return;
++    const fileSlot = Math.floor(id / 0x1000000);
++    if (fileSlot === 0xff) return; // engine-created TESNPC has no persistent key
++    const light = fileSlot === 0xfe;
++    const plugin = light ? this.sp.Game.getLightModName(Math.floor(id / 0x1000) % 0x1000)
++      : this.sp.Game.getModName(fileSlot);
++    if (!plugin || !/^[^:/\\]+\.(esm|esp|esl)$/i.test(plugin)) return;
++    const local = id % (light ? 0x1000 : 0x1000000);
++    return local.toString(16).padStart(6, '0') + ':' + plugin;
++  }
++  private update() {
++    const now = Date.now();
++    if (now - this.lastScan < 500) return;
++    this.lastScan = now;
++    if (!this.controller.lookupListener(NetworkingService).isConnected()) return;
++    const raw = this.sp.storage['hosted'];
++    const hosted: number[] = Array.isArray(raw) ? raw : [];
++    const current = new Set(hosted);
++    for (const id of Array.from(this.sent.keys())) if (!current.has(id)) this.forget(id);
++    for (const id of Array.from(this.failures.keys())) if (!current.has(id)) this.forget(id);
++    const world = this.controller.lookupListener(RemoteServer).getWorldModel();
++    for (const id of hosted) {
++      const form = world.forms.find(f => f?.refrId === id);
++      const marker = (form as unknown as { aetheriusNpcObservation?: { generation?: number } } | undefined)?.aetheriusNpcObservation;
++      if (!Number.isSafeInteger(marker?.generation) || marker!.generation! < 1 || form?.isDead) { this.forget(id); continue; }
++      try {
++        const actor = this.sp.Actor.from(this.sp.Game.getFormEx(remoteIdToLocalId(id)));
++        if (!actor || !actor.is3DLoaded()) { this.unavailable(id, marker!.generation!, 'ACTOR_NOT_LOADED'); continue; }
++        const resolved = actor.getLeveledActorBase();
++        if (!resolved) { this.unavailable(id, marker!.generation!, 'RESOLVED_BASE_ABSENT'); continue; }
++        const base = this.stableBase(resolved.getFormID());
++        let race: string | undefined;
++        if (!base) {
++          const effectiveRace = actor.getRace();
++          if (!effectiveRace) { this.unavailable(id, marker!.generation!, 'RACE_ABSENT'); continue; }
++          race = this.stableBase(effectiveRace.getFormID());
++          if (!race) { this.unavailable(id, marker!.generation!, 'RACE_HAS_NO_STABLE_KEY'); continue; }
++        }
++        const level = actor.getLevel();
++        if (!Number.isInteger(level) || level < 1 || level > 65535) { this.unavailable(id, marker!.generation!, 'INVALID_ENGINE_LEVEL'); continue; }
++        const fingerprint = JSON.stringify([base ? 1 : 2, base ?? race, level, marker!.generation]);
++        if (this.sent.get(id) === fingerprint) continue;
++        this.controller.emitter.emit('sendMessage', {
++          message: { t: MsgType.CustomPacket, contentJsonDump: JSON.stringify(base ? {
++            channel: 'aetherius.npc.observation', v: 1, actor: this.serverFormId(id), base, level, generation: marker!.generation
++          } : {
++            channel: 'aetherius.npc.observation', v: 2, actor: this.serverFormId(id), race, level, generation: marker!.generation
++          }) }, reliability: 'reliable'
++        });
++        this.sent.set(id, fingerprint);
++      } catch { this.unavailable(id, marker!.generation!, 'ENGINE_READ_FAILED'); }
++    }
++  }
++}
+diff --git a/client/src/services/services/remoteServer.ts b/client/src/services/services/remoteServer.ts
+index 430916e6664f39fb0013ae6823655aa0b8aa9270..df5a8b6d6e9091e937ea828f58f794239d467587 100644
+--- a/client/src/services/services/remoteServer.ts
++++ b/client/src/services/services/remoteServer.ts
+@@ -260,8 +260,23 @@ export class RemoteServer extends ClientListener {
+ 
+   private onTeleportMessage(event: ConnectionMessage<TeleportMessage> | ConnectionMessage<TeleportMessage2>, grantCycle?: GameplaySpawnBarrier): void {
+     const msg = event.message;
++    const idx = "idx" in msg && typeof msg.idx === "number" ? msg.idx : undefined;
++    const receivedId = idx !== undefined ? this.getIdManager().getId(idx) : undefined;
++    const receivedModel = receivedId !== undefined ? this.worldModel.forms[receivedId] : undefined;
++    const trace = (status: string, details?: unknown) => {
++      if (idx !== undefined) logTrace(this, 'indexedTeleport', status, { idx, id: receivedId, remoteId: receivedModel?.refrId, ...details as object });
++    };
++    trace('RECEIVED', { position: msg.pos, rotation: msg.rot, worldOrCell: msg.worldOrCell });
++    if (idx !== undefined && (receivedId === undefined || receivedId < 0 || !receivedModel)) {
++      trace('IDX_UNRESOLVED');
++      grantCycle?.complete('teleport', false);
++      return;
++    }
++    const sameModel = () => idx === undefined ||
++      (this.getIdManager().getId(idx) === receivedId && this.worldModel.forms[receivedId!] === receivedModel);
+     once('update', () => {
+-      const id = ("idx" in msg && typeof msg.idx === "number") ? this.getIdManager().getId(msg.idx) : this.getMyActorIndex();
++      if (!sameModel()) { trace('IDENTITY_CHANGED'); grantCycle?.complete('teleport', false); return; }
++      const id = idx !== undefined ? receivedId! : this.getMyActorIndex();
+       const refr = id === this.getMyActorIndex() ? Game.getPlayer() : getObjectReference(id);
+       logTrace(this,
+         `Teleporting id`, id, `refrId`, refr?.getFormID().toString(16), `...`,
+@@ -272,6 +287,12 @@ export class RemoteServer extends ClientListener {
+       const ragdollService = this.controller.lookupListener(RagdollService);
+ 
+       const refrId = refr?.getFormID();
++      trace('RESOLVED', { refrId });
++      if (idx !== undefined && !refr) {
++        trace('REFERENCE_ABSENT'); grantCycle?.complete('teleport', false); return;
++      }
++      const receivedView = idx !== undefined && id !== this.getMyActorIndex()
++        ? getViewFromStorage()?.getFormViews().getNthFormView(id) : undefined;
+ 
+       // Aetherius SkyDeath: ida e volta do cemitério pelo MoveTo do Papyrus, numa fila (o
+       // MoveRefrToPosition para outra célula às vezes não acontece logo depois de um LoadGame).
+@@ -283,6 +304,33 @@ export class RemoteServer extends ClientListener {
+       }
+ 
+       const removeRagdollCallback = () => {
++        // Ragdoll completion is asynchronous. An idx/model/view may have been
++        // destroyed and reused while waiting; never resolve that as a new actor.
++        if (idx !== undefined) {
++          const current = id === this.getMyActorIndex() ? Game.getPlayer() : getObjectReference(id);
++          const currentView = id !== this.getMyActorIndex()
++            ? getViewFromStorage()?.getFormViews().getNthFormView(id) : undefined;
++          if (!sameModel() || !current || current.getFormID() !== refrId || currentView !== receivedView) {
++            trace('IDENTITY_CHANGED', { refrId }); grantCycle?.complete('teleport', false); return;
++          }
++          const destination = Game.getFormEx(msg.worldOrCell);
++          if (!Cell.from(destination) && !WorldSpace.from(destination)) {
++            trace('DESTINATION_ABSENT', { refrId, worldOrCell: msg.worldOrCell });
++            grantCycle?.complete('teleport', false); return;
++          }
++          try {
++            TESModPlatform.moveRefrToPosition(current,
++              Cell.from(destination), WorldSpace.from(destination),
++              msg.pos[0], msg.pos[1], msg.pos[2], msg.rot[0], msg.rot[1], msg.rot[2]);
++            // Native call returned; this does not assert engine convergence.
++            trace('APPLIED', { refrId, position: msg.pos, worldOrCell: msg.worldOrCell });
++            grantCycle?.complete('teleport', true);
++          } catch (error) {
++            trace('APPLY_FAILED', { refrId, error: String(error) });
++            grantCycle?.complete('teleport', false);
++          }
++          return;
++        }
+         TESModPlatform.moveRefrToPosition(
+           ObjectReference.from(Game.getFormEx(refrId || 0)),
+           Cell.from(Game.getFormEx(msg.worldOrCell)),
+@@ -300,6 +348,7 @@ export class RemoteServer extends ClientListener {
+       // Aetherius SkyDeath: ferido ou espírito não está morto para o jogo; tirar o ragdoll
+       // do jogador vivo nesse estado desfazia a pose ajoelhada e a física do espírito.
+       if (actor /*&& actor.getFormID() === 0x14*/ && !(actor.getFormID() === 0x14 && skyDeathKeepsPhysics(actor))) {
++        trace('RAGDOLL_PENDING', { refrId });
+         ragdollService.safeRemoveRagdollFromWorld(actor, removeRagdollCallback);
+       } else {
+         removeRagdollCallback();

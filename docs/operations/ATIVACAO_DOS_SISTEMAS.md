@@ -1,13 +1,18 @@
 # Ativação dos sistemas do GameplayCore num servidor
 
-Para quem vai ligar os sistemas do Core no servidor oficial. Atualizado em 12/10/2026 (C3d-fix1).
+Atualizado em 25/10/2026 pela ordem DOC-2.
 
-Cada sistema do Core (pedras guardiãs, raças, e os que vierem) precisa de duas coisas no servidor onde roda: **tabelas próprias no PostgreSQL** e **uma opção de configuração que o liga**. No ambiente de desenvolvimento local esses dois passos foram feitos à mão a cada sistema. Este documento descreve o que foi feito, para ser repetido no servidor oficial com as diferenças necessárias.
+## Fonte atual de integração
 
-Este documento não cobre a instalação do pacote (compilar o Core, compilar o servidor, registrar o Core no gamemode). Isso é assunto do guia de instalação, ainda a escrever (`integrations/host/INSTALL.md`). Aqui presume-se o Core já instalado e carregando.
+O [guia de integração](../../integrations/INSTALL.md) é a referência para baselines, pacotes, PostgreSQL, verificação de catálogo, configuração oficial, ativação, conferência e rollback. Este documento mantém detalhes operacionais de migrations/opções e o histórico de sessões; não duplica o roteiro do guia.
 
-**Nota de supersessão (DOC-1, 12/10/2026):** o guia de instalação existe e fica em `integrations/INSTALL.md` (não em `integrations/host/`); o pacote do host fica em `integrations/host/` e o do cliente em `integrations/client/`.
+A instalação usa o pool PostgreSQL existente do gamemode e migrations 0001–0009 do Core. A migration 0008 é registrada em código em runtime/src/projection/migration.ts e entra no mesmo runner; não é um segundo pool. O runner não tem down-migrations: desligar um sistema não apaga linhas, grants ou migrations já aplicadas.
 
+Para DS-5, use aetheriusCombat.families e multipliers. Sem families, todas as famílias ficam off; active continua recusado até DS-7. multipliers.pve/pvp são fatores diretos, de 0 a 100: neutro = 1 e 100 = 100×. O padrão é 1. As opções antigas aetheriusCombat.shadow e physicalRecords são históricas e não ativam DS-5. No oficial, aetheriusCombat.probe e weaponPoison ficam ausentes ou false; opções de desenvolvimento ficam ausentes, nunca vazias ou false. Os valores completos estão no guia.
+
+Todos os modos começam off. Sessão local não equivale a homologação no servidor oficial. A decisão de ativar e a validação em jogo continuam com o dono do projeto. O estado confirmado e as pendências estão resumidos no [guia atual](../../integrations/INSTALL.md); evidências detalhadas são registros internos do workspace (não incluídos).
+
+**Supersessão DOC-2:** este cabeçalho substitui o roteiro geral de instalação de 12/10. Se uma instrução operacional abaixo divergir do guia atual, prevalece integrations/INSTALL.md; para DS-5, consulte também integrations/host/DS5A.md e DS5B.md. As notas históricas de sessões e decisões são preservadas.
 ## 1. O que o Core faz e não faz no banco
 
 - Usa o PostgreSQL que o gamemode já usa, pelo mesmo pool (`server/gamemode/core/pg.js`). A conexão vem de `GAME_DATABASE_URL` ou, se ausente, de `DATABASE_URL`. O Core não cria conexão própria.
@@ -83,39 +88,40 @@ O servidor oficial roda em `offlineMode=true` com login por token do site. Esse 
 
 ## 3. Como aplicar as migrations
 
-Na raiz do Core, com o mesmo ambiente do gamemode (a variável de conexão definida no ambiente do processo, nunca em argumento):
+Na raiz do Core, com conexão definida no ambiente do processo pelo pool do gamemode; nunca passe ou registre a URL do banco:
 
 ```powershell
-npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
-npm run migrations:apply  -- "<caminho absoluto>\gamemode\core\pg.js"
-npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
+npm run migrations:apply  -- "<caminho absoluto>\server\gamemode\core\pg.js" [schema]
+npm run migrations:status -- "<caminho absoluto>\server\gamemode\core\pg.js" [schema]
 ```
 
-- O primeiro `status` mostra o que já está aplicado. O `apply` aplica só o que falta, numa única transação: ou entra tudo, ou nada. Repetir o `apply` não faz nada.
-- Um terceiro argumento opcional é o schema; o padrão é `public`.
-- **Aplique com o servidor do jogo parado ou com os sistemas do Core desligados.** As migrations só criam tabelas, então não travam nada do que já existe, mas ligar um sistema no meio da aplicação não foi testado.
+- `status` é uma conferência de gate e falha se o ledger não existir, houver migration pendente ou hash divergente. Em schema novo, rode primeiro `apply` e depois `status`.
+- `apply` ordena e valida o lote, usa uma transação única sob lock por schema, aplica só o que falta e é idempotente quando o conteúdo não mudou.
+- O argumento opcional após o caminho de `pg.js` é o schema; o padrão é `public`. Schema customizado já deve existir e precisa ser o mesmo em `GAMEPLAY_CORE_DATABASE_SCHEMA`.
+- **Aplique com os sistemas do Core desligados.** Não ligue um sistema no meio da aplicação das migrations.
 - **Não edite um arquivo de migration já aplicado.** O Core guarda a assinatura de cada arquivo e recusa subir os sistemas que dependem do banco se um arquivo aplicado tiver mudado. Correção entra como migration nova. O repositório fixa o fim de linha desses arquivos (`.gitattributes`) para a assinatura ser a mesma em qualquer máquina; não os converta.
 - Faça backup do banco antes, como em qualquer mudança de schema.
 
-**O servidor não aplica migrations sozinho.** Se faltar alguma, o Core sobe, deixa indisponíveis os sistemas que dependem do banco, e escreve no log o comando a rodar. O servidor do jogo não cai por isso.
+**O servidor não aplica migrations sozinho.** Se faltar alguma, o Core marca indisponíveis os sistemas dependentes do banco e escreve no log o comando do runner. As tabelas são prefixadas `gc_`; não há down-migrations.
 
 ## 4. Opções de configuração
 
 **DS-5b:** DS-5b não cria opção: families ausente = off; shadow apenas para observar. active continua bloqueado por DS-7. Nenhuma configuração local foi alterada.
 
-DS-5a: no server-settings.json do host, aetheriusCombat.families tem melee,
-ranged e unarmed, cada uma off|shadow|active (ausente = off). Para avaliação,
-usar shadow nas três. aetheriusCombat.multipliers.pve/pvp são finitos em 0..100,
-padrão 1. active é reconhecido mas BLOQUEADO com ACTIVE_REQUIRES_DS7. A chave
-antiga shadow/physicalRecords é histórica e não habilita a DS-5a. Nenhum arquivo
-de configuração local foi alterado pelo executor desta ordem.
+DS-5a/DS-5b: no server-settings.json, aetheriusCombat.families tem melee,
+ranged e unarmed, cada uma off|shadow|active (ausente = off). Para observar,
+use shadow somente após autorização e mantenha as demais off. multipliers.pve/pvp
+são fatores diretos finitos de 0..100: neutro é 1, padrão 1 e 100 significa 100×.
+Inclua pve e pvp juntos. active é reconhecido, mas bloqueado com
+ACTIVE_REQUIRES_DS7. As chaves antigas shadow/physicalRecords são históricas e
+não ativam DS-5. Nenhum arquivo de configuração local foi alterado nesta ordem.
 
 Exemplo a ser aplicado pelo revisor, com o servidor parado:
 ```json
-{"aetheriusCombat":{"families":{"melee":"shadow","ranged":"shadow","unarmed":"shadow"},"multipliers":{"pve":1,"pvp":1}}}
+{"aetheriusCombat":{"families":{"melee":"off","ranged":"off","unarmed":"off"},"multipliers":{"pve":1,"pvp":1},"probe":false}}
 ```
 Rollback: retirar families ou colocar todas em off e reiniciar em janela autorizada.
-O addon precisa ser o build DS-5a e o bundle do Core precisa publicar o catálogo.
+O addon precisa ser o build DS-5b e o catálogo precisa passar pelo verify do guia.
 
 
 **DS-2:** nenhuma opção nova ou alteração local. Recompilar o bundle do Core inclui catalog/combat.json em BUILD_DOMAINS. O modo damage mantém off como padrão; configurar outro modo não entrega perfil nem ponte nativa. O C++ do spike ainda exige physicalRecords quando shadow é ligado: a DS-2 não altera/ativa esse caminho (ver integrations/host/COMBAT_DS2.md).
@@ -182,40 +188,9 @@ aproximação de três segundos. Cliente novo: begin/challenge/ready acompanha a
 tarefas conhecidas de spawn, nos caminhos com/sem loadGame, e invalida cada
 ciclo anterior. Não muda o removeAllSpells/reaplicação já existente.
 
-### Veneno no host nativo (D-P1) — configuração
+### Veneno em arma (D-P1) — suspenso
 
-A opção `aetheriusCombat.weaponPoison` é um booleano de **server-settings.json**, lido no construtor C++ do addon, não uma variável do `.env`. Ausente ou `false`: comportamento antigo. `true`: habilita o revestimento e o golpe com veneno. Alteração exige reiniciar o processo nativo; recarregar só o gamemode não altera a opção. Não habilita `aetheriusCombat.shadow`.
-
-```json
-"aetheriusCombat": { "weaponPoison": true, "shadow": false }
-```
-
-Sem Core, o host usa uma carga por dose. Com Core e classes em `active` (ou personagem selecionado em `canary`), a composição entrega `aetheriusPoisonDoseBonus`, propriedade nativa em memória, inteira de 0 a 65534. `mp.get(actorId, 'aetheriusPoisonStatus')` expõe resultado e máscara das famílias recusadas, para diagnóstico. O cliente não escreve esses valores. Os modos de classe não habilitam o C++ por si só.
-
-### Gatilho e diagnóstico do veneno (D-P1-fix2; correção D-P1-fix3)
-
-A fix3 não cria opção no host/Core. Requer Papyrus Extender no cliente: a Platform
-chama seus globais por callNative. Falta de função/retorno inválido é UNSUPPORTED,
-sem reconstrução da arma. Com o trace existente, procurar correct-in-place
-(before/after/functions); replace-base foi removido. Detalhes de instalação e
-reversão em integrations/client/LEIA-ME.md. Nenhuma configuração local foi alterada.
-
-Recompilar também o Core e instalar o patch cumulativo do cliente (ver
-`integrations/client/LEIA-ME.md`). `weaponPoison=true` habilita o canal mesmo se
-`GAMEPLAY_CORE_CLIENT_PERKS_MODE=off`; os perks só são enviados se seu próprio modo,
-banco e migration estiverem disponíveis. O protocolo requer a sessão oficial
-vigente, begin/challenge/ready. Sem contexto oficial ou binding nativo, o resultado
-é `UNSUPPORTED`. O bônus continua vindo da composição; não nasce no cliente.
-Nenhuma nova opção do gamemode, migration ou alteração de economia.
-
-Diagnóstico opcional no arquivo existente de settings do plugin cliente
-`skymp5-client-settings.txt` (JSON): acrescentar `"aetheriusWeaponPoisonTrace": true`
-no objeto desse plugin. A opção é ausente/desligada por padrão. Ela habilita linhas
-`[AETHERIUS poison]` no console/registro da Skyrim Platform para equip, unequip,
-mudanças dos extras, intenção, resposta e reconstrução. Reverter removendo a chave
-ou usando false e reiniciando o cliente. Não contém credenciais. O executor não
-alterou settings no jogo/MO2 nem instalou o cliente.
-
+**Supersedida:** as instruções históricas de ativação de veneno de D-P1/D-P1-fix2/fix3 não são instruções operacionais atuais. O dono do projeto suspendeu a integração. Mantenha `aetheriusCombat.weaponPoison` ausente ou `false`, não instale o patch cumulativo suspenso do cliente e não ligue diagnósticos de veneno. Reativação exige decisão e ordem próprias. O [guia atual](../../integrations/INSTALL.md) e o [LEIA-ME do cliente](../../integrations/client/LEIA-ME.md) registram o estado vigente.
 ### Só desenvolvimento: **não usar no servidor oficial**
 
 Todas as opções abaixo usam a mesma trava: `NODE_ENV=local` explicitamente, `GAME_ACCESS_CONTROL` diferente de `true` e `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS=true`. Ausência de `NODE_ENV` nunca conta como local, mesmo que `server-options.js` escolha o arquivo local por padrão. `production` e `staging` recusam as opções. O ambiente vem de `env: process.env` no descriptor do gamemode, depois de carregar seu `.env`; `GAME_ACCESS_CONTROL` é a mesma variável lida pelo AccessControl do host.

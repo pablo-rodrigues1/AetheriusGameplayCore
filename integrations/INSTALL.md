@@ -1,599 +1,326 @@
-# Guia de instalação do GameplayCore no servidor e no cliente oficiais do Aetherius RP
+# Guia de integração do AetheriusGameplayCore
 
-Para o desenvolvedor que vai integrar. Presume que você conhece o `aetherius-server` e o `aetherius-client` oficiais e nunca viu este trabalho.
+**DOC-2 · 25/10/2026 · guia vigente.** Esta edição substitui o guia de 12/10; o histórico daquela versão permanece no commit anterior. O marcador `<COMMIT_DO_CORE>` fica para o revisor preencher com o commit final da `main`. A aplicação dos patches em clones limpos não prova build, boot, load order oficial ou comportamento no jogo.
 
-> **Versão de 12/10/2026, depois da ordem C3d.** Descreve o Core no commit `c50c735` da branch `work/gameplay` e o pacote do host gerado nessa data sobre o `aetherius-server` `340449f`.
->
-> **Este guia ainda não foi executado de ponta a ponta numa máquina limpa nem no servidor oficial.** Tudo o que ele relata como validado foi validado no ambiente local de desenvolvimento, na data indicada. A seção 2 separa o que foi validado em jogo do que não foi.
+## Resumo para o mantenedor
 
-Convenções: `<Core>` é a raiz deste repositório; `<aetherius-server>` e `<aetherius-client>` são os seus clones; `<gamemode>` é a pasta do gamemode no diretório de execução do servidor (no ambiente local, `<aetherius-server>\build\dist\server\gamemode`). Caminhos `_work\...` e o arquivo `RETOMADA.md` ficam no workspace de desenvolvimento do dono do projeto, fora deste repositório; são citados como origem dos fatos.
+- **Entrega:** patch do host com 35 arquivos e patch de produção do cliente com 5 arquivos; há ainda um patch de trace separado, só diagnóstico. Os patches passaram em clones limpos nas bases declaradas e todos os hashes do manifesto bateram. A prova não incluiu build nem servidor oficial. Os pacotes e limites estão em [host](host/LEIA-ME.md) e [cliente](client/LEIA-ME.md).
+- **Estado inicial:** todos os modos do Core e todas as famílias da fórmula ficam `off`; veneno e sondas ficam desligados. O host continua sendo o owner do resultado de dano aplicado.
+- **Ordem:** [1 · host](#passo-1-host) → [2 · PostgreSQL](#passo-2-postgresql) → [3 · catálogos](#passo-3-catlogos) → [4 · bundle](#passo-4-bundle) → [5 · .env](#passo-5-env) → [6 · settings](#passo-5-settings) → [7 · cliente](#passo-6-cliente) → [8 · ativação](#passo-7-ativao-e-conferncia).
+- **Não faça:** não copie arquivos integrais sobre trabalho do mantenedor; não ligue domínio se a verificação do catálogo falhar; não use índices de load order ou nomes localizados como identidade; não aplique o trace diagnóstico no cliente oficial; não use `100` como multiplicador neutro (`100` significa 100×).
 
-Documentos que este guia resume, sem copiar:
+## 1. Escopo e autoridade
 
-- [`docs/operations/ATIVACAO_DOS_SISTEMAS.md`](../docs/operations/ATIVACAO_DOS_SISTEMAS.md) — banco, opções e comportamento de cada sistema. É a fonte principal; quando este guia diz "Ativação, seção N", é esse arquivo.
-- [`host/LEIA-ME.md`](host/LEIA-ME.md) — o pacote do servidor, trecho por trecho.
-- [`client/LEIA-ME.md`](client/LEIA-ME.md) — o pacote do cliente.
-- [`docs/classes/PERKS_POR_CLASSE.md`](../docs/classes/PERKS_POR_CLASSE.md) — os perks de cada classe, por marco.
+O servidor decide concessões, persistência e projeções. O cliente envia intenção e evidência, nunca dano, cura, XP, skill, atributo, grant, duração ou abate final. O Core usa o pool PostgreSQL único do gamemode, `server/gamemode/core/pg.js`; cria tabelas próprias com prefixo `gc_` e não lê nem escreve MySQL legado, tabelas do painel, contas, sessões, inventário, ouro ou economia. Não crie outro pool, ledger, inventário ou `ActorCombatState`. Fontes: [ADR D8](../docs/architecture/adr/D8-mudancas-no-host.md), [runtime](../runtime/src/index.ts), [runner de migrations](../runtime/migrations.mjs). Os limites de escopo também constam do registro interno do workspace (não incluído), AGENTS.md, seções 1, 3 e 5.
 
----
+Records persistidos usam `StableFormKey`: plugin de definição mais FormID local. Personagens persistidos usam `CharacterKey`; `actorId` e `userId` só valem em `SessionBinding` com epoch. Não use nome localizado, índice de plugin, FormID de runtime ou posição na load order como identidade. Falta de record, capability ou contexto é `UNSUPPORTED`, sem fallback. Fonte: [ADR D5](../docs/architecture/adr/D5-dano.md), [contratos](../shared/contracts/src/index.ts), [adapter de catálogo](../tools/catalog/host.ts).
 
-## 1. O que é e o que entrega
+Concessão e resultado têm owners separados. O host (`NATIVE_SERVER`) mantém o resultado de combate aplicado; DS-5 calcula um candidato `AETHERIUS_SERVER` somente em shadow. Não aplique os dois. `EnemySystem` escolhe spawn, listas niveladas, respawn e substituição de NPC. `DamageSystem` pode observar a criatura para dados de combate de NPC não gerenciado; **DamageSystem não decide spawn** (Q13). Fontes: [owners de dano](../modules/damage-system/docs/FONTES_E_DONOS.md), [integração e autoridade de spawn](../modules/damage-system/docs/INTEGRACAO_HOST_E_AUTORIDADE_DE_SPAWN.md), [DS5A](host/DS5A.md), decisão Q13 no registro interno do workspace (não incluído).
 
-O GameplayCore é um pacote de regras de gameplay que roda **dentro do gamemode** do servidor, carregado como um único arquivo JavaScript (`dist/aetherius-gameplay-core.cjs`). Ele decide e guarda, no PostgreSQL do próprio gamemode, quem tem qual pedra guardiã, raça e classe, e entrega ao jogador os feitiços e perks correspondentes. Ele não cria conexão de banco, não toca em tabela existente e não substitui nenhum serviço do gamemode.
+## 2. Situação atual por sistema
 
-### Sistemas
+“Confirmado em jogo” abaixo significa sessão registrada pelo dono no servidor local; não significa homologação oficial. “Só automatizado” não é confirmação de gameplay.
 
-| Sistema | O que faz |
+| Sistema | Confirmado em jogo | Só automatizado | Não confirmado | Desligado, suspenso ou dev | Fontes |
+|---|---|---|---|---|---|
+| Pedras guardiãs | Sessão C1, 08/10: escolha, troca, repetição, reconexão e mensagens observadas no servidor local. | Provider e persistência têm testes do Core. | Servidor oficial e resultado de gameplay pelo novo owner. | Modo começa `off`. | [runtime](../runtime/src/index.ts); sessão C1 de 08/10, registro interno do workspace (não incluído). |
+| Raças | Sessão C2, 08/10: raça observada e grants registrados localmente; foram observadas 3 habilidades e 1 perk `RACE`. | Provider/ownership e contrato têm testes. | Efeitos raciais em combate multiplayer e servidor oficial. | Modo começa `off`; os resultados raciais continuam `NATIVE_CLIENT`. | [ownership de raças](../modules/race-system/ownership.json); sessão C2 de 08/10, registro interno do workspace (não incluído). |
+| Classes e perks de classe | Sessão B5b, 12/10: 162/162 marcos em 18 classes; entrega de perks `CONFIRMED`, revalidada às 23:02. Isso prova entrega/presença, não efeito de cada perk. | Protocolo, composição, idempotência e fila têm testes. | Efeito de cada perk e homologação oficial. | Modo de classes e `GAMEPLAY_CORE_CLIENT_PERKS_MODE` começam `off`; varredura/overrides são somente dev. | [fila de entrega](../runtime/src/projection/DELIVERY.md); [perks](../runtime/src/projection/perks.ts); sessões B5b/C3c, registro interno do workspace (não incluído). |
+| Pontos de atributo C3d | Não testados em jogo; o dono reservou a homologação para o servidor oficial. | Contrato de alocação e persistência passaram pelos aceites automatizados. | Tela, três máximos e reconexão no oficial. | Requer classes, migration 0009 e propriedade nativa do host; sem suporte declara `UNSUPPORTED`. | [contrato C3d](../docs/classes/ATRIBUTOS_C3d.md); [sistema de atributos](../runtime/src/attribute-system.ts); sessão C3d, registro interno do workspace (não incluído). |
+| Catálogos `combat`, `npcs` e `effects` | Não confirmam efeito de gameplay. | DS-2d real-host `PASSED` para seis domínios, incluindo plugins reordenados. | Load order oficial atual. | Verifique os arquivos atuais antes de usar; catálogo não ativa efeito nem certifica owner. | [geração/verificação](../tools/catalog/README.md); [verificador](../tools/catalog/verify.ts); parecer DS-2d, registro interno do workspace (não incluído). |
+| Perfil de combate DS-4 | Não confirmado em jogo. | Perfil, fontes de perks e limpeza foram testados/revisados. | Consumo do perfil por cálculo de hit no oficial. | Perfil é projeção, não resultado de dano. | [owners de dano](../modules/damage-system/docs/FONTES_E_DONOS.md); pareceres DS-4/fix2/fix3, registro interno do workspace (não incluído). |
+| Observação de NPC DS-0g e correção de posição DS-0i | Sessão local de 24/10 recebeu observações e registrou `indexedTeleport APPLIED`. Esse status prova retorno da chamada nativa, não convergência do motor. | Harness e código têm testes. | Load order oficial e convergência final no motor. | Cliente relata evidência; não escolhe, cria, substitui ou move spawn por autoridade própria. | [observação no cliente](client/files/client/src/services/services/npcObservationService.ts); [correção indexada](client/files/client/src/services/services/remoteServer.ts); sessões DS-0g/DS-0i, registro interno do workspace (não incluído). |
+| Arma de NPC após respawn e conversão CNTO DS-0k | Sessão em jogo pendente. Os crashes vistos depois não tiveram causa atribuída. | Testes nativos de equipamento passaram; harness com host real foi inconclusivo. | Respawn hostil no oficial: owner nativo ou `EnemySystem`, e se a reequipagem continua necessária. | Limites de LVLI estão registrados; DS-0k não autoriza DamageSystem a escolher spawn. | [host: observação/equipamento](host/files/server/cpp/server_guest_lib/aetherius_combat/NpcObservation.h); pareceres DS-0k/fix3 e registro de crash de 25/10, registros internos do workspace (não incluídos). |
+| Fórmula física DS-5a/DS-5b | Não confirmada em jogo; não há sessão shadow. | Dourados DS-5b: 26 `PASS`, 0 `FAIL`, 10 `PENDING`; revisão aprovou a entrega parcial. | Recalcular dano em jogo e qualquer promoção para `active`. | `families` ausente ou `off` preserva o resultado atual; `active` bloqueia com `ACTIVE_REQUIRES_DS7`. | [host DS5A](host/DS5A.md); [host DS5B](host/DS5B.md); parecer DS-5b, registro interno do workspace (não incluído). |
+| XP de Leveling por abate | Não conectado: falta uma fonte de morte confirmada pelo servidor. | O entry point de XP tem testes de domínio. | Evento/owner confiável de morte e XP. | `GAMEPLAY_CORE_MODE_LEVELING=off`. | [runtime](../runtime/src/index.ts); decisões de Leveling, registro interno do workspace (não incluído). |
+| Religião, feitiços e perks fora de classes, dano mágico, procs, durabilidade, refino real e perks SPID (função 26) | Não confirmados; não entregues neste pacote. | Não se infere cobertura a partir de catálogos ou documentos. | Implementação e owner certificados. | Modos `off`; sem fallback. | [owners de dano](../modules/damage-system/docs/FONTES_E_DONOS.md); [configuração de modos](../runtime/src/index.ts). |
+| Veneno em arma | Suspenso pelo dono do projeto. | Histórico/testes não retiram a suspensão. | Reativação depende de nova decisão. | `aetheriusCombat.weaponPoison` ausente ou `false`; patch cumulativo suspenso. | [ativação](../docs/operations/ATIVACAO_DOS_SISTEMAS.md); [patch suspenso](client/suspenso/B5b-mais-veneno-fix3-aa864cb.patch). |
+| Sonda e trace de hit | Não são evidência de gameplay. | Ferramentas de diagnóstico registram dados; não mudam o filtro de hit. | Uso operacional no oficial não foi autorizado. | `aetheriusCombat.probe`, `GAMEPLAY_CORE_DEV_COMBAT_PROBE*` e patch `npc-hit-trace` ausentes no oficial. | [sonda do host](host/files/server/cpp/server_guest_lib/aetherius_combat/CombatProbe.h); [patch diagnóstico do cliente](client/diagnostico/npc-hit-trace.patch); [código de hit](client/files/client/src/services/services/hitService.ts). |
+
+As sessões acima e pareceres de revisão são registros internos do workspace (não incluídos neste repositório). A conferência fonte por fonte de cada linha está em `_work/evidence/DOC-2/source-checklist-r2.md`.
+
+## 3. Bases, pré-requisitos e identidade
+
+### Baselines dos pacotes
+
+- Host aetherius-server: 6181abf1774c31a4e93206f71b784af5b13f10ae.
+- Cliente aetherius-client: 31566e83fc5f991aaa29f6ee0e868f8a558fe2ad.
+- Core: `<COMMIT_DO_CORE>`, preenchido pelo revisor depois do merge final. O HEAD desta revisão documental é d2e79ae3ee3eef5c49c0d992c6676fca4a527e64. A main remota recebeu nove commits do outro desenvolvedor; o Opus 5.5 integra por merge antes de publicar. EnemySystem pertence a esse desenvolvedor. Não remova nem substitua esses commits. Registro interno do workspace (não incluído): ordem DOC-2 e Adendo 1.
+- O patch do host tem SHA-256 ad62636998ce7e7aedb68364ebb77a942a0c7afe657fa3c93df0fadb5a8c1d2f e 35 arquivos (17 modificados, 18 adicionados). O patch de produção do cliente tem SHA-256 007d8c3f71964a79b536b4c2ca309b21ff9acaf62be9d95e366804aa43068755; são 5 arquivos de produção. Cada patch foi aplicado em clone limpo de sua base e comparado ao manifesto; host 35/35 e cliente 5/5. O patch diagnóstico separado do cliente foi provado à parte, 2/2. Prova DOC-2, registro interno do workspace (não incluído).
+
+### Ambiente e load order
+
+O Core requer Node.js >=22.14.0; use npm 10. A versão PostgreSQL do servidor oficial não foi verificada; o banco local de desenvolvimento usa PostgreSQL 18. Confirme a versão operacional com o mantenedor. Não use MySQL. Fonte: [package.json do Core](../package.json); informação de versão local, registro interno do workspace (não incluído).
+
+Os catálogos entregues foram gerados a partir da instalação do launcher MO2 `C:/modOrganizer`, perfil `AETHERIUS - GRAFICO - QUALIDADE`. Em 25/10, o verificador passou nos seis domínios contra a cópia de dados disponível em `aetherius-server/build/dist/server/data` no workspace; o manifesto local tinha data de 22/10. Essa leitura offline não prova que os mesmos arquivos estejam atualmente implantados no servidor oficial. Antes de ativar qualquer domínio, rode o passo 3 contra os arquivos do deployment oficial do mantenedor.
+
+A identidade do record é o plugin de definição mais FormID local; resolva FormID runtime no boot com a load order carregada. Não fixe índices, slot, contagem de plugins ou números de FormID de runtime em código, configuração ou persistência. A lista efetiva de plugins vem da instalação oficial e pode mudar. Fontes: [D5](../docs/architecture/adr/D5-dano.md), [catálogo](../tools/catalog/README.md).
+
+## 4. Instalação passo a passo
+
+Esta é uma instrução para o mantenedor. A ordem DOC-2 não aplicou os patches nos repositórios oficiais, não compilou host ou cliente, não acessou banco, não mudou settings e não iniciou servidor. Fez provas de patch/hash em clones temporários e uma verificação offline dos catálogos contra a cópia de dados do workspace, não contra um servidor ao vivo. Os detalhes operacionais preservados por sistema e as notas históricas estão em [ATIVACAO_DOS_SISTEMAS.md](../docs/operations/ATIVACAO_DOS_SISTEMAS.md).
+
+<a id="passo-1-host"></a>
+### 1. Aplicar e compilar o host
+
+Use clone de integração e confira que o HEAD é exatamente a baseline. Se ela divergir, pare para revisão. Primeiro rode `git apply --check`, depois aplique o delta. Nunca copie `host/files/` por cima do mantenedor; essas cópias servem para revisão. O manifesto lista os 35 arquivos e seus hashes. Fonte: [pacote do host](host/LEIA-ME.md), [manifesto](host/manifest.json).
+
+~~~powershell
+git apply --check "<Core>/integrations/host/changes.patch"
+git apply "<Core>/integrations/host/changes.patch"
+~~~
+
+Reconfigure e compile com o toolchain, o gerador, a arquitetura e as opções que o servidor oficial já usa. A receita versionada no repositório do servidor é aetherius-server/cmake_server_build.txt; ajuste somente caminhos locais ao ambiente do mantenedor. Forma do comando registrado nessa receita:
+
+~~~powershell
+Set-Location "<aetherius-server>\build"
+cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="../vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-sp -DVCPKG_OVERLAY_TRIPLETS="../overlay_triplets" -DSKYRIM_DIR="<caminho do Skyrim SE mantido pelo operador>" -DBUILD_SKYRIM_PLATFORM=ON -DSIMPLEINI_INCLUDE_DIRS="$PWD/vcpkg_installed/x64-windows-sp/include" -DCMAKE_INCLUDE_PATH="$PWD/vcpkg_installed/x64-windows-sp/include"
+cmake --build . --config Release --target skymp5-server
+~~~
+
+Os fontes novos entram pelos globs do CMake. Use a rotina de deploy do mantenedor e revise o server-settings.json do diretório de execução depois de sincronizar plugins; não copie settings locais junto com o build. DOC-2 não executou CMake, build ou boot. Fontes: [LEIA-ME do host](host/LEIA-ME.md), [pacote espelhado](host/files/server/cpp/server_guest_lib/aetherius_combat/ds5a/Host.h).
+
+<a id="passo-2-postgresql"></a>
+### 2. Aplicar e conferir migrations PostgreSQL
+
+Execute da raiz do Core, usando o arquivo core/pg.js do gamemode e a conexão já configurada no processo do servidor. Não imprima nem registre a URL. Schema padrão: public; schema customizado precisa existir antes e deve ser igual no runner e em GAMEPLAY_CORE_DATABASE_SCHEMA.
+
+~~~powershell
+npm run migrations:apply -- "<caminho absoluto>/server/gamemode/core/pg.js" [schema]
+npm run migrations:status -- "<caminho absoluto>/server/gamemode/core/pg.js" [schema]
+~~~
+
+Hoje são nove migrations, numeradas e aplicadas em ordem:
+
+| Versão | Tabela(s) gc_* |
 |---|---|
-| **Pedras guardiãs** (`standing-stones`) | Quando o jogador ativa uma pedra, o servidor impede a ação nativa, grava a escolha, tira os feitiços da pedra anterior e aplica os da nova. Ao reconectar, repõe a partir do banco. 13 pedras no catálogo. |
-| **Raças** (`races`) | Quando o personagem entra, o servidor lê a raça, grava a observação e passa a listar as habilidades e perks raciais como concessões de origem "raça". Não aplica nem remove nada: quem aplica o efeito racial é o jogo, pelo record. 10 raças jogáveis no catálogo. |
-| **Classes** (`classes`) | O servidor guarda a classe do personagem e, pelo nível, compõe os perks dos marcos atingidos. O catálogo tem **18 classes**, cada uma com 9 marcos (níveis 1, 5, 10, 15, 20, 25, 30, 35 e 40), **162 marcos** e 350 entradas de perk ao todo. A classe é definida por uma ferramenta de staff; não há tela nem comando para o jogador nesta entrega. |
-| **Entrega de perks ao cliente** | O servidor envia ao cliente o conjunto de perks do personagem; o cliente aplica só a diferença no jogo e confirma. O servidor só considera entregue depois da confirmação. Exige o pacote do cliente (seção 4.6). |
-| **Entrega do marco na subida de nível** | Quando o XP gravado muda o nível do personagem, o marco novo é entregue ao jogador online depois do commit. O ponto de entrada existe (`awardLevelingXp`), mas **nenhuma fonte de XP está conectada** (seção 2). |
-| **Pontos de atributo** | O personagem ganha **15 pontos por nível de classe** depois do primeiro (`15 × (nível − 1)`; 585 no nível 40) e os distribui em vida, magia e vigor. Um ponto vale 1 do máximo; a distribuição é em múltiplos de 5; ponto gasto não volta, a não ser pela troca de classe. O servidor guarda a distribuição e o host soma o bônus ao máximo dos records. Não há tela nesta entrega: o contrato para a tela está em `docs/classes/ATRIBUTOS_C3d.md` (seção 8) e existe uma ferramenta de staff (seção 4.5). **Não validado em jogo** (seção 2). |
-| **Troca de classe** | Trocar de fato a classe de um personagem **zera o nível, o XP e a distribuição de pontos**, na mesma transação. Definir de novo a mesma classe não zera nada. Fadiga e limite diário de XP são preservados. |
+| 0001 | `gc_schema_migrations` |
+| 0002 | `gc_commands` |
+| 0003 | `gc_spell_projection_heads`, `gc_spell_projections` |
+| 0004 | `gc_standing_stone_choice` |
+| 0005 | `gc_race_observation` |
+| 0006 | `gc_character_class` |
+| 0007 | `gc_leveling_progress` |
+| 0008 | `gc_perk_projections` |
+| 0009 | `gc_attribute_allocation` |
 
-### Quem decide o quê
+0001–0007 e 0009 são arquivos SQL em database/migrations/; 0008 é declarada em [migration.ts](../runtime/src/projection/migration.ts) e incluída pelo mesmo runner. Ele ordena numericamente, valida antes de aplicar, usa transação atômica e lock por schema. gc_schema_migrations guarda version, sha256 e applied_at; repetir apply com conteúdo igual é idempotente. status falha se o ledger não existir, se houver versão pendente ou se um hash não corresponder. Rode apply antes do status em schema novo.
 
-O servidor é a autoridade sobre **concessão**: quem tem qual pedra, raça, classe, perk e feitiço. Sobre **resultado** (dano, cura, custo, duração), o servidor só responde pelo que o host já calculava; o efeito de cada perk e feitiço concedido é calculado pelo motor do jogo no cliente.
+Para uma conferência somente leitura:
 
-| Fato | Quem decide | Onde fica |
-|---|---|---|
-| Pedra escolhida, raça observada, classe, XP e nível | servidor (Core) | PostgreSQL, tabelas `gc_` |
-| Pontos de atributo gastos em vida, magia e vigor | servidor (Core); o saldo não é gravado, é calculado do nível a cada leitura | PostgreSQL, tabela `gc_attribute_allocation` |
-| Máximo de vida, magia e vigor | host: valor dos records mais o bônus que o Core entrega em memória (`aetheriusAttributeBonuses`) | memória do host; nada no save |
-| Quais feitiços e perks o personagem tem por pedra, raça e classe | servidor (Core), a partir dos records do catálogo | composto a cada entrada; registro do que foi aplicado em `gc_spell_projections` e `gc_perk_projections` |
-| Aplicar o feitiço de pedra no personagem | servidor (host) | — |
-| Aplicar o perk de classe no personagem | cliente, a pedido do servidor, com confirmação | save do jogador |
-| Efeito do perk, do feitiço e da habilidade racial (armadura, regeneração, custo, dano de magia) | motor do jogo, no cliente | — |
-| Dano de golpe físico, vida, magia e vigor em runtime | host SkyMP, como antes | — |
-| Inventário, ouro, economia, login, whitelist | não tocados | — |
+~~~sql
+SELECT version, sha256, applied_at
+FROM public.gc_schema_migrations
+ORDER BY version;
+~~~
 
-O cliente nunca envia valor final: envia a confirmação de que aplicou o que o servidor mandou. Identidade de personagem é `profile:<profile_id>`, tirada da sessão oficial do login (`mp.aetheriusOfficialIdentity`); ator sem sessão oficial não recebe nada do Core.
+Não edite migration já aplicada. Não há down-migrations: para desligar um sistema, desligue-o pela configuração e preserve tabelas/dados. Não remova grants ou dados por SQL. Qualquer remoção durável exige ordem específica e revisão. Fontes: [runner](../runtime/migrations.mjs), [implementação de migrations](../shared/persistence/src/migrations.ts).
 
----
+<a id="passo-3-catlogos"></a>
+### 3. Verificar catálogos com os plugins oficiais
 
-## 2. Estado de cada sistema
+Antes de compilar bundle ou ligar domínio, confira que o clone do Core e o checkout oficial do host são pastas irmãs e rode o verificador da raiz do workspace:
 
-Fatos, com a data e o registro. "Em jogo" significa sessão do dono do projeto no servidor **local** de desenvolvimento, com um personagem de teste (`profile:108549`). Nada foi executado no servidor oficial.
-
-> **Atenção: sem fonte de XP, todo personagem do servidor oficial fica no nível 1 de classe.** Isso significa: só os perks do primeiro marco da classe e **zero pontos de atributo**. A fonte de XP por abates é uma pendência decidida pelo dono do projeto em 12/10/2026: falta definir quem prova o abate no servidor. O ponto de entrada já existe e é o único que deve ser usado: `core.awardLevelingXp(input)` (Ativação, seção 5, "Entrada durável de XP e entrega online"). No ambiente local os níveis acima de 1 foram exercitados com uma opção de desenvolvimento que não pode ir para o oficial (seção 6).
-
-> **Atenção: os pontos de atributo não foram validados em jogo.** Por decisão do dono do projeto em 12/10/2026, eles não são validados no ambiente local; a homologação é no servidor oficial, com a tela do AetheriusUI Core. O que existe é teste automatizado e ensaio com o servidor compilado.
-
-> **A entrega de perks foi alterada e depois revalidada em jogo, no mesmo dia.** A sessão de 12/10/2026 às 18:33 (162 marcos) validou o adaptador do commit `c7192d7`. Depois dela, a ordem C3d-fix3 corrigiu um defeito real nesse adaptador (duas entregas podiam ficar em andamento ao mesmo tempo, inclusive no caminho normal) e passou todas as publicações por uma fila por personagem (`runtime/src/projection/perks.ts`). A versão deste guia, `c50c735`, foi **revalidada em jogo em 12/10/2026 às 23:02**: 162 de 162 passos `OK`, restauração `OK` e `delivery=CONFIRMED`, com o mesmo cliente (`D538B93B2FA6`); registro em `_work\evidence\H\sessao-revalidacao-entrega-2026-10-12-2302.md`. A revalidação cobre a **entrega**. Não cobre o efeito dos perks (só a amostra da tabela abaixo foi medida) nem os pontos de atributo (o personagem não tinha pontos distribuídos). O cliente não mudou.
-
-### Validado em jogo no ambiente local
-
-| O quê | Data | Registro |
-|---|---|---|
-| Pedras: escolha, repetição da mesma pedra, trocas, reconexão, mensagens ao jogador | 08/10/2026 | `_work\evidence\H\sessao-pedras-C1-2026-10-08.md` |
-| Raças: o servidor observou a raça do personagem (Nord) e listou as concessões raciais | 08/10/2026 | `_work\evidence\H\observacao-racas-C2-2026-10-08.md` |
-| Entrega de perks: 19 perks da classe `viper` aplicados e confirmados; reaplicados na reentrada | 10/10/2026 | `STATE.json` (B5b); sessões de 10/10 em `_work\evidence\H\` |
-| Concessão dos perks das 18 classes | 12/10/2026, 17:10 | `_work\evidence\C3b\sessao-em-jogo-2026-10-12-1710.log` |
-| Entrega por marco: 162 de 162 passos `OK` nas 18 classes, com remoção de perk confirmada pelo cliente. **Feita com o adaptador de entrega anterior** (commit `c7192d7`; ver o terceiro aviso acima) | 12/10/2026, 18:33 | `_work\evidence\H\sessao-marcos-C3c-2026-10-12-1833.md` |
-| Entrega por marco **com o adaptador corrigido** (Core `c50c735`, servidor recompilado com o C++ da C3d, migration 0009 aplicada no banco local): 162 de 162 passos `OK`, nenhum `FAIL`, `ABORTED` nem `ACK_TIMEOUT`; classe original reposta; boot com `attribute maximum writer=CLASS_ADDITIVE` e nenhuma linha `attributes UNSUPPORTED` | 12/10/2026, 23:02 | `_work\evidence\H\sessao-revalidacao-entrega-2026-10-12-2302.md` |
-| Efeito de perks, **por amostra de duas classes**: confirmados com número Light Armor Mastery, Light Armor Fit, Slow Metabolism (viper); Brutal Fighter, três perks de armadura pesada, Heavy Armor Training, Magic Resistance (cavaleiro_negro) | 12/10/2026 | `_work\evidence\H\sessao-efeito-perks-A-viper-2026-10-12.md` e `...-B-cavaleiro-negro-2026-10-12.md` |
-| Servidor sem queda com NPCs depois da correção `fix-1010` | sessões de 10/10 e 12/10/2026 | logs em `_work\evidence\H\` |
-
-### Validado só em teste automatizado
-
-| O quê | Observação |
-|---|---|
-| Pedras depois de reiniciar o servidor | coberto por teste com processo novo; não testado em jogo (Ativação, seção 5) |
-| Entrega do marco na subida de nível por XP (`awardLevelingXp`) | testes do Core contra PostgreSQL real e cliente simulado (ordem C3c). Não há fonte de XP, então não há como acontecer em jogo |
-| Trava das opções de desenvolvimento | matriz de combinações nos testes do runtime (ordem B1-fix1), incluindo o caso "opção esquecida no servidor oficial" |
-| Fila única de entrega de perks (C3d-fix3), a versão que este guia instala (também revalidada em jogo às 23:02, tabela acima) | cinco testes novos (`runtime/tests/perk-concurrency.test.mjs`), que falham com o adaptador antigo; ensaio da varredura com o servidor compilado: 162 de 162 (`_work\evidence\C3d-fix3\opus-harness-sweep.txt`). Parecer: `_work\reviews\C3d-review-1.md` |
-| Pontos de atributo: regra dos pontos, alocação, recusas, repetição do mesmo pedido, duas alocações concorrentes, publicação do bônus ao host | testes do Core contra PostgreSQL de teste; ensaio com o servidor compilado, de ponta a ponta: alocar, conferir o máximo que o host devolve, reconectar, trocar de classe (`_work\evidence\C3d-fix3\opus-harness-attributes.txt`) |
-| Máximo do host com bônus, sem bônus e com o override de teste | testes nativos em C++: 69 conferências (`_work\evidence\C3d-fix1\native-unit-opus.txt`); compilação Release (`native-build-opus.txt`) |
-| Troca de classe zera nível, XP e distribuição; a mesma classe não zera; fadiga preservada | testes do Core e o ensaio de atributos acima |
-
-### Não validado
-
-- **Pontos de atributo em jogo:** as três barras com o máximo novo, a tela, e o efeito da troca de classe sobre o personagem. Decisão do dono do projeto: homologar no servidor oficial. O roteiro de homologação está no fim de `docs/classes/ATRIBUTOS_C3d.md`.
-- **O bônus de atributos nunca foi exercitado em jogo:** na sessão das 23:02 o servidor já rodava com o C++ e o Core da C3d, mas o personagem não tinha pontos distribuídos.
-
-- Efeito dos perks de dano, de veneno e de golpe; efeito da maioria dos 350 perks (só a amostra acima foi medida).
-- Efeito das habilidades raciais no multiplayer, em especial as que alteram dano (Ativação, seção 5, "Raças").
-- Login em jogo com a identidade oficial **no servidor oficial**. No local, o personagem de teste recebeu vínculo e entrega nas sessões acima.
-- Modos `audit`, `shadow` e `canary` em jogo: no ambiente local os sistemas foram direto para `active`, porque só há um personagem de teste (Ativação, seção 6).
-- Mais de um jogador ao mesmo tempo.
-- Este guia, executado numa máquina limpa.
-
-### Suspenso
-
-- **Veneno em arma.** Suspenso pelo dono do projeto em 12/10/2026. O código está no pacote do host (desligado por `aetheriusCombat.weaponPoison` ausente ou `false`) e num patch de cliente separado, em `client\suspenso\`, que **não** se instala. Histórico: reprovado em jogo em 09/10 e 10/10; a última versão não derrubou o jogo no ataque em uma sessão, e o efeito não foi testado (`RETOMADA.md`, seção 6).
-
-### Desativado
-
-- **Religião.** Não iniciada; desativada por enquanto, por decisão do dono do projeto em 12/10/2026. O relatório de boot mostra `religion: UNSUPPORTED; Catalog domain religion not delivered`, e isso é o esperado.
-
-### Não conectado
-
-- **Fonte de XP por abates.** O Core tem o adaptador que grava XP, nível e fadiga, mas nada o chama: falta decidir quem prova o abate no servidor. O boot mostra `leveling: UNSUPPORTED; SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED: ...`. **Consequência prática: sem fonte de XP, todo personagem fica no nível 1 de classe**, recebe só os perks do marco de nível 1 e tem zero pontos de atributo. Quem for conectar a fonte de XP chama `core.awardLevelingXp`, nunca o adaptador de persistência diretamente. No ambiente local os outros marcos foram testados com uma opção de desenvolvimento que força o nível e que não pode ir para o oficial (seção 6).
-- **Fórmula de dano.** Adiada. O que existe é um cálculo em sombra, desligado.
-
-### Só desenvolvimento
-
-- **Máximos de teste (300 de vida, magia e vigor).** Confirmados em jogo em 12/10/2026 e desligados no mesmo dia. O código fica inerte sem a opção (seção 6).
-
----
-
-## 3. Pré-requisitos
-
-### Versões
-
-| Item | Versão | Origem do dado |
-|---|---|---|
-| Node.js | 22.14.0 ou mais novo | `package.json` do Core (`engines`); o ambiente local usou `v22.14.0` |
-| npm | 10 | `runtime/README.md` |
-| PostgreSQL | o ambiente local usou a versão 18. A versão mínima **não foi determinada**; as migrations usam `CREATE TABLE`, `jsonb` e `timestamptz` | `_work\evidence\A8\RUNBOOK.md` |
-| Compilador C++ | MSVC 14.44, do Visual Studio Build Tools 2022, gerador CMake "Visual Studio 17 2022" | `_work\evidence\upstream-server\configure-nospace.txt` |
-| Git | qualquer versão com `git apply`; o ambiente local usou 2.55 | — |
-
-### Commits base
-
-| Repositório | Commit sobre o qual os pacotes foram feitos |
-|---|---|
-| `aetherius-server` | `340449fae21bb4404439cad0814e60759f944857` |
-| `aetherius-client` | `aa864cbf0a7f026dd1b0c2d373640ddedf030369` |
-| `AetheriusGameplayCore` | branch `work/gameplay`, commit `c50c735` (35 commits sobre a `main`, `f622518`) |
-
-Se o servidor ou o cliente oficial já passaram desses commits, veja a seção 7.
-
-### Plugins que a load order precisa ter
-
-O catálogo do Core foi gerado dos records vencedores da load order do ambiente local e guarda, para cada plugin de que depende, o **tamanho e o CRC32** do arquivo. No boot o Core confere esses arquivos na pasta de dados do servidor. Se um plugin faltar ou tiver tamanho ou CRC diferente, o sistema que depende dele fica `UNSUPPORTED`, com o motivo no log; os outros sistemas seguem.
-
-Listas tiradas do campo `dependencies` de cada arquivo em `catalog\`:
-
-| Sistema | Arquivo | Plugins conferidos |
-|---|---|---|
-| Pedras | `catalog/standing-stones.json` | `Skyrim.esm`, `Update.esm`, `unofficial skyrim special edition patch.esp`, `Mundus.esp` |
-| Raças | `catalog/races.json` | `Skyrim.esm`, `Update.esm`, `Aetherius.esp`, `AETHERIUS - BALANCE.esp` |
-| Classes | `catalog/classes.json` | `Skyrim.esm`, `Vokrii - Minimalistic Perks of Skyrim.esp`, `Vokrii - ADXP Patch.esp`, `Vokrii - Apply Spell Conditions Fix.esp`, `Mysticism - Vokrii Compatibility Patch.esp` |
-
-O tamanho e o CRC32 esperados de cada um estão nesses mesmos arquivos. A **posição** do plugin na load order não importa.
-
-### A regra de identidade de record
-
-Um record é identificado pelo **plugin que o define mais o FormID local**, por exemplo `skyrim.esm|0BABE4`. O FormID de runtime é resolvido no boot. Nenhum índice de plugin, FormID de oito dígitos ou contagem de plugins é gravado em código, configuração ou banco. Por isso reordenar a load order não quebra o Core; trocar o **arquivo** de um plugin da lista acima, sim (o CRC muda).
-
----
-
-## 4. Passo a passo
-
-Ordem: host, banco, catálogo, bundle, configuração, cliente, ativação. Faça com o servidor do jogo parado, ou com `ENABLE_GAMEPLAY_CORE=false`, até a seção 4.7.
-
-### 4.1 Aplicar o pacote do host e compilar
-
-O pacote está em `host\`: `changes.patch` (um patch com tudo, arquivos novos incluídos), `files\` (cada arquivo tocado, inteiro, no estado final) e `manifest.json` (hash e funcionalidade de cada arquivo). Foi gerado em 12/10/2026 e a prova de que aplica sobre o commit base está em `_work\evidence\DOC-1\14-make-package-final.txt`.
-
-```powershell
-git -C <aetherius-server> rev-parse HEAD
-Get-FileHash "<Core>\integrations\host\changes.patch" -Algorithm SHA256
-git -C <aetherius-server> apply --check "<Core>\integrations\host\changes.patch"
-git -C <aetherius-server> apply "<Core>\integrations\host\changes.patch"
-```
-
-O `rev-parse` tem de mostrar o commit base da seção 3, e o hash tem de ser o de `host\manifest.json` (`patch.sha256`). O que o patch contém, o que cada trecho faz, como aplicar só uma parte e como compilar estão em [`host/LEIA-ME.md`](host/LEIA-ME.md), seções 1 a 5. Resumo:
-
-- O patch traz seis funcionalidades. **Duas são necessárias no oficial:** o carregador no gamemode (dois arquivos JavaScript, sem compilar C++) e o **bônus de atributos** (C++; exige compilar). A correção de queda do servidor (`fix-1010`) é recomendada e também exige compilar. Veneno, dano em sombra e máximos de teste ficam desligados.
-- **Sem recompilar o C++**, pedras, raças, classes e entrega de perks funcionam; os pontos de atributo ficam indisponíveis e o log mostra `attributes UNSUPPORTED: ATTRIBUTE_NATIVE_PROPERTY_UNAVAILABLE`. Isso foi lido no código (`runtime/src/attribute-system.ts`); não foi exercitado com um host sem a propriedade.
-- **Mudança de comportamento do host a conferir por você, mesmo com tudo desligado:** para ator **sem aparência**, a base passava `raceId = 0` em dois pontos (`CropRegeneration.cpp` e `MpActor::VisitProperties`); com o patch, os dois usam `GetRaceId()`, que resolve a raça pelo template do NPC. Para jogador com aparência nada muda. Isso foi **lido no diff, não medido**: não se sabe se altera os valores de algum NPC. Detalhe em [`host/LEIA-ME.md`](host/LEIA-ME.md), seção 3.
-- Compilar: a sequência completa, com o preparo do vcpkg, o diretório de build obrigatório (`<aetherius-server>\build`) e o caminho **sem espaços**, está em [`host/LEIA-ME.md`](host/LEIA-ME.md), seção 5. Alvo `skymp5-server`, configuração `Release`; é preciso reconfigurar o CMake antes, por causa dos arquivos novos. Essa receita foi usada no clone de desenvolvimento; **não foi executada numa máquina limpa**.
-- Depois de compilar, rodar `server\tools\sync-client-plugins.js` e conferir que `aetheriusCombat.weaponPoison` e `aetheriusCombat.shadow` continuam ausentes ou `false` no `server-settings.json` do diretório de execução.
-
-### 4.2 Banco
-
-O Core usa o PostgreSQL que o gamemode já usa, pelo pool de `<gamemode>\core\pg.js`. A conexão vem das variáveis que o gamemode já lê (`GAME_DATABASE_URL` ou, se ausente, `DATABASE_URL`). O Core só cria tabelas com prefixo `gc_`; o executor de migrations recusa arquivo que toque tabela sem esse prefixo. As migrations só criam tabela e índice (Ativação, seção 1).
-
-| Migration | Onde está definida | Cria | Para quê |
-|---|---|---|---|
-| `0001_gc_schema_migrations.sql` | arquivo | `gc_schema_migrations` | controle das migrations aplicadas e da assinatura de cada arquivo |
-| `0002_gc_commands.sql` | arquivo | `gc_commands` | registro de comandos, para ação repetida não valer em dobro |
-| `0003_gc_spell_projection.sql` | arquivo | `gc_spell_projection_heads`, `gc_spell_projections` | o que o Core já aplicou de feitiços por personagem |
-| `0004_gc_standing_stone_choice.sql` | arquivo | `gc_standing_stone_choice` | pedra escolhida |
-| `0005_gc_race_observation.sql` | arquivo | `gc_race_observation` | raça observada |
-| `0006_gc_character_class.sql` | arquivo | `gc_character_class` | classe e revisão |
-| `0007_gc_leveling_progress.sql` | arquivo | `gc_leveling_progress` | XP, nível e fadiga |
-| `0008_gc_perk_projection.sql` | **código** | `gc_perk_projections` | perks aplicados e confirmados, e autoria por personagem |
-| `0009_gc_attribute_allocation.sql` | arquivo | `gc_attribute_allocation` | pontos gastos em vida, magia e vigor e a revisão, por personagem. Não guarda saldo. Sem `CHECK`: quem garante não negativos e múltiplos de 5 é o comando; uma linha inválida é recusada na leitura (`ATTRIBUTE_ALLOCATION_INVALID`) e não é corrigida sozinha |
-
-São **nove**. Oito são arquivos em `database\migrations\` (0001 a 0007 e 0009). A **0008 é definida em código**, em `runtime/src/projection/migration.ts`, e não existe como arquivo `.sql`; é aplicada pelo mesmo comando e vai embutida no bundle. Não existe arquivo 0008 e isso não é uma lacuna.
-
-A ordem de aplicação é sempre **0001 a 0009, pelo número**. O comando junta os oito arquivos e a 0008 definida em código, e o executor **ordena pelo número antes de aplicar** (`shared/persistence/src/migrations.ts`, função `prepare`). Ele também recusa aplicar uma migration de número menor que outra já aplicada (`MIGRATION_ORDER_INVALID`) e recusa continuar se uma migration já aplicada mudou ou não está mais entre as entregues (`MIGRATION_HASH_MISMATCH`). Num banco que já tem 0001 a 0008, o `apply` aplica só a 0009. Aplique sempre pelo comando abaixo; não rode os SQL à mão.
-
-Quem precisa de quê: pedras, 0001 a 0004; raças, mais a 0005; **classes, mais a 0006, a 0007 e a 0009** (sem a 0009 as classes ficam indisponíveis); entrega de perks, mais a 0008.
-
-**Como aplicar.** Na raiz do Core, depois do `npm ci` da seção 4.4, com as mesmas variáveis de ambiente do gamemode definidas no ambiente do processo (nunca em argumento de linha de comando):
-
-```powershell
-npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
-npm run migrations:apply  -- "<caminho absoluto>\gamemode\core\pg.js"
-npm run migrations:status -- "<caminho absoluto>\gamemode\core\pg.js"
-```
-
-- O `apply` aplica só o que falta, numa transação: ou entra tudo, ou nada. Repetir não faz nada. Um terceiro argumento opcional é o schema (padrão `public`).
-- **O `status` não lista o que falta.** Ele só passa quando as nove migrations estão aplicadas e iguais às entregues; nesse caso mostra as nove, com hash e data. Antes da primeira aplicação a tabela de controle ainda não existe e o comando termina com `Migration status failed: <código>`; com alguma migration pendente, termina com `Migration status failed: MIGRATIONS_NOT_CURRENT`. Portanto o **primeiro** `status` da sequência acima pode falhar, e isso é esperado; o que tem de passar é o `status` **depois** do `apply`. Isto foi lido no código (`migrationStatus`, no mesmo arquivo); não foi executado contra um banco nesta ordem.
-- **Schema diferente de `public`:** ele precisa **existir antes**. O executor não cria schema e recusa com `SCHEMA_MISSING`.
-- **Quem aplica:** uma pessoa, à mão, com backup do banco feito antes. **O servidor não aplica migrations sozinho** no oficial. Existe uma opção que aplica no boot; ela é só de desenvolvimento (seção 6).
-- Não edite um arquivo de migration já aplicado: o Core guarda a assinatura de cada um e recusa subir os sistemas que dependem do banco se um arquivo aplicado mudou. O `.gitattributes` do Core fixa o fim de linha desses arquivos (LF) para a assinatura ser a mesma em qualquer máquina; não os converta.
-- Detalhes: Ativação, seções 2 e 3.
-
-### 4.3 Catálogo: conferir contra a load order oficial
-
-Os três arquivos de `catalog\` já estão no repositório e são embutidos no bundle na seção 4.4. Você não precisa gerá-los se os plugins da seção 3 forem, byte a byte, os do ambiente onde o catálogo foi gerado.
-
-**Conferência de verdade: o boot.** Ao subir, o Core lê os plugins relevantes na pasta de dados do servidor e compara tamanho, CRC32 e tipo (leve ou não). Divergência aparece no log como `Plugin absent: <arquivo>` ou `Plugin signature/kind mismatch: <arquivo>`, na linha `[gameplay-core] <sistema>: UNSUPPORTED; ...` (seção 5).
-
-**Conferência antes de subir (limitada).** A partir de uma pasta que contenha `AetheriusGameplayCore\` e `aetherius-server\` lado a lado, com o servidor compilado e sincronizado (o script lê `aetherius-server\build\dist\server\data\aetherius-loadorder.json`):
-
-```powershell
+~~~powershell
 node --experimental-strip-types AetheriusGameplayCore/tools/catalog/verify.ts .
-```
+~~~
 
-Em 12/10/2026 esse comando passa nos três domínios (`_work\evidence\DOC-1\10-catalogo-verify-fase2.txt`). Ele compara, para cada plugin do catálogo, nome do arquivo, tamanho, CRC32 e tipo. Até essa data ele falhava no domínio de classes por comparar também três campos de metadados que não identificam o plugin; foi corrigido nesta entrega, e o teste com um plugin alterado e com um plugin ausente continua recusando (`13-catalogo-verify-teste-negativo.txt`).
+O argumento real é a raiz do workspace. verify.ts lê os seis JSONs do catálogo e os arquivos relacionados em aetherius-server/build/dist/server/data, guiado por aetherius-loadorder.json. Compara assinatura de domínio, cada record e os fingerprints filename, size, crc32 e isLight dos plugins alcançados. Também varre identidade indexada/runtime. Isso é verificação offline dos arquivos, não um servidor vivo. Fontes: [README do catálogo](../tools/catalog/README.md), [verificador](../tools/catalog/verify.ts), [fingerprinting](../tools/catalog/host.ts).
 
-**Se um plugin do oficial for diferente** (outra versão de `Vokrii`, de `Mundus.esp`, de `AETHERIUS - BALANCE.esp`, por exemplo), o catálogo precisa ser gerado de novo:
+Se passar, use os catálogos entregues para os domínios verificados. Se falhar em um domínio, **não ligue esse domínio** e peça ao dono/Opus 5.5 para regenerar os exports e o catálogo com houseCARL contra a instância oficial; depois repita verify. Não corrija assinatura manualmente, não use nome como chave, não escolha outro record como fallback. O processo de regeneração está no [Apêndice A](#apendice-a-catalogos).
 
-```powershell
-node --experimental-strip-types AetheriusGameplayCore/tools/catalog/build.ts <pasta dos exports> <aetherius-loadorder.json> AetheriusGameplayCore/catalog
-```
+<a id="passo-4-bundle"></a>
+### 4. Construir o bundle do Core
 
-Esse comando lê **exports de records em JSONL** (raças, feitiços, efeitos, perks, pedras) tirados da instância do Mod Organizer com a ferramenta houseCARL. Esses exports **não estão neste repositório** (ficam em `_work\exports\` no workspace de desenvolvimento) e o procedimento para produzi-los não está documentado aqui. **`build.ts` não regenera `classes.json`:** ele gera só `standing-stones.json` e `races.json` (`tools/catalog/build.ts`, função `buildDomains`, e o laço de gravação em `main`). Não há, neste repositório, comando que regenere o catálogo de classes; `perks-per-class.mjs` só produz a tabela de documentação a partir do catálogo que já existe. Se a load order oficial diferir nos plugins da seção 3, a regeneração tem de ser feita por quem tem os exports e a instância; trate como bloqueio e avise o dono do projeto. Depois de regenerar, refaça a seção 4.4.
+Com as dependências instaladas pelo lockfile e catálogos verificados:
 
-Para regenerar só a tabela de perks por classe, a partir do catálogo já existente: `node tools/catalog/perks-per-class.mjs` (na raiz do Core).
-
-### 4.4 Construir o bundle do Core
-
-Na raiz do Core:
-
-```powershell
-npm ci
-npm run typecheck
+~~~powershell
+Set-Location "<AetheriusGameplayCore>"
 npm run build
-```
+~~~
 
-O resultado é `dist\aetherius-gameplay-core.cjs`: um arquivo CommonJS, sem dependência de npm em runtime (só módulos internos do Node), com os três catálogos e as migrations embutidos. A pasta `dist\` é ignorada pelo git: o bundle se constrói, não se baixa. No ambiente local ele tinha cerca de 1,1 MB (relatório da ordem C3c).
+O build gera dist/aetherius-gameplay-core.cjs; aponte GAMEPLAY_CORE_BUNDLE para esse arquivo no diretório de execução do gamemode. Recompile depois de alterar catálogos. Fonte: [build do runtime](../runtime/build.mjs), [package.json](../package.json).
 
-`npm test` roda a suíte inteira, mas precisa de coisas que só o ambiente de desenvolvimento tem: um PostgreSQL de teste descartável na variável `AETHERIUS_TEST_DATABASE_URL`, os exports de records e a pasta de dados do servidor compilado. Sem isso os testes do catálogo falham por falta de artefato. A linha de base conhecida tem falhas antigas no módulo legado `class-system` (49 de 55), que o runtime novo não usa.
+<a id="passo-5-env"></a>
+### 5. Configurar o .env do gamemode
 
-### 4.5 Ligar no gamemode
+Para comissionamento autorizado, carregue o bundle com os modos de sistema ainda off. Canário deve ser uma decisão explícita; GAMEPLAY_CORE_CANARY_CHARACTERS aceita entradas profile:<número positivo>. Valores de modo aceitos: off, audit, shadow, canary, active; ausente significa off. A tabela inclui todos os nomes de configuração GAMEPLAY_CORE_* encontrados no runtime atual.
 
-As opções ficam no `.env` do gamemode. O Core lê todas no boot; mudar exige reiniciar o servidor ou recarregar o gamemode (Ativação, seção 4).
-
-| Opção | Valor no oficial | Se faltar ou estiver errada |
+| Variável | Valor inicial recomendado | Uso |
 |---|---|---|
-| `ENABLE_GAMEPLAY_CORE` | `true` | ausente ou `false`: o gamemode não carrega o Core; nada muda no jogo |
-| `GAMEPLAY_CORE_BUNDLE` | caminho absoluto de `aetherius-gameplay-core.cjs` (ou relativo ao diretório de execução do servidor) | com o Core ligado e esta opção vazia, o módulo falha no boot com `Defina GAMEPLAY_CORE_BUNDLE para carregar o Core`; o resto do gamemode segue |
-| `GAMEPLAY_CORE_MODE_STANDING_STONES` | `off`, `audit`, `shadow`, `canary` ou `active` (seção 4.7) | ausente: `off`. Valor inválido: `off`, com aviso `invalid mode for <sistema>; using off` |
-| `GAMEPLAY_CORE_MODE_RACES` | idem | idem |
-| `GAMEPLAY_CORE_MODE_CLASSES` | idem | idem |
-| `GAMEPLAY_CORE_CLIENT_PERKS_MODE` | `off`, `canary` ou `active`. `audit` e `shadow` não iniciam a conversa com o cliente nem aplicam perks | ausente: `off`; as classes compõem os perks no servidor, mas nada chega ao jogo. Valor inválido: `invalid GAMEPLAY_CORE_CLIENT_PERKS_MODE; using off` |
-| `GAMEPLAY_CORE_CANARY_CHARACTERS` | lista separada por vírgula, no formato `profile:<profile_id>` | só importa para o que estiver em `canary`; entrada fora do formato é ignorada |
-| `GAMEPLAY_CORE_DATABASE_SCHEMA` | o schema das tabelas `gc_`, se não for `public` | ausente: `public`. Tem de ser o mesmo usado ao aplicar as migrations |
-| `NODE_ENV` | `production` | é a mesma variável que o gamemode já usa para escolher o arquivo de opções. As opções de desenvolvimento só valem com `NODE_ENV=local` (seção 6) |
+| ENABLE_GAMEPLAY_CORE | true somente após revisão e autorização de comissionamento; caso contrário false | Carrega o módulo do Core. O exemplo de host vem desligado. |
+| GAMEPLAY_CORE_BUNDLE | Caminho absoluto do bundle revisado | Caminho de aetherius-gameplay-core.cjs. |
+| GAMEPLAY_CORE_DATABASE_SCHEMA | public, ou o schema oficial aprovado | Deve coincidir com o runner de migrations. |
+| GAMEPLAY_CORE_CANARY_CHARACTERS | Ausente/vazio enquanto não houver canário autorizado | Lista de profile:<id> permitidos nos modos canary. |
+| GAMEPLAY_CORE_MODE_STANDING_STONES | off | Concessão de pedra. |
+| GAMEPLAY_CORE_MODE_RACES | off | Observação/concessão de raça; não move o owner do resultado racial. |
+| GAMEPLAY_CORE_MODE_CLASSES | off | Classes e progressão por marcos. |
+| GAMEPLAY_CORE_MODE_LEVELING | off | XP por abate segue sem fonte de morte confirmada. |
+| GAMEPLAY_CORE_MODE_DAMAGE | off | Modo do sistema no Core; não ativa sozinho a fórmula nativa DS-5. |
+| GAMEPLAY_CORE_MODE_RELIGION | off | Não entregue. |
+| GAMEPLAY_CORE_MODE_SPELLS | off | Não entregue como sistema independente. |
+| GAMEPLAY_CORE_MODE_PERKS | off | Não entregue fora dos perks de classe. |
+| GAMEPLAY_CORE_CLIENT_PERKS_MODE | off | Canal de entrega; active/canary requer migration 0008, cliente compatível e sessão pronta. |
+| GAMEPLAY_CORE_ALLOW_DEV_OPTIONS | Ausente | Chave da trava de desenvolvimento; nunca presente no oficial. |
+| GAMEPLAY_CORE_DEV_CLASS_SWEEP | Ausente | Varredura temporária de classes, somente desenvolvimento. |
+| GAMEPLAY_CORE_DEV_CLASS_LEVEL | Ausente | Override de nível, somente desenvolvimento. |
+| GAMEPLAY_CORE_DEV_ATTRIBUTES | Ausente | Override transitório de máximos, somente desenvolvimento. |
+| GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY | Ausente | Compatibilidade de identidade offline antiga, somente desenvolvimento. |
+| GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV | Ausente | Auto-apply em boot, somente desenvolvimento. |
+| GAMEPLAY_CORE_DEV_COMBAT_PROBE | Ausente | Sonda de combate, somente desenvolvimento. |
+| GAMEPLAY_CORE_DEV_COMBAT_PROBE_FILE | Ausente | Caminho absoluto JSONL exigido se a sonda dev for ligada. |
 
-Todas as opções da seção 6 têm de estar **ausentes**.
+ENABLE_STANDING_STONE_SPIKE também deve estar ausente: é o protótipo antigo, não começa com GAMEPLAY_CORE_. **Toda opção dev deve estar ausente**, não vazia nem false; sua presença fora da trava resulta em erro/refusa o subsistema. A trava exige simultaneamente NODE_ENV=local, GAME_ACCESS_CONTROL diferente de true e GAMEPLAY_CORE_ALLOW_DEV_OPTIONS=true. offlineMode do host não é critério de desenvolvimento. Fontes: [lista/trava](../runtime/src/development.ts), [configuração e modos](../runtime/src/index.ts), [sonda](../runtime/src/combat-probe.ts).
 
-O modo `GAMEPLAY_CORE_MODE_LEVELING` pode ser configurado, mas o leveling aparece `UNSUPPORTED` de qualquer jeito, por não ter fonte de eventos. As opções de `aetheriusCombat` (veneno e sombra) não são do `.env`: ficam no `server-settings.json` e devem permanecer ausentes ou `false`.
+<a id="passo-5-settings"></a>
+### 6. Configurar server-settings.json de combate
 
-**Definir a classe de um personagem.** Não há tela nem comando de jogador. Staff define pela ferramenta abaixo (Ativação, seção 5, "Classes"). **Ela é offline quanto à entrega:** grava o comando no banco e termina; não fala com o servidor em execução.
+Exemplo inicial explicitamente desligado:
 
-```powershell
-node runtime/set-character-class.mjs "<caminho absoluto>\gamemode\core\pg.js" profile:<profile_id> <classe>
-```
+~~~json
+{
+  "aetheriusCombat": {
+    "families": { "melee": "off", "ranged": "off", "unarmed": "off" },
+    "multipliers": { "pve": 1, "pvp": 1 },
+    "probe": false
+  }
+}
+~~~
 
-Os ids das classes são: `anti_mago`, `arqueiro`, `assassino`, `berserker`, `cavaleiro_negro`, `criomante`, `curandeiro`, `druida`, `elementalista`, `eletromante`, `guardiao`, `invocador`, `mestre_espadachim`, `paladino`, `piromante`, `ranger`, `trapaceiro`, `viper`. Classe desconhecida é recusada. A ferramenta permite troca livre. **Trocar de fato a classe zera o nível, o XP e a distribuição de pontos do personagem**, na mesma transação; definir a mesma classe de novo não zera nada; fadiga e limite diário são preservados. Regras de quem pode trocar (ticket, nível gratuito) não existem no Core.
+families ausente também equivale a todas off; isso preserva a cadeia de dano atual. Quando fornecido, cada valor é off, shadow ou active. multipliers.pve e .pvp são **fatores diretos**, finitos entre 0 e 100: **neutro é 1; 100 multiplica por 100**. Inclua ambos os campos. O host aplica normal × global; o padrão da configuração é 1. probe fica ausente ou false; weaponPoison fica ausente ou false. As opções antigas shadow e physicalRecords são históricas e não ligam DS-5. Fontes: [Host.h espelhado](host/files/server/cpp/server_guest_lib/aetherius_combat/ds5a/Host.h), [Physical.h espelhado](host/files/server/cpp/server_guest_lib/aetherius_combat/ds5a/Physical.h), [guia do host](host/LEIA-ME.md).
 
-**O que acontece com um jogador online.** A ferramenta só executa o comando durável (`runtime/set-character-class.mjs`); ela não chama o Core em execução. No instante em que termina, **o banco já tem a classe nova, o nível e o XP zerados e a distribuição de pontos apagada**, mas o personagem que está online continua com os perks e o máximo antigos até a próxima entrada no mundo (o sinal de pronto do ator), quando o Core recompõe tudo a partir do banco. Por isso: faça a troca com o jogador fora do servidor, ou peça que ele saia e entre de novo; depois confira no log a linha `perks profile:<id>: CONFIRMED` (seção 5) e, se quiser, a explicação por personagem. A publicação imediata existe só no caminho online do runtime (`runtime/src/classes.ts`: depois do commit, republica atributos e perks), que nesta entrega não tem tela nem comando ligado a ele.
+Não use active: o host responde ACTIVE_REQUIRES_DS7. Para shadow, após autorização e conferência de catálogo, escolha uma ou mais famílias shadow e deixe as demais off; o resultado vigente continua sendo NATIVE_SERVER, candidato AETHERIUS_SERVER. O Core só publica perfis de jogador se uma fonte compatível entre pedra/raça/classe estiver em canary ou active; ligar GAMEPLAY_CORE_MODE_DAMAGE isoladamente não os publica. DS-5b cobre apenas perks CLASS, nove entry points e nove condições certificadas; bash, Q16, furtivo, cinco regras de chance crítica, origens fora de CLASS e prioridade sem prova seguem UNSUPPORTED/inativos. Fontes: [DS5A](host/DS5A.md), [DS5B](host/DS5B.md), [owners](../modules/damage-system/docs/FONTES_E_DONOS.md).
 
-**Distribuir pontos de atributo por staff.** Enquanto não há tela, a distribuição é feita por esta ferramenta, que usa o mesmo comando de domínio que a tela usará:
+<a id="passo-6-cliente"></a>
+### 7. Aplicar e compilar o cliente
 
-```powershell
-node runtime/allocate-attributes.mjs "<caminho absoluto>\gamemode\core\pg.js" profile:<profile_id> <vida> <magia> <vigor>
-```
+Use clone limpo na base 31566e83fc5f991aaa29f6ee0e868f8a558fe2ad, rode git apply --check e aplique client/changes.patch. Esse delta inclui observação de NPC hospedado e tratamento de correção indexada com verificação de identidade. Ele não escolhe, cria, troca nem autoriza spawn. APPLIED indica apenas que a chamada nativa retornou. As cópias em client/files/ servem para revisão/hash; não as copie por cima do mantenedor. Fonte: [pacote do cliente](client/LEIA-ME.md), [manifesto](client/manifest.json).
 
-Os três números são **acréscimos** (inteiros não negativos, múltiplos de 5, soma maior que zero), não o total. A ferramenta só grava: o resultado traz `delivery=NOT_SENT`, e o host recebe o bônus na próxima entrada do personagem. Argumentos opcionais: schema e `requestId` (repita o mesmo `requestId` para repetir o mesmo pedido sem gastar em dobro). Com todo personagem no nível 1, não há ponto a distribuir: o pedido é recusado com `ATTRIBUTE_POINTS_INSUFFICIENT`.
+~~~powershell
+git apply --check "<Core>/integrations/client/changes.patch"
+git apply "<Core>/integrations/client/changes.patch"
+Set-Location "<aetherius-client>\client"
+npm run build
+~~~
 
-### 4.6 Aplicar o pacote do cliente e compilar
+O projeto declara build: webpack em client/package.json. DOC-2 provou patch/hash, não build nem teste do cliente. client/diagnostico/npc-hit-trace.patch é separado; não o aplique no oficial. O antigo client/historico/B5b-aa864cb.patch usa base supersedida e não deve ser aplicado.
 
-Instruções completas em [`client/LEIA-ME.md`](client/LEIA-ME.md). Resumo:
+<a id="passo-7-ativao-e-conferncia"></a>
+### 8. Ordem de ativação
 
-```powershell
-git -C <aetherius-client> rev-parse HEAD
-git -C <aetherius-client> apply --check "<Core>\integrations\client\B5b-aa864cb.patch"
-git -C <aetherius-client> apply "<Core>\integrations\client\B5b-aa864cb.patch"
-```
+1. Mantenha todos os modos off e confira boot, migrations, catálogo e capacidade do host.
+2. Só após decisão do dono, libere um sistema por vez em canário; não misture owners de resultado.
+3. Pedras e raças: ativação não muda o owner dos efeitos. Classes/perks: faça a entrega pelo canal compatível e exija estado CONFIRMED; isto prova entrega, não efeito do perk. Atributos C3d exigem 0009 e a propriedade nativa no host, ainda sem homologação de jogo.
+4. Fórmula DS-5: siga o passo 6 e DS5A/DS5B. Shadow é observação; active permanece bloqueado pela DS-7.
+5. Levelling por abate, religião, magia, procs, durabilidade e refino permanecem desligados até haver fonte/contrato/cobertura aprovados.
 
-- O patch altera quatro arquivos em `client\src\` e cria `client\src\services\services\gameplayGrantService.ts`. Só trata da entrega de perks. **Não** aplique `client\suspenso\B5b-mais-veneno-fix3-aa864cb.patch`: é o veneno, suspenso.
-- Em 12/10/2026 foi conferido que o patch corresponde à árvore do cliente de desenvolvimento (`_work\evidence\DOC-1\02-cliente-apply-check-R.txt` e `03-cliente-prova-por-hash.txt`).
-- Compilação: os comandos estão no `client/LEIA-ME.md` (TypeScript sem emitir, depois webpack). Eles pressupõem as dependências instaladas na pasta `client` (`node_modules`), pelo `client\package.json` e pelo `client\yarn.lock` do mantenedor; o pacote não acrescenta dependência. O bundle que foi validado em jogo em 12/10 tem SHA-256 começando em `D538B93B2FA6`; um build seu só terá o mesmo hash se as dependências forem as mesmas, o que não foi conferido fora do ambiente local.
-- Distribuição aos jogadores: pelo fluxo do launcher que o projeto já usa. **Cliente antigo continua entrando:** para ele o servidor registra a entrega de perks como `CLIENT_UNSUPPORTED`, e pedras e raças funcionam sem o cliente novo (as mensagens das pedras apareceram no cliente v0.13.0 sem alteração, registro de 08/10).
-- O serviço do cliente fica passivo até o servidor iniciar a conversa. Com `GAMEPLAY_CORE_CLIENT_PERKS_MODE=off`, o cliente novo se comporta como o antigo.
-- A ordem C3d não alterou o cliente nem o protocolo `aetherius.gameplay.grants`. O que mudou depois da validação em jogo foi o lado do servidor da entrega (seção 2).
+Nenhuma sessão local descrita neste guia autoriza ativação no servidor oficial. A decisão de ligar e a validação em jogo continuam com o dono do projeto. Fonte: registros C1/C2/B5b/C3d e DS-5b, registros internos do workspace (não incluídos).
 
-### 4.7 Ordem de ativação recomendada
+### 9. Shadow de dano e leitura do trace
 
-Um sistema por vez, nesta ordem: pedras, raças, classes, entrega de perks. Para cada um (Ativação, seção 6):
+O shadow DS-5 observa o candidato e retorna a cadeia vigente; não escreve no caminho do hit e não requer aetheriusCombat.probe. Para uma execução de harness privada e isolada, use runtime/tests/ds5a-host.mjs --help e os argumentos obrigatórios da versão atual, com porta livre diferente de 7777 e diretório de trabalho separado. Depois leia getAetheriusCombatCapabilities() para owners/modos e getAetheriusCombatShadow() para o buffer dos últimos 1.024 hits, quando o binding estiver disponível. Consulte [DS5A](host/DS5A.md) e [contrato de dano](../modules/damage-system/docs/FONTES_E_DONOS.md).
 
-1. Backup do banco.
-2. Servidor parado, ou o sistema em `off`.
-3. `migrations:status`, `migrations:apply`, `migrations:status` (seção 4.2).
-4. `off` → `shadow` (ou `audit`, que é equivalente): o sistema observa e registra no log o que faria, sem gravar e sem alterar o jogo. Suba o servidor e leia o log por um período.
-5. `shadow` → `canary`, com um ou dois `profile_id` da equipe em `GAMEPLAY_CORE_CANARY_CHARACTERS`. Teste em jogo.
-6. `canary` → `active`.
+O trace contém revisões, componentes, candidato, status e motivo; a sequência do buffer não é identidade única do golpe. HitMessage ainda não tem identidade de hit para a DS-7. Não há comando administrativo documentado para extrair esse buffer do servidor oficial; não habilite sondas nem crie canal de debug no oficial para contornar isso. A ordem DOC-2 não executou o harness. A sonda aetheriusCombat.probe/GAMEPLAY_CORE_DEV_COMBAT_PROBE* é ferramenta distinta e dev-only.
 
-Para a entrega de perks (`GAMEPLAY_CORE_CLIENT_PERKS_MODE`) não há etapa de observação: de `off` vai para `canary` e depois `active`. Ela só tem o que entregar com as classes em `canary` ou `active`, e precisa da migration `0008_gc_perk_projection.sql` e do cliente da seção 4.6.
+### 10. Conferência no boot e por personagem
 
-Antes de ligar qualquer sistema, faça a conferência da seção 6.
+No boot, confira bundle <versão>; initialized; active instances=1, migrations completas, catálogos aceitos e ausência de DEV/ERROR ... refused. Verifique que o servidor tem exatamente uma instância do Core. O Core emite mensagens de aviso pelo nível info; procure o texto e o prefixo, não suponha que ERROR no corpo seja um nível de log. Fontes: [runtime](../runtime/src/index.ts), [attributes](../runtime/src/attribute-system.ts).
 
-Os passos 4 e 5 **não foram exercitados em jogo**: no ambiente local os sistemas foram direto para `active`.
+Para explicar um personagem, use a ferramenta somente leitura a partir da raiz do Core:
 
----
+~~~powershell
+node runtime/explain-character.mjs "<gamemode>/core/pg.js" profile:<id> [schema]
+~~~
 
-## 5. Conferência depois de ligar
+Ela abre transação somente leitura, mostra pedra, raça, classe, nível/origem, marcos, alocação e recusas; não aplica migrations nem mutações. Não salve a URL do banco em evidência. Fonte: [ferramenta de explicação](../runtime/explain-character.mjs), [implementação](../runtime/src/explanation.ts).
 
-As linhas abaixo foram copiadas do log do servidor local de 12/10/2026 (`_work\evidence\H\server-20261012-183042.log`) do ensaio com o servidor compilado de 12/10/2026 (`_work\evidence\C3d-fix3\opus-harness-attributes.txt`) ou do código no commit `c50c735`. O prefixo de data e `[console] [info]` foi omitido. O Core escreve tudo no nível `info`, inclusive o que chama de `ERROR`: procure pelo texto, não pelo nível.
-
-### No boot
-
-| Linha | Significado |
+| Trecho de log | Leitura e ação |
 |---|---|
-| `[gameplay-core] bundle 0.1.0; initialized; active instances=1` | o Core carregou. Tem de haver **uma** instância |
-| `[gameplay-core] attribute maximum writer=CLASS_ADDITIVE; records provide base maxima` | o sistema de atributos subiu: o máximo é o dos records mais o bônus distribuído. Aparece quando o banco está disponível e as classes não foram recusadas. **No oficial tem de ser `CLASS_ADDITIVE`**; `writer=DEV` significa opção de desenvolvimento ligada |
-| `[module-registry] [LAB] gameplay-core: ATIVO (0 comandos registrados)` | o gamemode registrou o módulo |
-| `[gameplay-core] leveling: UNSUPPORTED; SERVER_CONFIRMED_DEATH_OWNER_NOT_DECIDED: runtime awardLevelingXp entry available after boot; no caller/event source connected` | esperado: não há fonte de XP |
-| `[gameplay-core] religion: UNSUPPORTED; Catalog domain religion not delivered` (e as mesmas para `spells`, `perks`, `damage`) | esperado: sistemas não entregues |
+| [gameplay-core] bundle <versão>; initialized; active instances=1 | Core carregado uma vez. |
+| persistence unavailable: <código>; Run npm run migrations:apply ... | Banco, migration ausente ou hash divergente; conferir pool e rodar CLI de migrations. Sistemas dependentes do banco ficam indisponíveis. |
+| Catalog host/files unavailable / Plugin absent / Plugin signature/kind mismatch | Verificar dataDir, arquivos e catálogo. Não ligar o domínio afetado até verify.ts passar. |
+| invalid mode for <sistema>; using off | Modo inválido; o runtime adotou off. Corrigir o valor antes de ativar. |
+| client perks UNSUPPORTED: PERK_MIGRATION_UNAVAILABLE | Conferir migration 0008 e ledger. |
+| client perks UNSUPPORTED: TRANSPORT_OR_DATABASE_UNAVAILABLE | Conferir pool e API de transporte do host/cliente. |
+| attributes UNSUPPORTED: ATTRIBUTE_NATIVE_PROPERTY_UNAVAILABLE | Host sem propriedade aetheriusAttributeBonuses; recompilar o pacote compatível. Sem fallback customizado. |
+| perks profile:<id>: SENT_UNCONFIRMED ou ACK_TIMEOUT | Não houve confirmação válida; não conte como aplicado. Verifique cliente/sessão/prontidão. |
+| perks profile:<id>: CONFIRMED | Evidência de entrega; não comprova efeito no jogo. |
+| ACTIVE_REQUIRES_DS7 | A fórmula continua bloqueada; mantenha off/shadow. |
+| ERROR <opção> refused: ... | Opção dev presente fora da trava; remova-a. O subsistema dependente foi recusado. |
 
-Não deve aparecer nenhuma linha `[gameplay-core] DEV ...` nem `[gameplay-core] ERROR ...`.
+Linhas e causas vêm de [index.ts](../runtime/src/index.ts), [perks.ts](../runtime/src/projection/perks.ts), [attribute-system.ts](../runtime/src/attribute-system.ts) e [trava de desenvolvimento](../runtime/src/development.ts). Para grants, confira estado por personagem e ACK/COMMIT; SENT_UNCONFIRMED ou ACK_RECEIVED isolado não prova entrega gravada.
 
-### Quando um personagem entra
+## 5. O que nunca vai ao oficial
 
-| Linha | Significado |
-|---|---|
-| `[races] active: profile:<id> SUPPORTED skyrim.esm\|013746` | raça observada (o exemplo é Nord) |
-| `[classes] active: profile:<id>; level origin=LEVELING; class perks=<n>; delivery=SENT_UNCONFIRMED` | classes compuseram `<n>` perks e enviaram. No oficial a origem do nível tem de ser `LEVELING`; `DEV` significa opção de desenvolvimento ligada |
-| `[gameplay-core] perks profile:<id>: ACK_RECEIVED; applied=<n>; alreadyPresent=0; unresolved=0; failed=0; removed=0; alreadyAbsent=0; delivery evidence only` | o cliente respondeu. `unresolved` e `failed` têm de ser zero |
-| `[gameplay-core] perks profile:<id>: CONFIRMED; <n> items; delivery evidence only` | a entrega foi gravada. **Só esta linha comprova a entrega**; `SENT_UNCONFIRMED` nunca significa aplicado. Nenhuma das duas comprova o efeito do perk no jogo |
+Antes do deploy, confira:
 
-As linhas do sistema de pedras têm o prefixo `[standing-stones]`.
+- [ ] Todos os GAMEPLAY_CORE_MODE_* estão off; nenhum canário está configurado sem autorização.
+- [ ] GAMEPLAY_CORE_CLIENT_PERKS_MODE está off, salvo decisão explícita de ativar entrega compatível após 0008.
+- [ ] GAMEPLAY_CORE_ALLOW_DEV_OPTIONS, GAMEPLAY_CORE_DEV_CLASS_SWEEP, GAMEPLAY_CORE_DEV_CLASS_LEVEL, GAMEPLAY_CORE_DEV_ATTRIBUTES, GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY, GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV, GAMEPLAY_CORE_DEV_COMBAT_PROBE e GAMEPLAY_CORE_DEV_COMBAT_PROBE_FILE estão ausentes; não basta false nem vazio.
+- [ ] ENABLE_STANDING_STONE_SPIKE está ausente.
+- [ ] NODE_ENV do processo é production; offlineMode não transforma o servidor oficial em ambiente dev.
+- [ ] aetheriusCombat.probe e aetheriusCombat.weaponPoison estão ausentes ou false; o trace npc-hit-trace não foi aplicado.
+- [ ] aetheriusCombat.families está ausente ou cada família está off; multiplicadores estão no fator neutro 1.
+- [ ] A ferramenta runtime/adopt-standing-stone.mjs não foi executada no oficial.
 
-### No banco e por personagem
+A trava de opções dev exige ao mesmo tempo NODE_ENV=local, GAME_ACCESS_CONTROL != true e GAMEPLAY_CORE_ALLOW_DEV_OPTIONS=true. Fora disso, a simples presença de opção dev — mesmo vazia ou false — é recusada e registrada. Fontes: [development.ts](../runtime/src/development.ts), [combat-probe.ts](../runtime/src/combat-probe.ts), [atributos](../runtime/src/attributes.ts).
 
-```sql
-SELECT version, applied_at FROM gc_schema_migrations ORDER BY version;
-```
+## 6. Como desligar ou voltar atrás
 
-```powershell
-node runtime/explain-character.mjs "<caminho absoluto>\gamemode\core\pg.js" profile:<profile_id>
-```
+- **Core inteiro:** em janela autorizada, defina ENABLE_GAMEPLAY_CORE=false e recarregue/reinicie pelo procedimento do mantenedor.
+- **Um sistema:** defina seu GAMEPLAY_CORE_MODE_* como off. Para perks, defina também GAMEPLAY_CORE_CLIENT_PERKS_MODE=off.
+- **Fórmula:** families ausente ou todas off restaura a cadeia corrente. Não altere os multiplicadores para simular rollback.
+- **Cliente/host:** use revert revisado contra o HEAD mais recente e coordene host, gamemode e cliente; não copie arquivos de files/ por cima de mudanças posteriores. O trace diagnóstico nunca é parte do rollback/instalação oficial.
+- **Dados:** desligar não desfaz migrations, não apaga registros nem revoga automaticamente tudo que já foi projetado. Não exclua tabelas nem remova perks manualmente. A revisão DOC-1 registrou que a reversão de perks de classe não está coberta por um rollback genérico; uma remoção total requer ordem própria e regra por origem. Registro interno do workspace (não incluído).
 
-A segunda só lê: mostra pedra, raça, classe, nível, origem do nível, marcos e concessões, com o servidor ligado ou parado (Ativação, seção 7).
+Não existem down-migrations. Preserve as tabelas gc_ para reativação e auditoria. Fontes: [migrations](../shared/persistence/src/migrations.ts), [owners](../modules/damage-system/docs/FONTES_E_DONOS.md).
 
-Para os atributos, a explicação mostra nível, origem do nível, pontos ganhos, gastos, disponíveis e o motivo quando a distribuição não é aplicável. Ela não mostra o máximo atual: isso depende do host e da sessão. Sem a migration 0009 mostra `ATTRIBUTE_MIGRATION_UNAVAILABLE`.
+## 7. Divergência de bases e identidade
 
-Recusas que a API e a ferramenta de staff devolvem ao distribuir pontos (lista completa e o que a tela deve fazer com cada uma em `docs/classes/ATRIBUTOS_C3d.md`): `ATTRIBUTE_POINTS_INVALID`, `ATTRIBUTE_POINTS_INSUFFICIENT`, `CLASS_REQUIRED`, `REQUEST_ID_REUSED`, `MODE_OR_STALE_BINDING`, `DEV_SWEEP_IN_PROGRESS`.
+Host e cliente recebem commits com frequência. Primeiro rode git apply --check na baseline correspondente. Se a base divergiu ou o patch falhou, pare e compare o diff com o mantenedor; git apply --3way pode ajudar a identificar conflitos, mas não foi exercitado nesta entrega. Nunca resolva copiando um arquivo inteiro por cima.
 
-### Linhas de erro e o que significam
+Arquivos do host com maior chance de conflito: server/cpp/server_guest_lib/ActionListener.cpp, MpActor.cpp/.h, MovementValidation.cpp, MpObjectReference.cpp, LeveledListUtils.cpp/.h, server/cpp/addon/ScampServer.cpp, PropertyBindingFactory.cpp, unit/CMakeLists.txt, server/gameplay/class-system/ui/js/embedded-data.js e server/gamemode/phase0-basic.js. No cliente: client/src/index.ts, client/src/services/services/remoteServer.ts, client/src/services/services/npcObservationService.ts; hitService.ts só aparece no patch diagnóstico. As cópias para inspeção são [host/files](host/files/server/cpp/server_guest_lib/aetherius_combat/ds5a/Host.h) e [client/files](client/files/client/src/services/services/remoteServer.ts).
 
-| Linha (trecho) | Causa | O que fazer |
-|---|---|---|
-| `[gameplay-core] ERROR <OPÇÃO> refused: NODE_ENV must be explicitly local; ...` | uma opção de desenvolvimento está presente fora do ambiente de desenvolvimento | remover a opção do `.env` (seção 6). O sistema que depende dela fica indisponível até lá |
-| `[gameplay-core] persistence unavailable: <código>; Run npm run migrations:apply -- <absolute-path-to-gamemode-core/pg.js> [schema] from the Core root` | falta migration, o banco está inacessível ou um arquivo de migration aplicado mudou | aplicar as migrations (seção 4.2). O servidor do jogo não cai; os sistemas que usam banco ficam indisponíveis |
-| `[gameplay-core] client perks UNSUPPORTED: PERK_MIGRATION_UNAVAILABLE: apply 0008_gc_perk_projection.sql` | a tabela de perks não existe | aplicar as migrations |
-| `[gameplay-core] client perks UNSUPPORTED: TRANSPORT_OR_DATABASE_UNAVAILABLE` | o modo de perks está ligado, mas falta o banco ou a API de pacote customizado do host | conferir o banco e a versão do servidor |
-| `[gameplay-core] attributes UNSUPPORTED: ATTRIBUTE_NATIVE_PROPERTY_UNAVAILABLE` | o host não tem a propriedade `aetheriusAttributeBonuses` | aplicar o pacote do host e recompilar o C++ (seção 4.1). Nada é gravado em propriedade customizada no lugar |
-| `[gameplay-core] attributes UNSUPPORTED: OFFICIAL_SESSION_REQUIRED` | o ator não tem sessão oficial atual | conferir o login do jogador |
-| `[gameplay-core] attributes UNSUPPORTED: ATTRIBUTE_NATIVE_DELIVERY_UNAVAILABLE` | o gamemode não consegue escrever a propriedade no host | conferir a versão do servidor |
-| `[gameplay-core] profile:<id>: ATTRIBUTE_ALLOCATION_EXCEEDS_LEVEL; saved allocation retained, bonuses suppressed` | os pontos gravados são mais do que o nível atual dá | o bônus não é aplicado e nada é apagado. Não corrija o dado em silêncio; investigue por que o nível caiu |
-| `[gameplay-core] profile:<id>: ATTRIBUTE_ALLOCATION_INVALID; saved allocation retained, bonuses suppressed` | a linha gravada tem valor negativo ou fora de múltiplo de 5 (alguém escreveu na tabela por fora do comando) | encaminhar ao responsável pelo banco; o Core não corrige |
-| `[classes] DEV sweep ERROR SWEEP_WOULD_RESET_PROGRESS` | só em desenvolvimento: a varredura recusou começar porque o personagem tem XP ou pontos distribuídos | no oficial essa linha não pode existir (a varredura é opção de desenvolvimento) |
-| `[gameplay-core] <sistema>: UNSUPPORTED; Plugin absent: <arquivo>` | plugin do catálogo fora da load order | seção 3 |
-| `[gameplay-core] <sistema>: UNSUPPORTED; Plugin signature/kind mismatch: <arquivo>` | o arquivo do plugin difere do usado para gerar o catálogo | seção 4.3 |
-| `[gameplay-core] <sistema>: UNSUPPORTED; Catalog host/files unavailable; check host dataDir and relevant plugin files` | o Core não conseguiu ler a pasta de dados do servidor | conferir `dataDir` no `server-settings.json` |
-| `[gameplay-core] invalid mode for <sistema>; using off` | valor inválido em `GAMEPLAY_CORE_MODE_*` | corrigir o valor |
-| `STANDING_STONE_SPIKE_CONFLICT: disable ENABLE_STANDING_STONE_SPIKE before canary/active` | o protótipo antigo de pedras está ligado junto com o sistema novo | remover `ENABLE_STANDING_STONE_SPIKE` |
-| `[races] profile:<id> UNSUPPORTED <motivo>` | raça fora das dez jogáveis, ou outro motivo declarado | nada é feito ao personagem; investigar o motivo |
-| `ACK_TIMEOUT` (Ativação, seção 7) | o cliente não confirmou em 10 segundos; a entrega fica `SENT_UNCONFIRMED` e é reenviada na reconciliação seguinte | conferir a versão do cliente do jogador |
-| `Defina GAMEPLAY_CORE_BUNDLE para carregar o Core`, `Bundle sem createGameplayCore`, `GameplayCore sem <método>` | erros do descriptor em `phase0-basic.js` | conferir o caminho e o arquivo do bundle |
-
-O texto exato de `ACK_TIMEOUT` no log não foi conferido para este guia; a constante de 10 segundos está em `runtime/src/projection/perks.ts`.
-
----
-
-## 6. O que nunca pode ir para o servidor oficial
-
-O arquivo `runtime/src/development.ts` define a lista `DEVELOPMENT_OPTIONS`. Relida no commit `c50c735`: são seis opções, as mesmas de antes da C3d.
-
-| Opção | O que faz no ambiente de desenvolvimento |
-|---|---|
-| `GAMEPLAY_CORE_DEV_CLASS_SWEEP` | troca a classe do personagem por todas as classes e marcos, para testar a entrega. Cada troca zera nível, XP e distribuição de pontos; por isso ela recusa começar se o personagem tiver XP ou pontos gravados (`SWEEP_WOULD_RESET_PROGRESS`) |
-| `GAMEPLAY_CORE_DEV_CLASS_LEVEL` | força o nível de classe (1 a 40) sem gravar XP |
-| `GAMEPLAY_CORE_DEV_ATTRIBUTES` | força os máximos de vida, magia e vigor |
-| `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY` | aceita perfil sem autenticação num host antigo |
-| `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV` | aplica migrations no boot |
-| `ENABLE_STANDING_STONE_SPIKE` | liga o protótipo antigo de pedras |
-
-Mais uma variável, que não está na lista mas é a chave que as libera: `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS`.
-
-### Lista de conferência
-
-No `.env` do gamemode do servidor oficial, **as sete têm de estar ausentes** — não basta `false` nem valor vazio:
-
-- [ ] `GAMEPLAY_CORE_DEV_CLASS_SWEEP`
-- [ ] `GAMEPLAY_CORE_DEV_CLASS_LEVEL`
-- [ ] `GAMEPLAY_CORE_DEV_ATTRIBUTES`
-- [ ] `GAMEPLAY_CORE_ALLOW_OFFLINE_IDENTITY`
-- [ ] `GAMEPLAY_CORE_APPLY_MIGRATIONS_DEV`
-- [ ] `ENABLE_STANDING_STONE_SPIKE`
-- [ ] `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS`
-
-E ainda:
-
-- [ ] `NODE_ENV=production` no ambiente efetivo do processo.
-- [ ] No log do boot, nenhuma linha `[gameplay-core] DEV ...`, nenhuma `[gameplay-core] ERROR ... refused` e nenhuma `attribute maximum writer=DEV`.
-- [ ] `aetheriusCombat.weaponPoison` e `aetheriusCombat.shadow` ausentes ou `false` no `server-settings.json`.
-- [ ] A ferramenta `runtime/adopt-standing-stone.mjs` não é usada: serviu para migrar um personagem de teste do protótipo.
-
-### A trava
-
-Uma opção da lista só é aceita quando as três condições valem ao mesmo tempo (função `isDevelopmentEnvironment`):
-
-1. `NODE_ENV` é exatamente `local` (ausente não conta como local);
-2. `GAME_ACCESS_CONTROL` não é `true`;
-3. `GAMEPLAY_CORE_ALLOW_DEV_OPTIONS` é exatamente `true`.
-
-Fora disso, a **simples presença** da opção — inclusive vazia ou `false` — é recusada: o Core escreve `ERROR <opção> refused: <motivos>` e o sistema que depende dela não sobe (por exemplo, com `GAMEPLAY_CORE_DEV_CLASS_LEVEL` esquecida, as classes ficam indisponíveis; pedras e raças continuam). Não há retorno silencioso ao comportamento normal: é preciso remover a opção.
-
-O servidor oficial roda em `offlineMode=true` com login por token. **`offlineMode` não é critério de ambiente de desenvolvimento** e não deve ser alterado por causa do Core. Detalhes: Ativação, seção 4, "Só desenvolvimento".
-
----
-
-## 7. Se o servidor ou o cliente oficial divergiram dos commits base
-
-Os dois repositórios recebem commits com frequência; é provável que os patches não apliquem direto.
-
-1. **Tente primeiro o patch inteiro, só conferindo:** `git apply --check`. Se passar, aplique.
-2. **Se falhar, tente a aplicação a três vias,** que usa os blobs da base quando o seu clone os tem: `git apply --3way <patch>`. Os conflitos ficam marcados nos arquivos. (Essa forma não foi exercitada nesta entrega.)
-3. **Se ainda falhar, aplique por partes:**
-   - Arquivos **novos no pacote** podem já existir no oficial mais novo, se o mantenedor tiver criado o mesmo caminho. **Copie de `host\files\` só se o destino não existir.** Se existir, não copie por cima: compare os dois e trate como conflito, com o mantenedor. O `git apply` já recusa criar um arquivo que existe; mantenha essa mesma proteção na cópia manual. Para aplicar só um caminho: `git apply --include=<caminho>`.
-   - Para cada arquivo **alterado**, use a tabela da seção 3 do [`host/LEIA-ME.md`](host/LEIA-ME.md): ela diz, por função, o que foi acrescentado e por quê. Os trechos são pequenos e marcados com `AETHERIUS <ordem>`. A cópia inteira do arquivo em `host\files\` serve para ver o resultado esperado, **não para substituir o arquivo do mantenedor**: ela está no estado da base mais as nossas mudanças e apagaria o que o mantenedor fez depois.
-4. **Nunca sobrescreva o que o mantenedor alterou.** Em dúvida, o código dele vale e a nossa mudança é que se adapta.
-
-### Arquivos com mais chance de conflito
-
-| Arquivo | Por quê | Funcionalidades |
-|---|---|---|
-| `server/cpp/server_guest_lib/ActionListener.cpp` | cinco pontos, em funções movimentadas (golpe, equipamento, hospedagem, valores) | `fix-1010`, `weapon-poison`, `dev-attributes` |
-| `server/cpp/server_guest_lib/MpActor.cpp` e `MpActor.h` | assinaturas de `GetBaseValues` e `GetMaximumValues`, `SetEquipment`, `OnEquip`, `VisitProperties`, e os métodos e campos do bônus de atributos | `weapon-poison`, `dev-attributes`, `attribute-bonus` |
-| `server/gamemode/phase0-basic.js` | lista de módulos do gamemode, que o mantenedor edita | `core-loader` |
-| `server/cpp/addon/ScampServer.cpp` | construtor do addon, perto da montagem das fórmulas de dano | `weapon-poison`, `damage-shadow` |
-| `server/cpp/addon/property_bindings/PropertyBindingFactory.cpp` | lista de propriedades | `weapon-poison`, `dev-attributes`, `attribute-bonus` |
-| cliente: `client/src/services/services/remoteServer.ts` | arquivo central do cliente; 49 linhas no resumo do diff | entrega de perks |
-
-Para o cliente, a intenção de cada mudança está em [`client/LEIA-ME.md`](client/LEIA-ME.md), seção "Entrega e confirmação".
-
-### Se a identidade ou o login mudaram no oficial
-
-O Core depende de `mp.aetheriusOfficialIdentity` com `session(actorId)` e `isCurrent(...)`, e de `mp.get(actorId, 'profileId')`. Se o mantenedor mudou essa API depois de `340449f`, o Core deixa de vincular personagens: nada é concedido e nada é gravado, sem erro de boot. Confira com um personagem em `canary` antes de qualquer outra coisa.
-
----
+O Core depende da identidade oficial existente no host: mp.aetheriusOfficialIdentity.session(actorId), isCurrent(...) e mp.get(actorId, 'profileId'). O pacote não altera o login. Se a API ou o vínculo com profileId mudou depois da baseline, pare; não use identidade alternativa nem fallback. Fontes: [atores do runtime](../runtime/src/actors.ts), server/ts/systems/login.ts no repositório do host.
 
 ## 8. Integração da tela (AetheriusUI Core)
 
-Regra: **a tela é projeção mais intenção.** Ela mostra o estado que o servidor publica e envia o que o jogador quer fazer; nunca envia valor final (atributo, nível, perk concedido, dano). O servidor valida, grava e republica.
+A UI é projeção mais intenção. Mostra o estado publicado pelo servidor e envia o pedido do jogador; não envia nível, saldo, máximo, perk final ou dano. O patch do host inclui server/gameplay/class-system/ui/js/embedded-data.js; o espelho está em [embedded-data.js](host/files/server/gameplay/class-system/ui/js/embedded-data.js). DOC-2 não compilou nem validou a tela.
 
-Nesta entrega não há tela nem comando de jogador para nenhum sistema: pedra é escolhida ativando a pedra no mundo; classe é definida por staff (seção 4.5).
+O contrato C3d de atributos está em [ATRIBUTOS_C3d.md](../docs/classes/ATRIBUTOS_C3d.md). Resumo:
 
-**O contrato dos pontos de atributo** está em [`docs/classes/ATRIBUTOS_C3d.md`](../docs/classes/ATRIBUTOS_C3d.md). Resumo:
+- Ler core.attributeState(binding) para classe, nível/origem, pontos ganhos/gastos/disponíveis, revisão, aplicabilidade e valores informados pelo host.
+- Enviar core.allocateAttributes({ binding, requestId, health, magicka, stamina }); os valores são incrementos inteiros não negativos, múltiplos de 5, com soma positiva. Não enviar nível, saldo ou máximo.
+- O servidor determina o binding autenticado e persiste idempotentemente por requestId; valores aceitos não provam que o máximo novo já foi projetado no motor.
+- O transporte entre a tela AetheriusUI e os comandos C3d ainda não está integrado. Não instale patches antigos de integrations/ui-runtime-changes/ junto com este pacote: usam bases distintas e a compatibilidade não foi verificada.
 
-- A tela **lê** com `core.attributeState(binding)`: classe, nível e origem do nível, pontos ganhos, gastos por atributo, disponíveis, revisão, se a distribuição é aplicável, o máximo esperado, o máximo dos records e o que o host informa.
-- A tela **envia** `core.allocateAttributes({ binding, requestId, health, magicka, stamina })`. Os três valores são acréscimos: inteiros não negativos, múltiplos de 5, soma positiva. A tela nunca envia nível, saldo nem máximo.
-- O adaptador do servidor obtém o vínculo autenticado atual; não aceita um vínculo escolhido pelo cliente.
-- Repetir o mesmo pedido depois de perder a resposta: mesmo `requestId`. Mudou os valores: outro `requestId`.
-- Pedido aceito e gravado não certifica que o jogo já mostra o máximo novo: a resposta separa o que foi gravado do que foi projetado no host.
-- Os motivos de recusa e o que a tela faz com cada um estão na tabela do contrato.
-- **O transporte entre a tela e o servidor não existe ainda**: será integrado depois e não muda o protocolo de perks. O roteiro de homologação no oficial está no fim do contrato.
+## 9. Limitações, riscos e decisões em aberto
 
-Os documentos em `docs\ui-integration\` e a pasta `integrations\ui-runtime-changes\` são de um trabalho anterior de interface (04/10/2026), sobre outras bases dos repositórios (`a89b2e6` do servidor e `8d1dd4e` do cliente). **Não aplique os patches de `ui-runtime-changes\` junto com os deste guia**: as bases são diferentes, e a compatibilidade entre os dois conjuntos não foi verificada.
+- HitMessage ainda não carrega identidade única de golpe. Essa é dependência do cliente/host e pré-requisito da DS-7; mantenha active bloqueado. Fonte: [bloqueio de deduplicação](../modules/damage-system/docs/DS5A_BLOQUEIO_DEDUPLICACAO.md).
+- Respawn de hostis no servidor oficial ainda precisa definir se a autoridade é nativa ou EnemySystem, e se a reequipagem DS-0k continua necessária. EnemySystem é de outro desenvolvedor; Q13 continua valendo.
+- Encantamentos/poções criados por jogador não têm magnitude por instância confirmada (Q16). Consulte [requisito de encantamentos/poções](../modules/damage-system/docs/REQUISITO_ENCANTAMENTOS_E_POCOES.md) e [diagnóstico Q16](../modules/damage-system/docs/DIAGNOSTICO_Q16_MAGNITUDE_POR_INSTANCIA.md).
+- Foram observados dois crashes ao entrar no mundo em 25/10; causa não atribuída. Registro interno do workspace (não incluído): DS-0k/ab-crash-20261025.md.
+- A suíte do runtime pode falhar sob saturação de CPU; DS-5a-fix1 registrou uma falha de infraestrutura e três execuções verdes. Evite build paralelo durante a execução de aceites. Registro interno do workspace (não incluído).
+- DS-0k-fix3 documenta limitações de LVLI no host. Não trate resultados parciais como autoridade de spawn. Registro interno do workspace (não incluído).
+- DS-5b não certifica bash, Q16, furtivo, cinco regras de chance crítica ou grupos não comutativos sem ordem provada; dez dourados permanecem pendentes. Fonte: [DS5B](host/DS5B.md), [casos dourados](../modules/damage-system/docs/CASOS_DOURADOS.md).
+- Load order oficial corrente, efeito de perks no motor, valores C3d em jogo, equipagem após respawn, builds oficiais e boot oficial continuam sem validação nesta ordem.
 
----
+## 10. Fontes e reprodutibilidade
 
-## 9. Limitações e achados conhecidos
+Os caminhos relativos deste guia apontam para arquivos contidos no repositório AetheriusGameplayCore. Código de host/cliente referenciado para o integrador está espelhado em integrations/host/files/ e integrations/client/files/. Ordens, pareceres e sessões do workspace são citados como registros internos do workspace (não incluídos), acompanhados do fato relevante; não são links externos ao Core.
 
-Tirados do `RETOMADA.md` (12/10/2026) e dos registros em `_work\evidence\H\`.
+A ordem DOC-2 repetiu a prova de aplicação:
 
-### Dos sistemas
+- Host: git apply --check e git apply passaram na baseline; 35/35 hashes do manifesto conferidos após normalização LF.
+- Cliente: patch de produção passou em `git apply --check` e `git apply`; 5/5 hashes conferidos. Patch diagnóstico, separado e não oficial, passou em `git apply --check`/`git apply`; 2/2 hashes conferidos.
+- Catálogo: `verify.ts` passou nos seis domínios, no workspace, contra os arquivos em `aetherius-server/build/dist/server/data`; resultado offline, não é confirmação de deployment ou host ao vivo.
+- Não foram executados build do host, build do cliente, testes, migrations, boot ou validação em jogo nesta ordem.
 
-- **Efeito dos perks só por amostra.** A confirmação de entrega prova que o perk está no personagem, não que o efeito funciona. Foram medidos perks de duas classes (seção 2). Perks de dano, de veneno e de golpe não foram testados; os de dano dependem da fórmula de dano, adiada.
-- **Regeneração de vigor abaixo do record.** Os perks Agility e Stimulants ficaram ativos, com valor medido abaixo do que o record indica. Segue sem explicação. O corte de regeneração de vigor que o pacote do host acrescenta só atua com os máximos de teste ligados, e eles estavam desligados nessas sessões (parecer da C3d). O perk Disciplined Fighter reduziu o custo mais do que o record prevê (×0,66 medido contra ×0,75), sem explicação.
-- **Nove perks concedidos antes do pré-requisito nativo.** Em nove casos a classe dá um perk num marco e só dá o pré-requisito nativo dele num marco posterior (tabela no relatório da ordem C3c). Só o jogo diz se o motor aceita o perk nesse intervalo; não foi verificado.
-- **54 perks com pré-requisito que a classe não concede.** São concedidos assim mesmo e estão marcados em `docs/classes/PERKS_POR_CLASSE.md`. O Core não avalia as condições nativas de aquisição e não completa ranks nem pré-requisitos sozinho.
-- **Sem fonte de XP,** todo personagem fica no nível 1 de classe (seção 2).
-- **Pontos de atributo não validados em jogo** (seção 2). A entrega de perks foi alterada depois da validação das 18:33 e revalidada em jogo às 23:02; o efeito dos perks continua medido só por amostra.
-- **Não há como retirar os perks de classe de um personagem por revogação** (seção 10): o domínio não tem comando que remova a escolha de classe.
-- **As ferramentas de staff são offline quanto à entrega** (seção 4.5): gravam no banco e o jogador online só recebe na próxima entrada.
-- **Limite diário de XP na troca de classe:** a troca preserva o limite diário, que fica com o valor do nível antigo até o ciclo diário seguinte (parecer da C3d).
-- **Um personagem só pode ter, no host, bônus de até 585 pontos no total**, o ganho do nível 40; acima disso a propriedade recusa (`ATTRIBUTE_POINTS_INVALID`).
-- **Pedra do Corcel:** o bônus de corrida não é suportado; o record não liga esse bônus à pedra (está em `unsupported` no catálogo).
-- **Feitiço ou perk que o personagem já tinha por outro motivo nunca é removido** pelo Core. Efeito colateral declarado: se o servidor cair entre aplicar um feitiço e gravar o registro, o feitiço fica no personagem sem autoria e uma revogação posterior não o remove (parecer da ordem B5a).
-- **Desligar não apaga.** Perks já aplicados continuam no save do jogador e as tabelas `gc_` ficam (seção 10).
-- **Remoção de perk no cliente:** o jogo só mostra a ausência de um perk removido algumas atualizações depois da chamada. O cliente confere até três vezes ou 500 ms; se o perk continuar presente, relata falha e a remoção fica pendente no servidor.
+Saídas completas: registro interno do workspace (não incluído), `_work/evidence/DOC-2/package-proof-r2-retry.txt`. A lista e resultado da resolução de todos os links deste guia estão em `_work/evidence/DOC-2/links-r2.txt`.
 
-### Do jogo e do host, sem causa determinada
+<a id="apendice-a-catalogos"></a>
+## Apêndice A — regeneração de catálogos
 
-- **O jogo fecha sozinho, sem relatório.** Erro `0xc0000409` em `ucrtbase.dll+0x71208`, sete ocorrências entre 10/10 e 12/10/2026, com versões diferentes do cliente: três em 10/10 e quatro em 12/10 (15:12:56 ao dar alt-tab, 17:10:56, 17:19:10 e 18:34:42, esta ao abrir o menu de feitiços). Relação com os perks concedidos: **não demonstrada nem descartada**. A investigação depende dos despejos de memória do Windows; os comandos para habilitá-los foram entregues ao dono do projeto em 12/10 e nenhum despejo tinha sido analisado até esta data.
-- **Golpes em alvos que o servidor não conhece:** `ActionListener::OnHit - MpObjectReference not found`. Defeito do host, anterior a este trabalho.
-- **Queda do servidor com NPC hospedado:** corrigida no pacote do host (`fix-1010`); o defeito existe no código da base. O relato para o mantenedor está em `_work\evidence\FIX-1010\DEFEITO-HOST-lastMovUpdateByIdx.md`.
-- **Entrada no mundo que trava:** o cliente enviou `begin` e nunca `ready`, uma vez, em 12/10 às 15:42; não se repetiu nas entradas seguintes.
-- **Queda ao carregar o save** (10/10, 12:48) e **queda na máquina de scripts Papyrus** (10/10, 10:52): uma ocorrência cada.
-- **Vida 150 de um Nord** vista em 08/10: o host calcula 100; origem não determinada.
-- **O cliente reaplica o inventário do servidor a cada 5 segundos** (`remoteServer.ts`); é comportamento do cliente da base, relevante para quem for mexer em equipamento.
-- **Serviço de sobrevivência do gamemode** (fome e sede): com fome ou sede em zero ele drena vida, magia e vigor. Não é do Core; apareceu nos testes porque muda as barras.
+A regeneração exige exports e manifesto da mesma época, obtidos da load order vencedora da instância oficial. No fluxo de trabalho atual, o Opus 5.5 consulta o houseCARL na instância C:/modOrganizer, perfil AETHERIUS - GRAFICO - QUALIDADE, e entrega os exports ao executor autorizado. Um mantenedor sem houseCARL deve pedir essa regeneração ao dono/Opus; não invente exports nem use wiki, nomes ou memória.
 
-### Desta entrega
-
-- A conferência prévia do catálogo (`verify.ts`) falhava no domínio de classes e foi corrigida nesta entrega (seção 4.3).
-- O `.gitattributes` do Core passou a proteger os patches e os arquivos espelhados de `integrations\host\` e `integrations\client\` contra conversão de fim de linha (`_work\evidence\DOC-1\12-gitattributes-check-attr.txt`). A proteção vale a partir do commit que a incluir; confira o SHA-256 do patch antes de aplicar.
-- **Mudança de comportamento do host para ator sem aparência**, lida no diff e não medida (seção 4.1).
-- A correção do revisor no ensaio de atributos (`runtime/harness/attribute-allocation.mjs`) e a correção `fix-1010` aguardam revisão independente (pareceres da C3d e da FIX-1010).
-
-### Onde este guia diverge do documento de ativação
-
-Em 12/10/2026 o `ATIVACAO_DOS_SISTEMAS.md` recebeu notas de supersessão (o texto antigo foi mantido) nestes pontos, que antes divergiam deste guia: o caminho do guia de instalação; os "seis rótulos não resolvidos" do catálogo de classes; o exemplo de boot com `classes: UNSUPPORTED`; as pendências do revisor da C3d, já cumpridas; a orientação de "revogar classes" para remover perks, que não é executável; e, na seção 9, a revalidação em jogo das 23:02 e a retirada da varredura do ambiente local.
-
-Continuam divergentes, e **vale o que este guia diz**:
-
-| Ativação diz | O que foi conferido |
-|---|---|
-| seção 5: pedras precisam dos plugins `Skyrim.esm` e `Mundus.esp`; raças, de `Skyrim.esm`, `Aetherius.esp` e `AETHERIUS - BALANCE.esp` | os catálogos conferem também `Update.esm` (pedras e raças) e `unofficial skyrim special edition patch.esp` (pedras). Lista completa na seção 3 |
-| seção 3: "o primeiro `status` mostra o que já está aplicado" | o `status` só passa com tudo aplicado; antes disso falha (seção 4.2) |
-| seção 2: a tabela lista a 0008 depois das outras, como "(runtime)" | a ordem de aplicação é por número, 0001 a 0009 (seção 4.2) |
-
----
-
-## 10. Como desligar e como desfazer
-
-| Passo | Desligar | Desfazer |
-|---|---|---|
-| Um sistema | pôr `GAMEPLAY_CORE_MODE_<SISTEMA>=off` e reiniciar o servidor ou recarregar o gamemode. A pedra guardiã volta ao comportamento nativo; as raças deixam de ser observadas | nada a desfazer: as tabelas ficam e o sistema retoma de onde parou ao ser religado |
-| Entrega de perks | `GAMEPLAY_CORE_CLIENT_PERKS_MODE=off` | desligar **conserva** os perks já aplicados no save do jogador e a autoria no banco. **Esta entrega não tem procedimento para retirar os perks de classe de um personagem por revogação:** o domínio só oferece `classes.set` para uma classe do catálogo (`modules/class-progression-system/src/index.ts`) e não existe comando que remova a escolha de classe. Não apague linhas de `gc_perk_projections` e não remova perks em massa. Se a retirada total for exigida, trate como bloqueio: precisa de uma ordem de trabalho própria |
-| Pontos de atributo | não têm opção própria: seguem o modo das classes. Com as classes em `off`, o bônus deixa de ser entregue; ele vive só na memória do host e some quando o personagem sai ou o servidor reinicia | ponto gasto **não volta**. O único caminho que apaga a distribuição é a troca de classe, que também zera nível e XP. Não apague linhas de `gc_attribute_allocation` à mão |
-| O Core inteiro | `ENABLE_GAMEPLAY_CORE=false` e reiniciar | o gamemode volta a se comportar como antes do Core |
-| Migrations | — | **não há migration de remoção, de propósito.** As tabelas `gc_` não interferem em nada quando o Core está desligado. Se for preciso removê-las, é decisão e operação manual do responsável pelo banco, com backup; restaurar o backup anterior à aplicação também desfaz |
-| Pacote do host | manter as opções desligadas (o [`host/LEIA-ME.md`](host/LEIA-ME.md), seção 6, lista cada uma) | `git apply -R "<Core>\integrations\host\changes.patch"` no clone e recompilar; ou voltar ao binário anterior, que você guardou antes de trocar |
-| Pacote do cliente | o cliente novo fica passivo com o modo de perks em `off` | repor o bundle anterior do cliente, com o jogo fechado; `git apply -R` do patch no clone |
-| Bundle do Core | — | apontar `GAMEPLAY_CORE_BUNDLE` para o bundle anterior e reiniciar |
-| Feitiços de pedra já aplicados | continuam no personagem depois de desligar | quem os remove é o próprio sistema, numa troca de pedra |
-
-Se o Core ou o banco falharem com um sistema ligado, o servidor do jogo continua no ar; o sistema afetado fica indisponível e diz por quê no log.
-
-Guarde, antes de cada troca: o backup do banco, o binário do servidor (`scam_native.node`), o bundle do cliente e o `.env` do gamemode.
-
----
-
-## 11. Onde está cada coisa
-
-| Caminho no Core | Conteúdo |
-|---|---|
-| `integrations/INSTALL.md` | este guia |
-| `integrations/host/` | pacote do servidor: `changes.patch`, `files/`, `manifest.json`, `LEIA-ME.md`, e o gerador (`make-package.mjs`, `features.json`) |
-| `integrations/client/` | pacote do cliente: `B5b-aa864cb.patch`, `LEIA-ME.md`; `suspenso/` com o patch de veneno, que não se instala |
-| `integrations/ui-runtime-changes/` | trabalho anterior de interface, sobre outras bases; não faz parte desta instalação |
-| `docs/operations/ATIVACAO_DOS_SISTEMAS.md` | banco, opções, comportamento de cada sistema, como conferir e desligar |
-| `docs/classes/PERKS_POR_CLASSE.md` | perks de cada classe por marco |
-| `docs/classes/ATRIBUTOS_C3d.md` | contrato dos pontos de atributo para a tela e roteiro de homologação |
-| `docs/architecture/adr/` | decisões de arquitetura D1 a D8 (D8: mudanças no host viajam como pacote dentro do Core) |
-| `catalog/` | os três catálogos assinados (`standing-stones.json`, `races.json`, `classes.json`) e o `README.md` |
-| `tools/catalog/` | gerador e verificador do catálogo, tabela de perks por classe |
-| `database/migrations/` | migrations em SQL (0001 a 0007 e 0009; a 0008 é definida em `runtime/src/projection/migration.ts`) |
-| `runtime/` | o runtime: `src/` (código), `build.mjs` (gera o bundle), `migrations.mjs` (aplica e mostra migrations), `explain-character.mjs` (explicação por personagem), `set-character-class.mjs` (define a classe), `allocate-attributes.mjs` (distribui pontos de atributo), `harness/` (ensaios com o servidor compilado, só para desenvolvimento) |
-| `runtime/src/development.ts` | a lista das opções de desenvolvimento e a trava |
-| `modules/standing-stone-system/`, `modules/race-system/`, `modules/class-progression-system/`, `modules/leveling-system/` | regras de cada sistema |
-| `modules/race-system/ownership.json` | quem responde por cada efeito racial |
-| `shared/` | catálogo de records, persistência, contratos |
-| `dist/aetherius-gameplay-core.cjs` | o bundle; gerado, ignorado pelo git |
-
-No workspace de desenvolvimento, fora deste repositório: `RETOMADA.md` (estado do trabalho), `_work\STATE.json` (fases e gates), `_work\orders\` e `_work\reviews\` (ordens e pareceres), `_work\evidence\` (saídas de comandos e sessões em jogo).
+O procedimento usa os builders documentados em [tools/catalog/README.md](../tools/catalog/README.md): build.ts para pedras/raças, classes.ts para classes, npcs.ts e effects.ts para os domínios de combate/NPCs/efeitos, todos com manifesto e epoch coerentes. Gere os artefatos auxiliares fora de catalog/, revise os diffs e rode novamente [verify.ts](../tools/catalog/verify.ts) contra os arquivos de plugin do servidor oficial. Só os domínios cuja verificação passar podem ser usados.

@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-25T22:45:29.972Z",
+  "generatedBy": "DOC-2 client package from current aetherius-client working tree",
+  "format": "git unified patch plus full copies of every changed file",
+  "lineEndings": "LF",
+  "repository": {
+    "name": "aetherius-client",
+    "baseline": "31566e83fc5f991aaa29f6ee0e868f8a558fe2ad",
+    "headWhenGenerated": "31566e83fc5f991aaa29f6ee0e868f8a558fe2ad",
+    "workingTree": "3 modified and 4 added files, packaged from current order inputs"
+  },
+  "patch": {
+    "path": "changes.patch",
+    "bytes": 31348,
+    "sha256": "007d8c3f71964a79b536b4c2ca309b21ff9acaf62be9d95e366804aa43068755",
+    "purpose": "production-capable integration changes; excludes optional diagnostic-only hit trace"
+  },
+  "files": [
+    {
+      "lineEndings": "LF",
+      "sha256": "7136f65fa29c4c5c2c497cc58486d11509515534df6646d82fb918e7cd922ca7",
+      "path": "client/src/index.ts",
+      "status": "modified",
+      "bytes": 8694,
+      "classification": "production-integration"
+    },
+    {
+      "lineEndings": "LF",
+      "sha256": "8c9be99f08c8412684a7b2b44db62f75cabe664035e80162de2d655a7e783684",
+      "path": "client/src/services/services/hitService.ts",
+      "status": "modified",
+      "bytes": 4642,
+      "classification": "diagnostic-only; excluded from changes.patch"
+    },
+    {
+      "lineEndings": "LF",
+      "sha256": "27f4e3dedc951fd996dbeaf3523a767e73e3f33c8fe4bcfe1b6c6cc6cead4ca3",
+      "path": "client/src/services/services/remoteServer.ts",
+      "status": "modified",
+      "bytes": 40928,
+      "classification": "production-integration"
+    },
+    {
+      "lineEndings": "LF",
+      "sha256": "703ff0826b61f050fa0e99e7111efe2e2a0eafd92b80bac5748ce298dfc16b47",
+      "path": "client/src/services/services/npcObservationService.ts",
+      "status": "added",
+      "bytes": 6055,
+      "classification": "production-integration"
+    },
+    {
+      "lineEndings": "LF",
+      "sha256": "ccc58b20a508cd845c856285ca98818930c92774f1d9cc74e973eef0a5389064",
+      "path": "client/meridian/indexed-teleport.test.cjs",
+      "status": "added",
+      "bytes": 5829,
+      "classification": "production-integration"
+    },
+    {
+      "lineEndings": "LF",
+      "sha256": "b52db891702ddea25a089c46dd41feb5e81e28af9b9ecd03d2ef2ac167a9da5c",
+      "path": "client/meridian/npc-hit-trace.test.cjs",
+      "status": "added",
+      "bytes": 4785,
+      "classification": "diagnostic-only; excluded from changes.patch"
+    },
+    {
+      "lineEndings": "LF",
+      "sha256": "b58721095f3721a8b0b4ea8959890915bcd15546e8d746f029e18d7b0231746d",
+      "path": "client/meridian/npc-observation.test.cjs",
+      "status": "added",
+      "bytes": 11793,
+      "classification": "production-integration"
+    }
+  ],
+  "features": {
+    "npcObservation": {
+      "files": [
+        "client/src/index.ts",
+        "client/src/services/services/npcObservationService.ts"
+      ],
+      "diagnosticOnly": false,
+      "description": "Relays observation evidence for hosted NPCs to the server; it does not select, spawn, replace, or mutate actors."
+    },
+    "indexedNpcTeleport": {
+      "files": [
+        "client/src/services/services/remoteServer.ts"
+      ],
+      "diagnosticOnly": false,
+      "description": "Resolves and applies server indexed NPC position corrections with identity checks; APPLIED means the native call returned, not engine convergence."
+    },
+    "npcHitTrace": {
+      "files": [
+        "client/src/services/services/hitService.ts"
+      ],
+      "diagnosticOnly": true,
+      "description": "Diagnostic logTrace around existing client hit filtering; no packet fields or channels are added and diagnostic failure does not change filtering.",
+      "patch": "diagnostico/npc-hit-trace.patch",
+      "productionUse": false
+    },
+    "tests": {
+      "files": [
+        "client/meridian/indexed-teleport.test.cjs",
+        "client/meridian/npc-hit-trace.test.cjs",
+        "client/meridian/npc-observation.test.cjs"
+      ],
+      "diagnosticOnly": true,
+      "description": "Test-only source files; not runtime deployment assets."
+    }
+  },
+  "diagnosticPatch": {
+    "path": "diagnostico/npc-hit-trace.patch",
+    "bytes": 9291,
+    "sha256": "c6c038ae09b86eff932786b7e48abe97721257bfa4286f525a60400383d7d3c6",
+    "productionUse": false,
+    "purpose": "optional diagnostic-only hit trace; do not apply to the official client"
+  }
+}
