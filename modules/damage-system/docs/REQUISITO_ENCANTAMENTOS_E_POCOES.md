@@ -7,6 +7,8 @@
 
 ## 1. Situação atual
 
+> Diagnóstico DS-Q16 (25/10/2026): [campos do host, fontes de magnitude e limites de prova por instância](DIAGNOSTICO_Q16_MAGNITUDE_POR_INSTANCIA.md).
+
 - A funcionalidade de encantar itens e criar poções **não está desenvolvida no servidor**. Não se sabe ainda como ela se comporta no
   contexto do SkyMP.
 - O que já foi observado: o host guarda, por item no inventário, o **código do encantamento** (`enchantmentId`, visto na sonda de
