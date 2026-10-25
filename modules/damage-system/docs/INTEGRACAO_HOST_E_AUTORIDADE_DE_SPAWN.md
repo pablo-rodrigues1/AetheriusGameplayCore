@@ -5,6 +5,9 @@
 > repositório durante o desenvolvimento local (ordens DS-0b a DS-0g-fix3, outubro de 2026), as decisões do dono do
 > projeto que as limitam e o que ainda falta.
 
+> [!IMPORTANT]
+> **Encantamentos e poções:** o DamageSystem assume que a magnitude real de cada encantamento/poção fica guardada no próprio item pelo servidor (cenário ideal, decisão do dono). A implementação dos encantamentos deverá ser construída para funcionar assim: ver [REQUISITO_ENCANTAMENTOS_E_POCOES.md](REQUISITO_ENCANTAMENTOS_E_POCOES.md).
+
 ## 1. Regra principal: a autoridade de spawn é do EnemySystem
 
 Decisão do dono do projeto (Q13, 24/10/2026):
