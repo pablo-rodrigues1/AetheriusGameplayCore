@@ -8,7 +8,7 @@ import { fingerprintFiles } from './host.ts';
 
 const workspace = resolve(process.argv[2] ?? '../../../');
 const catalogDir = join(workspace, 'AetheriusGameplayCore/catalog');
-const domains = ['standing-stones', 'races', 'classes', 'combat'].map(name => JSON.parse(readFileSync(join(catalogDir, `${name}.json`), 'utf8')) as DomainData);
+const domains = ['standing-stones', 'races', 'classes', 'combat', 'npcs'].map(name => JSON.parse(readFileSync(join(catalogDir, `${name}.json`), 'utf8')) as DomainData);
 const dataDir = join(workspace, 'aetherius-server/build/dist/server/data');
 const manifest = JSON.parse(readFileSync(join(dataDir, 'aetherius-loadorder.json'), 'utf8')) as { loadOrder: string[] };
 const begin = performance.now();
@@ -32,7 +32,8 @@ for (const domain of domains) {
     assert.equal(record.signature, recordSignature(record, defining), `Record signature mismatch: ${record.stableFormKey}`);
   }
   console.log(JSON.stringify({ domain: domain.domain, roots: domain.roots.length, records: domain.records.length,
-    unsupported: domain.unsupported, dependencies: domain.dependencies.map(p => p.filename), bytesToHash: domain.dependencies.reduce((sum, p) => sum + p.size, 0) }));
+    recordsByType: domain.records.reduce<Record<string, number>>((counts, record) => { counts[record.recordType] = (counts[record.recordType] ?? 0) + 1; return counts; }, {}),
+    unsupportedGroups: domain.unsupported.length, unsupportedOccurrences: domain.unsupported.reduce((sum, entry) => sum + (entry.count ?? 1), 0), dependencies: domain.dependencies.map(p => p.filename), bytesToHash: domain.dependencies.reduce((sum, p) => sum + p.size, 0) }));
 }
 console.log(JSON.stringify({ relevantFilesVerified: actual.map(p => p.filename), bytesToHashOnce: actual.reduce((sum, p) => sum + p.size, 0),
   offlineFingerprintMs: performance.now() - begin, result: 'PASSED', liveHost: false }));

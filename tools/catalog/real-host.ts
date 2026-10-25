@@ -59,7 +59,7 @@ function swapped(order: string[], a: string, b: string): string[] {
   // Replace by filename; callers never supply or receive plugin indices.
   return order.map(name => name === a ? b : name === b ? a : name);
 }
-function reorder(order: string[], metadata: PluginFingerprint[], dependencies: Map<string, string[]>, probes: Map<string, string>): { order: string[]; moved: string[] } {
+function reorder(order: string[], metadata: PluginFingerprint[], dependencies: Map<string, string[]>, probes: Map<string, string>, combat: DomainData, npcs: DomainData): { order: string[]; moved: string[] } {
   const relevant = ['Vokrii - Minimalistic Perks of Skyrim.esp'];
   let result: string[] | undefined;
   let moved: string[] = [];
@@ -71,6 +71,20 @@ function reorder(order: string[], metadata: PluginFingerprint[], dependencies: M
     if (result) break;
   }
   assert.ok(result, 'No valid move for a relevant plugin');
+  const npcPlugins = new Set(npcs.records.filter(r => r.recordType === 'NPC_').map(r => r.definingPlugin.toLowerCase()));
+  const itemPlugins = new Set(combat.records.filter(r => ['WEAP', 'ARMO'].includes(r.recordType)
+    && typeof ((r.data.fields as Record<string, unknown>).Template ?? (r.data.fields as Record<string, unknown>).TemplateArmor) === 'string')
+    .map(r => r.definingPlugin.toLowerCase()));
+  let npcMoved = false;
+  for (const a of metadata.filter(p => !p.isLight && npcPlugins.has(p.filename.toLowerCase()) && itemPlugins.has(p.filename.toLowerCase()))) {
+    if (moved.includes(a.filename)) continue;
+    for (const b of result.filter(name => name !== a.filename && !moved.includes(name))) {
+      const candidate = swapped(result, a.filename, b);
+      try { checkOrder(candidate, dependencies); result = candidate; moved.push(a.filename, b); npcMoved = true; break; } catch { /* another valid swap */ }
+    }
+    if (npcMoved) break;
+  }
+  assert.ok(npcMoved, 'No valid move for a plugin defining both NPCs and templated equipment');
   const light = metadata.filter(p => p.isLight && order.includes(p.filename) && probes.has(p.filename.toLowerCase()));
   for (const a of light) for (const b of light.filter(p => p.filename !== a.filename)) {
     const candidate = swapped(result, a.filename, b.filename);
@@ -79,7 +93,7 @@ function reorder(order: string[], metadata: PluginFingerprint[], dependencies: M
   throw new Error('No valid swap for light plugins');
 }
 function child(workspace: string, evidence: string, port: number, configFile: string): void {
-  const data = ['standing-stones', 'races', 'classes', 'combat'].map(name => JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog', `${name}.json`), 'utf8')) as DomainData);
+  const data = ['standing-stones', 'races', 'classes', 'combat', 'npcs'].map(name => JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog', `${name}.json`), 'utf8')) as DomainData);
   const settings = JSON.parse(readFileSync(configFile, 'utf8')) as Settings;
   assert.equal(settings.port, port, 'Child settings must use the requested port');
   const require = createRequire(import.meta.url);
@@ -135,10 +149,12 @@ async function main(): Promise<void> {
       probes.set(filename.toLowerCase(), encodeFormKey(decodeFormKey(row.formid, 'housecarl', 'LIGHT'), 'skymp', 'LIGHT', filename));
     }
   }
-  const changed = reorder(manifest.loadOrder, manifest.plugins, dependencies, probes);
+  const combat = JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog/combat.json'), 'utf8')) as DomainData;
+  const npcs = JSON.parse(readFileSync(join(workspace, 'AetheriusGameplayCore/catalog/npcs.json'), 'utf8')) as DomainData;
+  const changed = reorder(manifest.loadOrder, manifest.plugins, dependencies, probes, combat, npcs);
   mkdirSync(evidence, { recursive: true });
   writeFileSync(join(evidence, 'reorder-plan.json'), JSON.stringify({ movedPlugins: changed.moved, mastersValidated: true,
-    lightProbes: changed.moved.slice(2).map(name => probes.get(name.toLowerCase())) }, null, 2));
+    lightProbes: changed.moved.slice(-2).map(name => probes.get(name.toLowerCase())) }, null, 2));
   const files = ['original', 'reordered'].map(name => join(evidence, `${name}.settings.json`));
   for (const [name, loadOrder] of [['original', manifest.loadOrder], ['reordered', changed.order]] as const) {
     // Deliberately omit account, credentials, saves, gamemode, damage and bundle settings.
@@ -156,7 +172,13 @@ async function main(): Promise<void> {
   const snapshots = files.map(file => JSON.parse(readFileSync(join(evidence, `${basename(file, '.json')}.resolution.json`), 'utf8')) as Snapshot);
   const stripped = (snapshot: Snapshot) => snapshot.domains.map(d => ({ ...d, entries: d.entries.map(({ runtimeFormId: _id, ...entry }) => entry) }));
   assert.deepEqual(stripped(snapshots[0]!), stripped(snapshots[1]!));
-  const altered = snapshots[0]!.domains.flatMap(d => d.entries).filter(entry => snapshots[1]!.domains.flatMap(d => d.entries).find(other => other.key === entry.key)!.runtimeFormId !== entry.runtimeFormId);
+  const reorderedIds = new Map(snapshots[1]!.domains.flatMap(d => d.entries).map(entry => [entry.key, entry.runtimeFormId]));
+  const altered = snapshots[0]!.domains.flatMap(d => d.entries).filter(entry => reorderedIds.get(entry.key) !== entry.runtimeFormId);
+  assert.ok(altered.some(entry => entry.type === 'NPC_'), 'NPC defining plugin ids must change');
+  const templatedKeys = new Set(combat.records.filter(r => ['WEAP', 'ARMO'].includes(r.recordType)
+    && typeof ((r.data.fields as Record<string, unknown>).Template ?? (r.data.fields as Record<string, unknown>).TemplateArmor) === 'string')
+    .map(r => r.stableFormKey));
+  assert.ok(altered.some(entry => templatedKeys.has(entry.key as typeof combat.roots[number])), 'Templated equipment ids must change');
   assert.ok(altered.some(entry => entry.key.startsWith('vokrii - minimalistic perks of skyrim.esp|')), 'Class perk defining plugin ids must change');
   assert.ok(snapshots[0]!.lightProbe.some(p => snapshots[1]!.lightProbe.find(other => other.key === p.key)!.runtimeFormId !== p.runtimeFormId), 'A light probe must change its runtime id');
   console.log(JSON.stringify({ result: 'PASSED', movedPlugins: changed.moved, changedRelevantRecords: altered.length, equivalentDomains: snapshots[0]!.domains.map(d => d.domain) }));

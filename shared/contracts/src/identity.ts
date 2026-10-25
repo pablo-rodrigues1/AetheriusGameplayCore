@@ -65,7 +65,7 @@ export function stableFormKeyParts(key: StableFormKey, pluginKind: PluginKind): 
 }
 
 export type RecordType = 'RACE' | 'PERK' | 'SPEL' | 'MGEF' | 'WEAP' | 'ARMO' | 'AMMO'
-  | 'NPC_' | 'ACTI' | 'REFR' | 'KYWD' | 'ENCH' | 'ALCH' | 'LVLI';
+  | 'NPC_' | 'CLAS' | 'ACTI' | 'REFR' | 'KYWD' | 'ENCH' | 'ALCH' | 'LVLI';
 export type CatalogSignature = Brand<string, 'CatalogSignature'>;
 export interface DefinitionRef<T extends RecordType = RecordType> {
   readonly stableFormKey: StableFormKey;

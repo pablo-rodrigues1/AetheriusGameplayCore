@@ -1,7 +1,8 @@
+import type { UnsupportedLink } from '../../shared/record-catalog/src/types.ts';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 
-export interface ExportField { path: string; value?: string; note?: string }
+export interface ExportField { path: string; value?: string; note?: string; note_ref?: string }
 export interface ExportRow { formid: string; type: string; editorid: string; winner: string; fields: ExportField[] }
 export interface ExportManifest { housecarl_artifact: number; row_count: number; epoch: string }
 export interface ExportFile { manifest: ExportManifest; rows: ExportRow[] }
@@ -29,4 +30,15 @@ export async function readExport(file: string): Promise<ExportFile> {
   }
   if (!manifest || rows.length !== manifest.row_count) throw new TypeError(`Export row count mismatch: ${file}`);
   return { manifest, rows };
+}
+
+/** Repeated limitations stay counted in the bundle; per-record evidence is a generation report. */
+export function summarizeUnsupported(entries: readonly UnsupportedLink[]): UnsupportedLink[] {
+  const groups = new Map<string, number>();
+  for (const entry of entries) {
+    const reason = entry.reason.replace(/\[\d+\]/g, '[]');
+    groups.set(reason, (groups.get(reason) ?? 0) + (entry.count ?? 1));
+  }
+  return [...groups].sort(([a], [b]) => a.localeCompare(b, 'en')).map(([reason, count]) =>
+    ({ status: 'UNSUPPORTED', stableFormKey: null, reason, count }));
 }

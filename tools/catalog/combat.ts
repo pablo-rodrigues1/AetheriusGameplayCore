@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { readExport } from './exports.ts';
+import { readExport, summarizeUnsupported } from './exports.ts';
 import type { ExportRow } from './exports.ts';
 import { decodeFormKey, encodeFormKey } from '../../shared/record-catalog/src/codecs.ts';
 import { contentSignature, recordSignature } from '../../shared/record-catalog/src/integrity.ts';
@@ -27,9 +27,9 @@ const references: Readonly<Record<string, readonly string[]>> = {
 const compare = (a: string, b: string) => a.localeCompare(b, 'en');
 const addressPattern = /^[\da-f]{6}:[^:]+\.(esm|esp|esl)$/i;
 
-/** All physical records, including nonplayable equipment and NPC races. No name filters.
- * Values are exported winner leaves; references never imply certified semantics. */
-export async function buildCombatDomain(exportsDir: string, fingerprints: readonly PluginFingerprint[]): Promise<DomainData> {
+/** All physical winners, including nonplayable equipment. No name filters.
+ * Leaves remain local; inheritance and effect semantics remain uncertified. */
+export async function buildCombatDomain(exportsDir: string, fingerprints: readonly PluginFingerprint[], report?: UnsupportedLink[]): Promise<DomainData> {
   const files = await Promise.all(Object.keys(families).map(name => readExport(join(exportsDir, name + '.jsonl'))));
   const epoch = files[0]!.manifest.epoch;
   if (files.some(file => file.manifest.epoch !== epoch)) throw new TypeError('Combat exports have different epochs');
@@ -131,6 +131,7 @@ export async function buildCombatDomain(exportsDir: string, fingerprints: readon
       }
       if (!exported.has('Attacks') || exported.get('Attacks')?.note === '(absent)') missing('Attacks');
     }
+
     const data: JsonObject = { editorId: row.editorid, fields, exportNotes, ...(recordType !== 'KYWD' ? { keywords } : {}) };
     const record: Omit<CatalogRecord, 'signature'> = { stableFormKey, recordType, definingPlugin: defining.filename,
       pluginKind: defining.isLight ? 'LIGHT' : 'FULL', winnerPlugin: row.winner, data };
@@ -145,9 +146,10 @@ export async function buildCombatDomain(exportsDir: string, fingerprints: readon
     const row = indexes.get('KYWD')!.get(address.toLowerCase());
     if (row) put(row, 'KYWD'); else issue(stable, 'Reached KYWD absent from exports');
   }
+  if (report) for (const entry of unsupported) report.push(entry);
   const payload = { schemaVersion: 1 as const, domain: 'combat' as const, exportEpoch: epoch,
     dependencies: [...dependencies.values()].sort((a, b) => compare(a.filename.toLowerCase(), b.filename.toLowerCase())),
     roots: roots.sort(compare), records: [...records.values()].sort((a, b) => compare(a.stableFormKey, b.stableFormKey)),
-    unsupported: unsupported.sort((a, b) => compare(a.stableFormKey ?? '', b.stableFormKey ?? '') || compare(a.reason, b.reason)) };
+    unsupported: summarizeUnsupported(unsupported) };
   return { ...payload, signature: contentSignature(payload) };
 }

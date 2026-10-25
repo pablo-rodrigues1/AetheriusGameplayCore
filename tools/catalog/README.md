@@ -112,3 +112,89 @@ Esse comando não foi executado pelo implementador: exige servidor local. A port
 harness prepara processos isolados, sem gamemode/banco/saves, e compara todos os
 records após reordenar. O bundle é reconstruído com combat em BUILD_DOMAINS e o
 boot usa o mesmo createFileHost. A DS-2 não instala nem ativa esses artefatos.
+
+## DS-2b: entrada NPC_ e limites da herança
+
+Histórico: a geração conjunta, a representação e a pendência de CLAS abaixo
+são supersedidas pela seção DS-2b-fix1.
+
+O comando combat acima exige também NPC_.jsonl no diretório combat-20261024,
+com manifesto, contagem de 11.583 e epoch igual. O SHA-256 esperado consta de
+MANIFESTO.txt. Não usar NPC_ do export antigo nem inventar CLAS ausentes.
+O leitor exports.ts expõe note_ref para os vínculos de ContainerItem que o depth 3
+não expande em folhas. Valores de records são procurados exclusivamente por FormID.
+
+O contrato dos dados locais e de npc.templateProviders está em catalog/README.md.
+A resolução de categoria segue os flags definidos em libespm/include/libespm/NPC_.h
+e a parada por categoria de server/cpp/server_guest_lib/EvaluateTemplate.h,
+conferidos no host atual. Nenhuma lista nivelada é avaliada. Contagem de NPC,
+assinaturas, fingerprints, dados por FormID, offsets negativos, ranks, cadeia
+encadeada, template ausente/cíclico, flags desconhecidas e campos incompletos
+são cobertos pelos testes combat. Reordenação muda IDs de NPC_ e equipamento
+com template mantendo dados e assinaturas. Esses testes usam contrato duplo do
+host, sem alegar execução nativa.
+
+Saídas dos aceites: _work/evidence/DS-2b. O real-host.ts exige agora também um
+movimento válido de plugin que define NPC_ e equipamento com template, além das
+provas anteriores FULL/LIGHT. Compara por chave indexada para evitar busca quadrática.
+Roteiro do revisor, não executado pelo implementador (AGENTS §7.1):
+
+~~~powershell
+node --experimental-strip-types AetheriusGameplayCore/tools/catalog/real-host.ts . _work/evidence/DS-2b/real-host-opus <porta-udp-livre>
+~~~
+
+A porta é argumento, sem padrão. Escolher pasta isolada e porta diferente da do
+dono; o harness não para servidor existente. O teste nativo prova resolução, não
+semântica de template no engine. O item 2 da ordem parou por falta de prova
+primária acessível (investigação em template-investigation.md). WEAP/ARMO mantêm
+os valores locais e a limitação de herança da DS-2. CLAS/auto-cálculo ficam
+pendentes; required-clas.json identifica os records a exportar no mesmo epoch.
+Não há migration, opção de configuração, instalação ou ativação nova.
+
+## DS-2b-fix1: combat e npcs independentes
+
+Com Node 22, da raiz do workspace:
+
+~~~powershell
+node --experimental-strip-types AetheriusGameplayCore/tools/catalog/npcs.ts _work/exports/combat-20261024 aetherius-server/build/dist/server/data/aetherius-loadorder.json AetheriusGameplayCore/catalog _work/evidence/DS-2b/fix1
+node --experimental-strip-types AetheriusGameplayCore/tools/catalog/verify.ts .
+cd AetheriusGameplayCore
+npm run typecheck --workspace @aetherius/catalog-tools
+npm run typecheck --workspace @aetherius/runtime
+npm run build --workspace @aetherius/runtime
+node --test runtime/tests/combat.test.mjs
+npm test --workspace @aetherius/runtime
+~~~
+
+O CLI npcs.ts gera combat.json (cinco tipos físicos) e npcs.json (NPC_ + CLAS),
+além de combat-unsupported.json e npcs-unsupported.json fora do bundle. Os quatro
+argumentos são obrigatórios; não há diretório de relatório padrão. combat.ts
+continua exportando buildCombatDomain; build.ts ... combat gera apenas combat e
+não atualiza npcs nem seus relatórios. Use o comando conjunto acima nesta entrega.
+
+NPC_ e CLAS exigem manifestos, contagens e epoch igual entre si. O pacote da ordem
+tem 11.583 e 220 records, respectivamente, no mesmo epoch dos físicos. NPC_FIELDS,
+NPC_TEMPLATE_CATEGORIES e NPC_PROVIDER_REASONS definem o layout 1, documentado em
+catalog/README.md, com helpers puros de leitura. Null não vira zero nem lista vazia.
+As listas completas de limitações são retornadas pelo argumento opcional report
+dos builders; unsupported do domínio contém grupos/contagens. Não copie esses
+relatórios para catalog nem BUILD_DOMAINS.
+
+A suíte combat inclui NPC/CLAS e comparação exaustiva das colunas numéricas/pesos
+com exports buscados por FormID, reprodução canônica, reordenação FULL/LIGHT e
+assinatura por record, cadeia por categoria, lacunas/ciclos/LVLN e recusa de
+assinatura obsoleta. Fixtures ficam somente em _work/evidence/DS-2b/fix1.
+O runtime npm test usa apenas AETHERIUS_TEST_DATABASE_URL (aetherius_test) e
+GAMEPLAY_CORE_TEST_EXPORTS=_work/exports. O script de reprodução e as medições
+antes/depois estão nesse mesmo diretório; não imprimem a URL.
+
+Roteiro nativo atualizado inclui npcs/CLAS, sem executar servidor pelo implementador:
+
+~~~powershell
+node --experimental-strip-types AetheriusGameplayCore/tools/catalog/real-host.ts . _work/evidence/DS-2b/fix1/real-host-opus <porta-udp-livre>
+~~~
+
+Porta e pasta explícitas, sem padrão e sem parar o servidor existente. Ainda exige
+Opus fora do sandbox; nenhuma validação nativa ou em jogo é alegada nesta fix1.
+Não há migration, opção de configuração, instalação ou ativação nova. Templates
+WEAP/ARMO permanecem parados, sem nova tentativa de inferir semântica.

@@ -29,10 +29,12 @@ export interface UnsupportedLink {
   readonly status: 'UNSUPPORTED';
   readonly stableFormKey: StableFormKey | null;
   readonly reason: string;
+  /** Aggregated occurrences; full per-record list lives outside the bundle. */
+  readonly count?: number;
 }
 export interface DomainData {
   readonly schemaVersion: 1;
-  readonly domain: 'standing-stones' | 'races' | 'classes' | 'combat';
+  readonly domain: 'standing-stones' | 'races' | 'classes' | 'combat' | 'npcs';
   readonly exportEpoch: string;
   readonly signature: CatalogSignature;
   readonly dependencies: readonly PluginFingerprint[];

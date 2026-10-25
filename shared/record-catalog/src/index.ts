@@ -7,6 +7,7 @@ import { contentSignature, deepFreeze, recordSignature } from './integrity.ts';
 import type { CatalogHost, DomainCatalog, DomainData, PluginFingerprint, ResolvedRecord } from './types.ts';
 export * from './types.ts';
 export * from './codecs.ts';
+export { NPC_FIELDS, NPC_TEMPLATE_CATEGORIES, NPC_PROVIDER_REASONS, npcField, npcTemplateProvider } from './npcs.ts';
 export { contentSignature, canonicalJson, recordSignature } from './integrity.ts';
 
 /** All host calls are confined to this boot function. No caller-owned object is frozen. */
@@ -18,7 +19,7 @@ export function loadDomain(input: DomainData, host: CatalogHost): DomainCatalog 
   const fail = (reason: string): { readonly status: 'UNSUPPORTED'; readonly reason: string } =>
     Object.freeze({ status: 'UNSUPPORTED', reason });
   try {
-    if (data.schemaVersion !== 1 || !['standing-stones', 'races', 'classes', 'combat'].includes(data.domain)) throw new TypeError('Invalid domain schema');
+    if (data.schemaVersion !== 1 || !['standing-stones', 'races', 'classes', 'combat', 'npcs'].includes(data.domain)) throw new TypeError('Invalid domain schema');
     if (contentSignature(data) !== data.signature) throw new TypeError('Catalog content signature mismatch');
     const dependencies = new Map(data.dependencies.map(p => [p.filename.toLowerCase(), p]));
     if (dependencies.size !== data.dependencies.length) throw new TypeError('Duplicate dependency');

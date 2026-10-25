@@ -211,3 +211,81 @@ UNSUPPORTED pelos motivos DS-4 (perfil) e DS-5 (ponte nativa). O mapa e proposta
 para substituir physicalRecords estão em integrations/host/COMBAT_DS2.md;
 o C++ não foi alterado. Nenhuma família muda de dono. Q13: nenhum sorteio,
 criação, remoção, substituição ou decisão de spawn/respawn é feito pelo catálogo.
+
+## 10. NPC_ no domínio combat — DS-2b (24/10/2026)
+
+Supersede a ausência de NPC_ na descrição histórica da DS-2 (§9): NPC_.jsonl de
+combat-20261024 contém 11.583 winners no epoch e2-771486e30fc46d2a, depth 3,
+SHA-256 fb17823c7349411a45ae5e6cd08510b78f2a52c18aac9b1e7f7172653e012032.
+Não houve consulta de instância nem mudança no MO2; só os exports da ordem foram
+usados para valores, localizados por plugin de definição + FormID local.
+
+A estrutura foi conferida na referência Mutagen instalada (Npc, NpcConfiguration,
+NpcLevel/PcLevelMult, PlayerSkills, PerkPlacement e ContainerEntry/ContainerItem).
+Class/Race/TPLT, ACBS (flags, nível e offsets), DNAM (skills e atributos), PRKR
+(perk/rank), SPLO, DOFT/SOFT e CNTO são preservados pelo contrato documentado em
+catalog/README.md. CNTO.Count não está nas folhas depth 3: referência note_ref
+preservada, quantidade null/UNSUPPORTED. Lista ausente é UNSUPPORTED, sem vazio
+ou valor padrão presumido. Spells, perks, classe, itens e outfits são referências,
+sem grants nem leitura de inventário de ator.
+
+Fontes primárias locais para os provedores de template por categoria:
+- [NPC_.h: TemplateFlags](../../../../aetherius-server/libespm/include/libespm/NPC_.h):
+  UseTraits inclui raça; UseStats inclui nível, auto-cálculo, skills, atributos e
+  classe; UseSpelllist inclui spells e perks; UseInventory inclui outfits/CNTO;
+  UseAttackData e UseKeywords são categorias próprias.
+- [EvaluateTemplate.h](../../../../aetherius-server/server/cpp/server_guest_lib/EvaluateTemplate.h):
+  primeiro NPC sem TPLT ou sem o flag da categoria fornece o dado; não é uma
+  regra de pegar a raiz global para todos os campos. A DS-2b resolve apenas a
+  travessia NPC_→NPC_ estática. Categoria sem provedor, ciclo, link/flags ilegíveis
+  ou alvo externo (inclusive LVLN) fica UNSUPPORTED. Não sorteia lista (Q13).
+
+SUPPORTED em npc.templateProviders certifica apenas identidade/cadeia do provedor.
+O dado local não vira dado efetivo automaticamente. AutoCalcStats continua
+UNSUPPORTED para resultado: falta export CLAS dos Stats providers, incluindo
+pesos de skills/atributos e parâmetros do auto-cálculo, no mesmo epoch, e prova
+da fórmula usada pelo motor. required-clas.json em _work/evidence/DS-2b lista
+as chaves alcançadas, sem presumir pesos ou fórmula. DS-4 continua responsável
+por montar o perfil e respeitar limitações locais do provedor escolhido.
+
+**Herança de equipamento (item 2): PARADA nesta entrega.** Tentativas de ler
+[Weapons](https://ck.uesp.net/wiki/Weapons) e [Armor](https://ck.uesp.net/wiki/Armor)
+no Creation Kit retornaram HTTP 403. Foram encontradas descrições secundárias,
+mas não aceitas como prova de campos herdados/exceções. O código primário local
+[WEAP.cpp](../../../../aetherius-server/libespm/src/WEAP.cpp) lê DATA/DNAM e
+[ARMO.cpp](../../../../aetherius-server/libespm/src/ARMO.cpp) lê EITM/DATA/DNAM/ETYP/
+BODT/BOD2; ambos não leem CNAM/TNAM, portanto não comprovam herança no engine.
+A semântica completa de campos de WEAP/ARMO não foi implementada: dados locais,
+Template/TemplateArmor e UNSUPPORTED da DS-2 permanecem. Fonte primária acessível
+ou código comprovado do engine é o que falta para retomar o item. Investigação e
+limites em _work/evidence/DS-2b/template-investigation.md. Isso não altera
+ownership, fórmula nem autoridade de spawn; não instala ou ativa nada.
+
+## 11. DS-2b-fix1 — fonte NPC/CLAS separada e compacta
+
+Supersede a representação NPC_ no combat e a ausência de CLAS descritas na §10.
+Fonte atual: catalog/npcs.json, 11.583 NPC_ + 220 CLAS de combat-20261024, epoch
+e2-771486e30fc46d2a. CLAS.jsonl foi fornecido pelo revisor; valores localizados
+por FormID, sem consulta live, troca de instância MO2 ou dados de memória.
+Schema: referência Mutagen Class, Npc/NpcConfiguration/PlayerSkills. CLAS conserva
+SkillWeights (18 skills), StatWeights (Health/Magicka/Stamina), BleedoutDefault,
+VoicePoints, Unknown e Unknown2. Incompletude segue explícita. Não implementa
+fórmula de auto-cálculo nem certifica o resultado do DNAM para AutoCalcStats.
+
+Contrato compacto e helpers em catalog/README.md e shared/record-catalog/src/npcs.ts.
+Cada record retém chave estável e assinatura; dados físicos não mudam. Provedores
+por categoria são agrupados somente quando identidade, cadeia e motivo coincidem;
+a regra NPC_.h/EvaluateTemplate.h da §10 continua a fonte. Stats fornece classe,
+nível, skills/offsets/atributos; Traits fornece raça; SpellList fornece perks/spells;
+Inventory fornece apenas referências CNTO/outfits, sem estado de inventário de ator.
+RecordCatalog continua dono das definições; Damage consumirá o perfil em DS-4;
+EnemySystem continua dono do spawn. Não há sorteio, criação, remoção, substituição,
+respawn, segundo ActorCombatState ou I/O no hit.
+
+Limitações repetidas ficam agregadas no bundle por campo/motivo e count. O CLI
+gera fora dele a lista completa de ocorrências por record, com assinatura do
+domínio para vincular o relatório à geração. Não se perde a declaração local de
+null/indisponibilidade nem a razão/cadeia de template. Export CLAS agora disponível
+não remove a exigência de semântica certificada pela DS-4. Templates WEAP/ARMO,
+ENCH, condições e famílias já não certificadas permanecem nas mesmas condições;
+nenhuma família muda de owner nesta ordem. Nenhum sistema é ativado ou instalado.
