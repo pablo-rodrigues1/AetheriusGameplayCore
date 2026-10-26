@@ -1,6 +1,6 @@
 # Guia de integração do AetheriusGameplayCore
 
-**DOC-2 · 25/10/2026 · guia vigente.** Esta edição substitui o guia de 12/10; o histórico daquela versão permanece no commit anterior. O marcador `<COMMIT_DO_CORE>` fica para o revisor preencher com o commit final da `main`. A aplicação dos patches em clones limpos não prova build, boot, load order oficial ou comportamento no jogo.
+**DOC-2 · 25/10/2026 · guia vigente.** Esta edição substitui o guia de 12/10; o histórico daquela versão permanece no commit anterior. O código do Core desta entrega é o merge `a2f0517` na `main` (integra os nove commits do outro desenvolvedor); o commit seguinte só preenche esta referência. A aplicação dos patches em clones limpos não prova build, boot, load order oficial ou comportamento no jogo.
 
 ## Resumo para o mantenedor
 
@@ -45,7 +45,7 @@ As sessões acima e pareceres de revisão são registros internos do workspace (
 
 - Host aetherius-server: 6181abf1774c31a4e93206f71b784af5b13f10ae.
 - Cliente aetherius-client: 31566e83fc5f991aaa29f6ee0e868f8a558fe2ad.
-- Core: `<COMMIT_DO_CORE>`, preenchido pelo revisor depois do merge final. O HEAD desta revisão documental é d2e79ae3ee3eef5c49c0d992c6676fca4a527e64. A main remota recebeu nove commits do outro desenvolvedor; o Opus 5.5 integra por merge antes de publicar. EnemySystem pertence a esse desenvolvedor. Não remova nem substitua esses commits. Registro interno do workspace (não incluído): ordem DOC-2 e Adendo 1.
+- Core: `main` a partir do merge `a2f0517` (entrega de 25/10/2026; o commit seguinte só preenche esta referência). O guia foi revisado sobre d2e79ae3ee3eef5c49c0d992c6676fca4a527e64. A main remota tinha nove commits do outro desenvolvedor (EnemySystem e DurabilitySystem), integrados nesse merge; testes desses módulos passaram depois do merge (enemy-system 82/82, durability-system 13/13). EnemySystem pertence a esse desenvolvedor. Não remova nem substitua esses commits. Registro interno do workspace (não incluído): ordem DOC-2 e Adendo 1.
 - O patch do host tem SHA-256 ad62636998ce7e7aedb68364ebb77a942a0c7afe657fa3c93df0fadb5a8c1d2f e 35 arquivos (17 modificados, 18 adicionados). O patch de produção do cliente tem SHA-256 007d8c3f71964a79b536b4c2ca309b21ff9acaf62be9d95e366804aa43068755; são 5 arquivos de produção. Cada patch foi aplicado em clone limpo de sua base e comparado ao manifesto; host 35/35 e cliente 5/5. O patch diagnóstico separado do cliente foi provado à parte, 2/2. Prova DOC-2, registro interno do workspace (não incluído).
 
 ### Ambiente e load order
