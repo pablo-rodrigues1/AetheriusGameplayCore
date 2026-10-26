@@ -10,6 +10,7 @@ export * from './dungeons/discovery.mjs';
 export * from './dungeons/enrichment.mjs';
 export * from './encounters/profiles.mjs';
 export * from './spawning/resolver.mjs';
+export * from './spawning/location.mjs';
 export * from './persistence/spawn-state.mjs';
 export * from './loot-integration/policy.mjs';
 export * from './events/event-hub.mjs';

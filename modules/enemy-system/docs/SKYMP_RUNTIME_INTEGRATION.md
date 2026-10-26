@@ -121,7 +121,9 @@ Regras multiplayer:
 
 ## 4. Resolução e criação de inimigos
 
-Para cada ponto gerenciado, o host consulta o resolvedor server-authoritative:
+### 4.1 Identidade e seleção (inalteradas)
+
+Para cada referência de spawn `ACHR` gerenciada, o host consulta o resolvedor server-authoritative:
 
 ```ts
 const resolution = spawnResolver.resolve({
@@ -137,7 +139,7 @@ const resolution = spawnResolver.resolve({
 
 Uma decisão persistida para o mesmo ponto e geração é reutilizada. Uma nova decisão usa os pesos derivados das listas originais; candidatos sem peso comprovado não recebem probabilidade uniforme inventada.
 
-A identidade canônica escolhida é convertida para a load order atual somente na borda do host:
+O NPC-base escolhido é resolvido contra a load order atual na borda do host:
 
 ```ts
 const runtimeBaseId = mp.getIdFromDesc(
@@ -145,26 +147,53 @@ const runtimeBaseId = mp.getIdFromDesc(
 );
 ```
 
-O fork já permite criar um ator a partir de um NPC-base com `mp.place(baseId)`. Em seguida, o host aplica localização e ponto de respawn:
+A identidade escolhida e o local de nascimento são fatos independentes: **o resolvedor de seleção não escolhe nem inventa a posição física**.
+
+### 4.2 Preflight obrigatório de coordenadas (23/10/2026)
+
+As posições de `spawnRefs` vêm dos registros vencedores `ACHR` extraídos pelo houseCARL. O catálogo preserva `cellIdentity`, `position: {x,y,z}` e `rotation: {x,y,z}`. A borda do SkyMP recebe `pos: [x,y,z]` e `rot: [x,y,z]`; enviar os objetos originais diretamente a `mp.set('locationalData')` é incompatível com o contrato nativo.
+
+O módulo `src/spawning/location.mjs` implementa `validatePlacedSpawnLocation(spawnRef)` e `prepareSkyMpSpawnLocation(spawnRef, resolveCellOrWorldDesc)`. O `SkyMpIntegrationAdapter` expõe `prepareSpawnLocation(spawnRef)` e `spawnAtPlacedReference({spawnRef, ...context})`.
+
+Validações sem fallback:
+
+- O registro deve ser `ACHR`, com identidade e `cellIdentity` canônicas válidas.
+- Posição e rotação devem conter `x`, `y`, `z` finitos, numéricos e explícitos; zero é válido quando presente no record original, mas ausência não é zero.
+- O host **deve** resolver a célula do `ACHR` para um `cellOrWorldDesc` aceito pelo SkyMP. Para exterior, o descriptor pode ter de representar a `WRLD` original em vez da `CELL` exterior. A função injetada `resolveCellOrWorldDesc` deve usar o mundo/célula do registro original e a load order ativa, nunca a localização atual do jogador.
+- Ausência do callback, referência malformada, descriptor vazio ou falha de resolução retornam `FAILED` e **não chamam o hook de spawn**.
+- O novo preflight do `readiness` registra `DUNGEON_SPAWN_LOCATION_INVALID` para referências com dados espaciais inválidos, além do erro já existente de dungeon sem referências. Isso bloqueia o `readyForProduction`.
+- A resolução do descriptor precisa de conferência no host: este módulo não implementa a ligação nativa com o SkyMP nem prova que o descriptor se refere ao worldspace correto.
+
+### 4.3 Criação pelo host (contrato de integração, não implantação ativa)
+
+Exemplo ilustrativo da interface que a integração concreta **deverá fornecer**. `resolveFromOriginalAchr` é um callback a implementar no host, não uma função pronta do SkyMP:
 
 ```ts
-const actorId = mp.place(runtimeBaseId);
+const adapter = new SkyMpIntegrationAdapter({
+  resolveCellOrWorldDesc: resolveFromOriginalAchr,
+  onServerSpawn({ runtimeBaseId, spawnRef, location }) {
+    const actorId = mp.place(runtimeBaseId);
+    mp.set(actorId, 'locationalData', location);
+    mp.set(actorId, 'spawnPoint', location);
+    mp.set(actorId, 'private.aetherius.spawnId', spawnRef.identity);
+    return { actorId };
+  }
+});
 
-const location = {
-  cellOrWorldDesc: canonicalCell,
-  pos: spawn.position,
-  rot: spawn.rotation
-};
-
-mp.set(actorId, "locationalData", location);
-mp.set(actorId, "spawnPoint", location);
-mp.set(actorId, "private.aetherius.spawnId", spawnStableIdentity);
-mp.set(actorId, "private.aetherius.dungeonId", dungeonId);
-mp.set(actorId, "private.aetherius.generation", dungeon.generation);
-mp.set(actorId, "private.aetherius.enemyIdentity", resolution.resolvedNpcStableIdentity);
+const created = adapter.spawnAtPlacedReference({
+  spawnRef: spawn, // entrada ACHR do catálogo, com suas coordenadas originais
+  runtimeBaseId
+});
+if (created.status === 'FAILED') {
+  // Não criar o ator por outro caminho; registrar referência e motivo.
+}
 ```
 
-Como melhoria de produção, o fork pode expor `placeAt(baseId, location)`, construindo o ator diretamente na célula correta. Isso evita criar o ator inicialmente na origem de Tamriel antes do teleporte.
+O `mp.place(baseId)` do SkyMP original cria inicialmente na origem de Tamriel e publica a referência antes de atualizar a posição. O exemplo acima é transitório: **para produção deve-se preferir uma capacidade nativa `placeAt(baseId, location)` ou equivalente, que já crie o ator na célula correta, sem aparição inicial no local errado**. Tal capacidade não foi implementada por este commit e depende de mudança separada no host.
+
+O host também deve impedir a materialização simultânea do `ACHR` nativo e do ator dinâmico gerenciado. `locationalData` e `spawnPoint` precisam receber a mesma localização autorizada. Depois da criação, comparar a posição/célula reais do ator com a referência original e registrar discrepâncias; não corrigir por aproximação à posição do jogador.
+
+**Escopo desta correção:** contratos, bloqueios de dados inválidos, adapter callback e testes locais; sem alteração no algoritmo de seleção, pesos `LVLN`, nível, economia, distribuição de encontros, pontos originais nem código binário do SkyMP. Não há alegação de teste em jogo ou cutover do EnemySystem.
 
 ## 5. Referências originais
 

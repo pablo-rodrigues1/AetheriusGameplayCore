@@ -29,10 +29,12 @@ test('configuração contempla kits MISC, catálogo de materiais e ícones verif
   assert.equal(Object.keys(config.maintenance.kits.weapons).length, 12);
   assert.equal(Object.keys(config.maintenance.kits.armor).length, 18);
   for (const kit of Object.values(config.maintenance.kits.weapons)) {
+    assert.equal(kit.charges, 50);
     assert.equal(kit.recordType, 'MISC');
     assert.equal(kit.iconSource.formId, '05CAE1:Skyrim.esm');
   }
   for (const kit of Object.values(config.maintenance.kits.armor)) {
+    assert.equal(kit.charges, 50);
     assert.equal(kit.recordType, 'MISC');
     assert.equal(kit.iconSource.formId, '0E49F7:Skyrim.esm');
   }
@@ -45,7 +47,7 @@ test('equipar ou permanecer conectado sem combate não consome cargas', async ()
   const activation = await service.activateKit({ characterId: 'char-1', actorId: 20, kitKey: 'weapon.iron', baseId: 1001, requestId: 'request-0001' });
   assert.equal(activation.ok, true);
   const status = await service.getStatus('char-1');
-  assert.equal(status.reserves.find(row => row.material === 'iron').weapons, 10);
+  assert.equal(status.reserves.find(row => row.material === 'iron').weapons, 50);
   assert.equal(status.cycle, null);
 });
 
@@ -63,8 +65,8 @@ test('vários ataques no ciclo consomem uma carga por combinação e dual wield 
   assert.equal(second.consumed[0].alreadyCovered, true);
   const status = await service.getStatus('char-2', [], 1200);
   const byMaterial = Object.fromEntries(status.reserves.map(row => [row.material, row.weapons]));
-  assert.equal(byMaterial.iron, 9);
-  assert.equal(byMaterial.ebony, 9);
+  assert.equal(byMaterial.iron, 49);
+  assert.equal(byMaterial.ebony, 49);
 });
 
 test('magia exclusiva não consome arma; dano físico e bloqueio consomem apenas a defesa usada', async () => {
@@ -79,8 +81,8 @@ test('magia exclusiva não consome arma; dano físico e bloqueio consomem apenas
   await service.handleEffectiveEvent({ authority: 'server', characterId: 'char-3', eventId: 'damage-1', type: 'physical_damage_received', physical: true, affectedArmorMaterials: ['steel'], at: 1100 });
   await service.handleEffectiveEvent({ authority: 'server', characterId: 'char-3', eventId: 'block-1', type: 'shield_block', physical: true, effective: true, shieldMaterial: 'steel', at: 1200 });
   const snapshot = persistence.snapshot('char-3');
-  assert.equal(snapshot.balances.weapons.steel, 10);
-  assert.equal(snapshot.balances.armor.steel, 9);
+  assert.equal(snapshot.balances.weapons.steel, 50);
+  assert.equal(snapshot.balances.armor.steel, 49);
 });
 
 test('última carga preserva cobertura até o encerramento do ciclo, sem saldo negativo', async () => {
@@ -101,7 +103,7 @@ test('uso duplicado de kit é idempotente e não duplica cargas', async () => {
   await service.initializeCharacter('char-5');
   const results = await Promise.all(Array.from({ length: 10 }, () => service.activateKit({ characterId: 'char-5', actorId: 20, kitKey: 'weapon.iron', baseId: 1001, requestId: 'same-request-0005' })));
   assert.ok(results.every(result => result.ok));
-  assert.equal(persistence.snapshot('char-5').balances.weapons.iron, 10);
+  assert.equal(persistence.snapshot('char-5').balances.weapons.iron, 50);
   assert.equal(persistence.snapshot('char-5').inventory['1001'], undefined);
 });
 
@@ -115,7 +117,34 @@ test('duas solicitações diferentes concorrentes não removem mais kits do que 
   ]);
   assert.equal(results.filter(result => result.ok).length, 1);
   assert.equal(results.filter(result => result.reason === 'KIT_NOT_IN_INVENTORY').length, 1);
-  assert.equal(persistence.snapshot('char-6').balances.weapons.iron, 10);
+  assert.equal(persistence.snapshot('char-6').balances.weapons.iron, 50);
+});
+
+test('duas ativações somam 100 cargas; a terceira é recusada sem consumir o kit', async () => {
+  const { service, persistence } = createService();
+  await persistence.setInventory('char-limit', 1001, 3);
+  await service.initializeCharacter('char-limit');
+
+  const first = await service.activateKit({ characterId: 'char-limit', actorId: 20, kitKey: 'weapon.iron', baseId: 1001, requestId: 'limit-request-1' });
+  const second = await service.activateKit({ characterId: 'char-limit', actorId: 20, kitKey: 'weapon.iron', baseId: 1001, requestId: 'limit-request-2' });
+  const third = await service.activateKit({ characterId: 'char-limit', actorId: 20, kitKey: 'weapon.iron', baseId: 1001, requestId: 'limit-request-3' });
+  assert.equal(first.chargesAdded, 50);
+  assert.equal(second.chargesAdded, 50);
+  assert.equal(third.ok, false);
+  assert.equal(third.reason, 'CHARGE_LIMIT');
+  assert.equal(persistence.snapshot('char-limit').balances.weapons.iron, 100);
+  assert.equal(persistence.snapshot('char-limit').inventory['1001'], 1);
+});
+
+test('saldo preexistente de 60 cargas rejeita novo kit de 50 sem consumo', async () => {
+  const { service, persistence } = createService({ seed: { 'char-existing': { balances: { weapons: { steel: 60 }, armor: {} } } } });
+  await persistence.setInventory('char-existing', 1002, 1);
+  await service.initializeCharacter('char-existing');
+  const result = await service.activateKit({ characterId: 'char-existing', actorId: 20, kitKey: 'weapon.steel', baseId: 1002, requestId: 'limit-request-4' });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'CHARGE_LIMIT');
+  assert.equal(persistence.snapshot('char-existing').balances.weapons.steel, 60);
+  assert.equal(persistence.snapshot('char-existing').inventory['1002'], 1);
 });
 
 test('eventos enviados pelo cliente não são autoridade de consumo', async () => {

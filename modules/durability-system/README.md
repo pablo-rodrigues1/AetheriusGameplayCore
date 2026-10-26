@@ -69,6 +69,8 @@ Em produção, o consumo exige evento proveniente do NativeCombatPort, `eventId`
 
 O administrador edita somente `config/maintenance-config.json` e executa o reload explícito do `configStore`. Penalidades são multiplicadores da contribuição de arma/Armor Rating; a curva final de redução não é alterada nem penalizada novamente.
 
+Cada kit MISC (12 de armas e 18 de armaduras) concede **50 cargas** por ativação. O limite existente de 100 cargas por categoria/material, a lógica de consumo por ciclo e os visuais de cada kit permanecem inalterados. As receitas aprovadas e o vínculo com os identificadores de materiais existentes estão documentados em [KIT_RECIPES_AND_BALANCE.md](docs/KIT_RECIPES_AND_BALANCE.md); não foram criados COBJ/ingredientes executáveis neste ajuste.
+
 Alterar `charges` afeta novas ativações. Reservas já adquiridas permanecem com o valor salvo. FormIDs `null` são intencionais até o patch Housecarl ser criado e lido de volta.
 
 ## Integração
@@ -76,6 +78,7 @@ Alterar `charges` afeta novas ativações. Reservas já adquiridas permanecem co
 Consulte:
 
 - `IMPLEMENTATION_REPORT.md` — relatório técnico e limitações;
+- `docs/KIT_RECIPES_AND_BALANCE.md` — receitas, cargas e integração futura ao CraftingSystem;
 - `docs/INTEGRATION_CONTRACT.md` — pontos reais observados no servidor/cliente local;
 - `database/001_aetherius_durability.sql` — migração no banco existente;
 - `patching/housecarl-source-records.json` — fontes verificadas para os modelos MISC dos ícones;

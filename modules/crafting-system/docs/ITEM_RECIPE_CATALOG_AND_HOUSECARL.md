@@ -261,6 +261,23 @@ Material profile pode ser derivado por:
 
 Se não puder ser determinado com segurança, a recipe fica unresolved.
 
+### 16.1. Receitas de kits de manutenção (DurabilitySystem)
+
+A fonte de verdade dos kits e seus materiais é `modules/durability-system/config/maintenance-config.json`: `maintenance.kits.weapons` e `maintenance.kits.armor`, indexados por `materialKey` e com `stableId` próprios. Não criar uma taxonomia paralela nem deduzir automaticamente um ingrediente pelo texto do nome do material.
+
+**Balanceamento aprovado:**
+
+- Kit de armas com lingote correspondente validado: **2 lingotes do material/tier do kit + 3 Leather Strips**.
+- Kit de armaduras com lingote correspondente validado: **2 lingotes do material/tier do kit + 2 Leather + 2 Leather Strips**.
+- Kit de armadura `armor.leather` ou `armor.hide`: **6 Leather + 3 Leather Strips**.
+- Cada recipe produz **1 kit**. Ao ativar esse MISC, o DurabilitySystem concede **50 cargas**, segundo sua própria configuração; crafting não concede cargas diretamente.
+
+O Housecarl/RecordCatalog deve resolver ingrediente por `StableFormKey` e validar winning record; material sem lingote correspondente confirmado permanece com **receita UNRESOLVED**, sem criar substitutos por suposição. O kit de manutenção continua existindo e com sua mecânica intacta.
+
+O ProfessionCraftMapping, a workstation, o rank e demais gates existentes continuam determinando quem pode produzir cada kit; não classificar automaticamente toda armadura como Ferreiro. Custos devem pertencer à camada de definitions/overrides do CraftingSystem e não ao código de combate.
+
+Especificação normativa: [KIT_RECIPES_AND_BALANCE.md](../../durability-system/docs/KIT_RECIPES_AND_BALANCE.md). **Esta seção é documentação para implementação futura das receitas**, não declaração de COBJ executáveis já criados.
+
 ## 17. Camada de balanceamento das receitas
 
 Housecarl/COBJ é a fonte de descoberta estrutural da receita, mas **as quantidades vanilla/mod não são obrigatoriamente o balanceamento final do Aetherius**.
@@ -367,6 +384,14 @@ Toda geração deve listar:
 
 Unresolved não entra silenciosamente na UI.
 
+### Auditoria completa de armas/armaduras sem material identificado
+
+Na futura implementação do mapeamento da load order, gerar e **comunicar ao responsável pelo projeto a lista completa**, sem amostragem ou truncamento, de **todos os registros `WEAP` e `ARMO` elegíveis cujo material não foi identificado de modo confiável**, incluindo conteúdo vanilla, DLCs, mods e winning records de patches.
+
+Cada item não classificado deve constar individualmente com `StableFormKey`, tipo de record, `EditorID`/nome quando disponíveis, plugin vencedor, dados/keywords examinados e motivo da impossibilidade de classificação. Entregar também os totais analisados, classificados e não classificados por categoria, a identificação da load order/catálogo auditado e uma declaração explícita de zero pendências caso a lista esteja vazia. O relatório **deve ser apresentado integralmente ao responsável**, e não apenas armazenado em logs ou resumido em contagens.
+
+**Separar estes equipamentos sem `materialKey` reconhecido** das recipes cujo ingrediente correspondente não foi validado: são duas situações diferentes. Preservar `UNRESOLVED`/estado equivalente, sem atribuir material por suposição. Ver também [KIT_RECIPES_AND_BALANCE.md](../../durability-system/docs/KIT_RECIPES_AND_BALANCE.md).
+
 ## 21. Assinatura
 
 ~~~text
@@ -396,7 +421,10 @@ Manter fixtures para provar:
 - set metálico completo soma 30 ingots;
 - set de Couro completo soma 30 leather;
 - set de pele pura soma 15 leather + 5 hides;
-- alteração de balanceamento muda custos sem alterar código.
+- alteração de balanceamento muda custos sem alterar código;
+- recipes de kits de manutenção usam os `materialKey` e `stableId` existentes do DurabilitySystem;
+- recipes com lingote validado exigem os insumos aprovados, e as de `armor.leather`/`armor.hide` exigem 6 Leather + 3 Leather Strips;
+- recipe sem ingrediente correspondente validado permanece UNRESOLVED, sem criar COBJ ou substituto fictício.
 
 ## 23. Resultado
 

@@ -1,3 +1,5 @@
+import { validatePlacedSpawnLocation } from './spawning/location.mjs';
+
 export function buildReadinessReport({ sourceLockOk = false, plugins = [], loadOrderValidation = { ok: false, issues: [] }, enemyRegistry = { enemies: [] }, reachability = [], dungeons = [], patchRequirements = [], integration = {} } = {}) {
   const errors = [];
   const warnings = [];
@@ -15,6 +17,17 @@ export function buildReadinessReport({ sourceLockOk = false, plugins = [], loadO
   if (unassignedDungeons.length) warnings.push({ code: 'DUNGEONS_UNASSIGNED', count: unassignedDungeons.length });
   const dungeonsWithoutSpawns = dungeons.filter((dungeon) => !Array.isArray(dungeon.spawnRefs) || dungeon.spawnRefs.length === 0);
   if (dungeonsWithoutSpawns.length) errors.push({ code: 'DUNGEON_SPAWN_REFERENCES_MISSING', count: dungeonsWithoutSpawns.length });
+  const invalidSpawnLocations = dungeons.flatMap((dungeon) =>
+    (Array.isArray(dungeon.spawnRefs) ? dungeon.spawnRefs : []).flatMap((spawnRef) => {
+      const issues = validatePlacedSpawnLocation(spawnRef);
+      return issues.length ? [{ dungeonId: dungeon.dungeonId, spawnStableIdentity: spawnRef?.identity ?? null, issues }] : [];
+    })
+  );
+  if (invalidSpawnLocations.length) errors.push({
+    code: 'DUNGEON_SPAWN_LOCATION_INVALID',
+    count: invalidSpawnLocations.length,
+    examples: invalidSpawnLocations.slice(0, 10)
+  });
   const unresolvedDungeonActorBases = dungeons.reduce((sum, dungeon) => sum + (dungeon.contentEvidence?.unresolvedActorBases ?? 0), 0);
   if (unresolvedDungeonActorBases) errors.push({ code: 'DUNGEON_ACTOR_BASES_UNRESOLVED', count: unresolvedDungeonActorBases });
   const unresolvedDungeonActorFamilies = dungeons.reduce((sum, dungeon) => sum + (dungeon.contentEvidence?.unresolvedActorFamilies ?? 0), 0);
