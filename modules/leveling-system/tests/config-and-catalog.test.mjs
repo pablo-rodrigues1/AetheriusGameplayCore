@@ -26,11 +26,37 @@ test('entire authorized XP snapshot is represented without silent legacy values'
     'Flame Atronach': 20, 'Frost Atronach': 22, 'Storm Atronach': 25, Dremora: 30, Dragon: 1000
   };
   const profiles = loaded.configs.enemyBaseXp.profiles;
-  assert.equal(profiles.length, Object.keys(expected).length);
+  const originalProfiles = profiles.filter((profile) => !profile.balanceId.startsWith('mundo.'));
+  const worldProfiles = profiles.filter((profile) => profile.balanceId.startsWith('mundo.'));
+  const originalScaledProfiles = originalProfiles.filter((profile) => profile.awardMode === 'SCALED');
+  const originalByBalanceId = new Map(originalProfiles.map((profile) => [profile.balanceId, profile]));
+  assert.equal(originalProfiles.length, Object.keys(expected).length, 'all 51 original authorized profiles remain represented');
+  assert.equal(originalByBalanceId.size, originalProfiles.length, 'original balance identifiers are unique');
+  assert.equal(worldProfiles.length, originalScaledProfiles.length,
+    'each SCALED original profile has exactly one mundo.* profile');
+  assert.equal(profiles.length, Object.keys(expected).length + originalScaledProfiles.length,
+    'total is the original authorized snapshot plus one mundo.* profile per SCALED original');
   for (const [label, value] of Object.entries(expected)) {
-    const profile = profiles.find((candidate) => candidate.sourceLabel === label);
+    const profile = originalProfiles.find((candidate) => candidate.sourceLabel === label);
     assert.ok(profile, `missing ${label}`);
     assert.equal(profile.awardMode === 'FIXED' ? profile.fixedXp : profile.baseXp, value, label);
+  }
+  const seenWorldProfiles = new Set();
+  for (const worldProfile of worldProfiles) {
+    const originalBalanceId = worldProfile.balanceId.slice('mundo.'.length);
+    const original = originalByBalanceId.get(originalBalanceId);
+    assert.ok(original, `${worldProfile.balanceId} has no original balance profile`);
+    assert.equal(original.awardMode, 'SCALED', `${worldProfile.balanceId} must correspond to a scalable original profile`);
+    assert.equal(worldProfile.balanceId, `mundo.${original.balanceId}`);
+    assert.equal(worldProfile.sourceLabel, `${original.sourceLabel} (mundo)`);
+    assert.equal(worldProfile.awardMode, 'SCALED');
+    assert.deepEqual(worldProfile.eventXpCategories, original.eventXpCategories.map((category) => `${category}_mundo`),
+      `${worldProfile.balanceId} must map each original category to its mundo counterpart`);
+    assert.equal(seenWorldProfiles.has(original.balanceId), false, `${worldProfile.balanceId} duplicates its original profile`);
+    seenWorldProfiles.add(original.balanceId);
+  }
+  for (const original of originalScaledProfiles) {
+    assert.equal(seenWorldProfiles.has(original.balanceId), true, `missing mundo.${original.balanceId}`);
   }
   const catalog = new EnemyXpCatalog(loaded.configs.enemyBaseXp);
   assert.equal(catalog.resolveExact('vampire').profile.baseXp, 30);

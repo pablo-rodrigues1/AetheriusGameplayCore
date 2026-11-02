@@ -372,13 +372,21 @@ test('NPC profile cache evicts least recently inspected entries and clears their
   port.shutdown();
 });
 
-test('NPC perks distinguish an explicit null list from rows that resolve to no perks',()=>{
+test('NPC perks preserve unresolved rows as explicit unsupported entries; null list is supported empty',()=>{
   const rows=npcBaseDataFixture('ROWS');
   const unresolved=api.composeNpcCombatProfile({status:'CONFIRMED',generation:'npc-perks-rows',stableFormKey:rows.record.stableFormKey},
     rows.npcs,rows.races,()=>undefined,1);
-  assert.equal(unresolved.perks.status,'UNSUPPORTED');
-  assert.deepEqual(unresolved.perks.value,[]);
-  assert.equal(unresolved.perks.reason,'NPC_PERK_ROWS_UNRESOLVED');
+  const baseDataKey=stableCatalogProvider(rows.record.data,'BaseData').provider;
+  const baseData=rows.npcs.byKey(baseDataKey);
+  assert.deepEqual(baseData.data.perks,[['skyrim.esm|10C041',1]],'fixture has one unresolved winner perk at rank 1');
+  assert.deepEqual(unresolved.perks,{
+    status:'UNSUPPORTED',
+    value:[{
+      sourceKind:'NPC_RECORD',sourceKey:baseDataKey,stableFormKey:'skyrim.esm|10C041',rank:1,
+      status:'UNSUPPORTED',reason:'PERK_WINNER_UNAVAILABLE',compiled:null
+    }],
+    reason:'ONE_OR_MORE_NPC_PERKS_UNSUPPORTED'
+  });
 
   const noPerks=npcBaseDataFixture('NULL');
   const explicitEmpty=api.composeNpcCombatProfile({status:'CONFIRMED',generation:'npc-perks-null',stableFormKey:noPerks.record.stableFormKey},
