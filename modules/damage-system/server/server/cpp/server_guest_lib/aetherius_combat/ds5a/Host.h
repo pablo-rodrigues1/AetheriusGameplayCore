@@ -74,7 +74,7 @@ inline uint32_t AnimationOwner(const MpActor& actor) {
   const auto* world=actor.GetParent();if(!world)return 0;
   const auto found=world->hosters.find(actor.GetFormId());return found==world->hosters.end()?0:found->second;
 }
-struct Sample { uint64_t sequence=0;uint32_t attacker=0,defender=0,source=0;float current=0;Trace trace; };
+struct Sample { uint64_t sequence=0;uint32_t attacker=0,defender=0,source=0;float current=0;Trace trace;uint32_t hitSeq=0; };
 struct Buffer {
   static constexpr size_t Capacity=1024;
   std::array<Sample,Capacity> samples{};
@@ -100,7 +100,7 @@ struct Buffer {
         {"blockConfirmed",t.blockConfirmed},{"blockReduction",t.blockReduction},{"globalMultiplier",t.global},{"preDefense",t.preDefense},
         {"refinementTier",0},{"q16Contribution",0},{"attackerUnsupportedEffects",t.attackerUnsupportedEffects},
         {"defenderUnsupportedEffects",t.defenderUnsupportedEffects},{"q16Reason","ACTIVE_EFFECT_INSTANCE_MAGNITUDE_UNAVAILABLE"},
-        {"hitIdentity","HOST_RECEIVED_NO_UNIQUENESS_CLAIM"},
+        {"hitIdentity","HOST_DEDUPED_CLIENT_HIT_SEQ"},{"hitSeq",s.hitSeq},
         {"powerConfirmed",t.powerConfirmed},{"powerFactor",t.powerFactor},{"powerSettingMissing",t.powerSettingMissing},
         {"bashConfirmed",t.bashConfirmed},{"bashDamage","UNSUPPORTED_NO_CERTIFIED_BASH_FORMULA"},{"sneakBonus",0},
         {"critical",t.critical},{"criticalChancePercent",t.criticalChance},{"criticalComponent",t.criticalComponent},
@@ -217,9 +217,10 @@ public:
     auto t=Evaluate(a,d,hit);
     const auto mode=settings.modes[static_cast<unsigned>(t.family)];
     if(mode==Mode::Off)return applied;
-    // DS-7 must supply actual hit identity and certify two-client application.
+    // DS-7: hit identity is the client hitSeq, deduplicated in ActionListener::OnHit
+    // before this call. Two-client application is still not certified.
     if(mode==Mode::Active){t.status=Status::Unsupported;t.reason=Reason::ActiveRequiresDS7;}
-    buffer->Add({0,hit.aggressor,hit.target,hit.source,applied,t});
+    buffer->Add({0,hit.aggressor,hit.target,hit.source,applied,t,hit.hitSeq.value_or(0)});
     return applied;
   }
   float CalculateDamage(const MpActor& a,const MpActor& d,const SpellCastData& spell) const override {

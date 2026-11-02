@@ -149,13 +149,13 @@ try{
   const caps=JSON.parse(server.getAetheriusCombatCapabilities());
   assert.equal(caps.families.melee.status,'SHADOW');
   const before=JSON.parse(server.getAetheriusCombatShadow()).hits;
-  bot.send({t:17,data:{aggressor:actor,target,source:weaponId,projectile:0,isBashAttack:false,isHitBlocked:false,isPowerAttack:false,isSneakAttack:false}});
+  bot.send({t:17,data:{aggressor:actor,target,source:weaponId,projectile:0,isBashAttack:false,isHitBlocked:false,isPowerAttack:false,isSneakAttack:false,hitSeq:1}});
   await until(()=>JSON.parse(server.getAetheriusCombatShadow()).hits>before,'Native host accepted hit');
   const shadow=JSON.parse(server.getAetheriusCombatShadow());
   const sample=shadow.samples.find(row=>row.aggressor===actor&&row.target===target&&row.sequence>before);
   assert(sample,'Hit sample missing');assert.equal(sample.status,'CALCULATED',sample.reason);
   assert.equal(sample.attackerRevision,second.revision);assert.equal(sample.defenderRevision,targetProfile.revision);
-  assert.equal(sample.hitIdentity,'HOST_RECEIVED_NO_UNIQUENESS_CLAIM');
+  assert.equal(sample.hitIdentity,'HOST_DEDUPED_CLIENT_HIT_SEQ');assert.equal(sample.hitSeq,1);
   console.log('PASS DS-5a real host shadow: '+JSON.stringify({classOne:classOne.id,classTwo:classTwo.id,sample,profileParses:shadow.profileParses}));
 
 }catch(error){

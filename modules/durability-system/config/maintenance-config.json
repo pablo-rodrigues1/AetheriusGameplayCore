@@ -274,7 +274,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponIron",
-          "formId": null,
+          "formId": "000800:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Hammer",
             "editorId": "BlacksmithHammer01",
@@ -288,7 +288,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponSteel",
-          "formId": null,
+          "formId": "000801:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Hammer",
             "editorId": "BlacksmithHammer01",
@@ -302,7 +302,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponElven",
-          "formId": null,
+          "formId": "000802:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Hammer",
             "editorId": "BlacksmithHammer01",
@@ -316,7 +316,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponDwarven",
-          "formId": null,
+          "formId": "000803:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Hammer",
             "editorId": "BlacksmithHammer01",
@@ -330,7 +330,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponOrcish",
-          "formId": null,
+          "formId": "000804:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Hammer",
             "editorId": "BlacksmithHammer01",
@@ -344,7 +344,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponGlass",
-          "formId": null,
+          "formId": "000805:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Hammer",
             "editorId": "BlacksmithHammer01",
@@ -358,7 +358,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponEbony",
-          "formId": null,
+          "formId": "000806:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Hammer",
             "editorId": "BlacksmithHammer01",
@@ -372,7 +372,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponDaedric",
-          "formId": null,
+          "formId": "000807:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Hammer",
             "editorId": "BlacksmithHammer01",
@@ -386,7 +386,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponDragonbone",
-          "formId": null,
+          "formId": "000808:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Hammer",
             "editorId": "BlacksmithHammer01",
@@ -400,7 +400,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponStalhrim",
-          "formId": null,
+          "formId": "000809:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Hammer",
             "editorId": "BlacksmithHammer01",
@@ -414,7 +414,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponSilver",
-          "formId": null,
+          "formId": "00080A:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Hammer",
             "editorId": "BlacksmithHammer01",
@@ -428,7 +428,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityWeaponWood",
-          "formId": null,
+          "formId": "00080B:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Hammer",
             "editorId": "BlacksmithHammer01",
@@ -444,7 +444,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorLeather",
-          "formId": null,
+          "formId": "00080C:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -458,7 +458,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorHide",
-          "formId": null,
+          "formId": "00080D:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -472,7 +472,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorIron",
-          "formId": null,
+          "formId": "00080E:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -486,7 +486,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorSteel",
-          "formId": null,
+          "formId": "00080F:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -500,7 +500,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorElven",
-          "formId": null,
+          "formId": "000810:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -514,7 +514,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorDwarven",
-          "formId": null,
+          "formId": "000811:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -528,7 +528,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorOrcish",
-          "formId": null,
+          "formId": "000812:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -542,7 +542,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorGlass",
-          "formId": null,
+          "formId": "000813:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -556,7 +556,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorEbony",
-          "formId": null,
+          "formId": "000814:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -570,7 +570,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorDaedric",
-          "formId": null,
+          "formId": "000815:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -584,7 +584,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorDragonbone",
-          "formId": null,
+          "formId": "000816:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -598,7 +598,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorStalhrim",
-          "formId": null,
+          "formId": "000817:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -612,7 +612,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorScaled",
-          "formId": null,
+          "formId": "000818:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -626,7 +626,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorChitin",
-          "formId": null,
+          "formId": "000819:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -640,7 +640,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorBonemold",
-          "formId": null,
+          "formId": "00081A:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -654,7 +654,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorFalmer",
-          "formId": null,
+          "formId": "00081B:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -668,7 +668,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorNordic",
-          "formId": null,
+          "formId": "00081C:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",
@@ -682,7 +682,7 @@
           "charges": 50,
           "recordType": "MISC",
           "editorId": "AetheriusDurabilityArmorDragonscale",
-          "formId": null,
+          "formId": "00081D:AetheriusManutencao.esp",
           "iconSource": {
             "name": "Sylgja's Satchel",
             "editorId": "FFSS02SylgjaSatchel",

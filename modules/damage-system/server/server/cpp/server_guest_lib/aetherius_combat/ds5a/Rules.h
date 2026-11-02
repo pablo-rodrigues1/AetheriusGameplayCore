@@ -156,6 +156,9 @@ inline StableFormKey Form(const std::string& value) {
   if(split!=6)throw std::invalid_argument("compiled form key");
   return StableFormKey::Parse(value.substr(7)+":"+value.substr(0,6));
 }
+// DS-5c: compiled origins the host applies. CLASS (player class stage) and NPC_RECORD (perks of the
+// winning NPC_, BaseData provider). RACE/STANDING_STONE stay counted as unsupported.
+inline bool AppliedOrigin(const Json& kind) { return kind=="CLASS"||kind=="NPC_RECORD"; }
 inline Rule Convert(const Json& j,const StableFormKey& perk,unsigned index) {
   Rule r;r.perk=perk;r.index=index;r.entry=Entry(j.at("entryPoint").get<std::string>());
   r.supported=j.at("status")=="SUPPORTED";r.reason=j.value("reason",std::string{});
@@ -163,7 +166,7 @@ inline Rule Convert(const Json& j,const StableFormKey& perk,unsigned index) {
   r.modification=j.at("modification");r.value=j.at("value");r.priority=j.at("priority");
   r.actorValue=j.value("actorValue",std::string{});r.rank=j.at("rank");r.effectIndex=j.at("effectIndex");
   r.sourceKey=j.at("origin").at("sourceKey");
-  const auto provenance=perk.ToString()+"#"+std::to_string(r.effectIndex)+" CLASS:"+r.sourceKey+" "+r.modification;
+  const auto provenance=perk.ToString()+"#"+std::to_string(r.effectIndex)+" "+j.at("origin").at("sourceKind").get<std::string>()+":"+r.sourceKey+" "+r.modification;
   if(provenance.size()>=r.provenance.size())throw std::invalid_argument("rule provenance capacity");
   std::memcpy(r.provenance.data(),provenance.c_str(),provenance.size()+1);
   if(!std::isfinite(r.value)||!std::isfinite(r.priority)||!(Form(j.at("perk"))==perk))throw std::invalid_argument("compiled rule identity/value");
@@ -204,7 +207,7 @@ inline Table ConvertPerks(const Json& profile) {
     const auto key=StableFormKey::Parse(keyText.substr(0,split)+":"+keyText.substr(split+1));
     // Grant presence is known even when its semantics are unsupported.
     if(!Contains(table.perks,key))table.perks.push_back(key);
-    if(item.at("status")!="SUPPORTED"||item.at("sourceKind")!="CLASS"||item.at("compiled").is_null()) {
+    if(item.at("status")!="SUPPORTED"||!AppliedOrigin(item.at("sourceKind"))||item.at("compiled").is_null()) {
       ++table.unsupported;
       const auto& skipped=item.at("compiled");
       if(skipped.is_object()&&skipped.contains("rules")&&skipped.at("rules").is_array()) {
@@ -214,7 +217,7 @@ inline Table ConvertPerks(const Json& profile) {
       continue;
     }
     const auto& compiled=item.at("compiled");
-    if(!(Form(compiled.at("perk"))==key)||compiled.at("origin").at("sourceKind")!="CLASS"
+    if(!(Form(compiled.at("perk"))==key)||compiled.at("origin").at("sourceKind")!=item.at("sourceKind")
       ||compiled.at("origin").at("sourceKey")!=item.at("sourceKey"))throw std::invalid_argument("compiled origin");
     for(const auto& row:compiled.at("rules")) {
       if(++index>2048)throw std::invalid_argument("rule capacity");

@@ -360,9 +360,9 @@ O perfil é uma projeção imutável, versionada (version=1) e publicada como um
 | nível | Leveling / fato de classe capturado por ActorComposition | Player lê nível e revisão da mesma composição; ausente = UNSUPPORTED. NPC usa nível observado confirmado ou NPC_.level fixo. PC_LEVEL_MULT sem nível observado = UNSUPPORTED. |
 | raça | Race + RecordCatalog | StableFormKey do RACE vencedor; sem record ou revisão = UNSUPPORTED. |
 | skills de combate do player | Class + catalog/classes.json | Valores cumulativos de stages[].skills no nível atual (Q1/Q14), sem bônus racial. Skills ausentes = UNSUPPORTED. O perfil não aplica skills ao motor. |
-| skills de NPC | record NPC_ vencedor e seu template Stats | Só valores explícitos do record com AutoCalcStats=false; auto-cálculo sem CLAS/GMSTs vencedores = UNSUPPORTED. |
+| skills de NPC | record NPC_ vencedor e seu template Stats; com AutoCalcStats, CLAS (Stats), RACE (Traits) e GMSTs vencedores lidos do servidor | AutoCalcStats=false: valores explícitos do record. AutoCalcStats=true (DS-5c): calculado de CLAS/RACE/GMST vencedores, mas só SUPPORTED com `GAMEPLAY_CORE_NPC_AUTOCALC_SKILLS=certified` (casos dourados medidos no jogo); antes disso UNSUPPORTED `NPC_AUTOCALC_FORMULA_UNCERTIFIED`. Fonte ausente = UNSUPPORTED com o motivo. |
 | perks efetivos e origem | grants do ActorState (sourceKind + sourceKey) e compilador DS-3 | Compilação de origem CLASS; grava rank, StableFormKey, condições e resultado por regra. O catálogo PERK compacto usado em runtime omite condições CTDA completas de records como os da classe; nesses casos o compilador retorna UNSUPPORTED. Não se lê export de desenvolvimento em runtime nem se inventa regra. Outras origens não certificadas = UNSUPPORTED, preservando a origem. |
-| perks do NPC | NPC_ Perks e PERK winner | A presença/proveniência do record pode ser relatada; compilador DS-3 só certifica grants CLASS, portanto perks NPC ficam UNSUPPORTED. `Perks=null` explícito é SUPPORTED vazio; uma lista presente sem nenhuma linha resolvida é UNSUPPORTED com motivo. Campo não exportado = UNSUPPORTED. |
+| perks do NPC | NPC_ Perks (provedor BaseData) e PERK winner | DS-5c: compiladas pela DS-3 com origem `NPC_RECORD` (sourceKey = StableFormKey do NPC_ provedor) e aceitas pelo host como CLASS. Perk fora dos catálogos = UNSUPPORTED `PERK_WINNER_UNAVAILABLE`, mas presente (HasPerk). `Perks=null` explícito é SUPPORTED vazio; campo não exportado = UNSUPPORTED. |
 | máximos de vida, magia e vigor | AttributeSystem e host SkyMP, lidos durante a composição | Snapshot sincronizado com a composição do personagem; override de desenvolvimento ou getter ausente = UNSUPPORTED. Para NPC, máximos ainda não resolvidos = UNSUPPORTED. |
 | variáveis Q15/Q16 | instâncias ativas do ActorState do servidor | Dez famílias físicas declaradas; nesta ordem suas fontes de magnitude ativa não existem no ActorState, então cada valor é UNSUPPORTED com null. Fortify Sneak Attacks permanece INACTIVE (Q9). Record/descrição não substituem magnitude de instância; nunca aceitar valor do cliente. |
 | identidade/cadeia do NPC | observação DS-0g + NPC_ e RecordCatalog | Exige observação confirmada com StableFormKey. O marcador DS-0g atualmente disponível fornece apenas geração; sem chave estável o perfil inteiro é UNSUPPORTED. Resolver/relatar a criatura observada não escolhe, troca, cria nem remove NPC (Q13). |
@@ -552,3 +552,27 @@ Conferência offline adicional: class-chance-audit.json em _work/evidence/DS-5b 
 os 149 records RESOLVED do crosswalk; 19 perks inteiramente SUPPORTED, cinco regras de
 chance crítica e nenhuma delas SUPPORTED. Não é prova de aplicação no jogo. O compilador
 não foi alterado por esta ordem; a extensão paralela DS-4-fix3 preserva a semântica CLASS.
+
+## 16. DS-5c — perfil de combate completo para NPC (29/10/2026)
+
+Implementado no repositório aetherius-server (cópia embutida em server/gameplay/core), a pedido do dono do Core.
+
+- **Diagnóstico por lado:** `server/gamemode/combat-shadow-log.js` separa cada motivo por lado e tipo
+  (`SKILL_UNSUPPORTED[defensor NPC, armadura]`), pela ordem de checagem de `ds5a/Host.h`: revisão 0 = perfil
+  ausente daquele lado; SKILL sem `weaponBase` (com arma) = skill de quem bate, senão armadura/bloqueio de quem
+  apanha. Jogador = ator com `profileId`.
+- **Confirmação da criatura:** opção (a), pacote `integrations/client/changes.patch` (base 31566e8) aplicado no
+  cliente. A opção (b) não basta: `NeedsNpcObservation` vale para toda base com template nivelado ou PC_LEVEL_MULT
+  (MpActor.cpp), e os NPCs externos são ACHR vanilla com listas niveladas, fora do EnemySystem.
+- **Skills com AutoCalcStats:** `runtime/src/npc-autocalc.ts` porta `Distribute`/`AutoSkills` de
+  `aetherius_combat/NpcObservation.h` (mesma ordem e arredondamento) e lê do servidor, fora do golpe e com cache,
+  a CLAS (DATA bytes 6..23), a RACE (DATA, 7 pares ActorValue/bônus) e os GMSTs `aetherius.esp|000803`
+  iAVDSkillStart e `skyrim.esm|0C790F` iAVDSkillsLevelUp (as mesmas chaves do host). Nível: fixo ou observado
+  confirmado. Trava: `GAMEPLAY_CORE_NPC_AUTOCALC_SKILLS=certified`, só depois dos casos dourados; até lá
+  `NPC_AUTOCALC_FORMULA_UNCERTIFIED`. Valores esperados: `runtime/tools/npc-autocalc-golden.mjs`.
+- **Perks do NPC:** origem `NPC_RECORD` no compilador DS-3; host (`ds5a/Rules.h`, `AppliedOrigin`) aplica CLASS e
+  NPC_RECORD; regra sem suporte continua nunca aplicada. Cobertura medida no catálogo de 29/10: 5.380 de 11.803
+  NPC_ sem `Perks` exportado; das 66.929 linhas de perk, 33.996 resolvem nos catálogos (165 PERK). Perks vanilla
+  de combate como `skyrim.esm|079376` não estão em domínio nenhum: exigem um domínio PERK novo no catálogo.
+- **Testes:** `runtime/tests/npc-autocalc.test.mjs` (9). As suítes que dependem de `_work/exports` não rodam fora
+  do workspace do dono do Core.

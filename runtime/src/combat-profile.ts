@@ -11,6 +11,7 @@ import type { DomainCatalog, DomainData } from '../../shared/record-catalog/src/
 import type { CatalogEntry } from '../../shared/contracts/src/ports.ts';
 import { NPC_FIELDS, NPC_TEMPLATE_CATEGORIES, npcField, npcTemplateProvider } from '../../shared/record-catalog/src/npcs.ts';
 import type { RuntimeMp } from './host.ts';
+import { AUTOCALC_SKILL_INDEX, computeAutoCalcSkills, type NpcAutoCalcSource } from './npc-autocalc.ts';
 
 export const COMBAT_PROFILE_PROPERTY = 'aetheriusCombatProfile';
 export const NPC_OBSERVATION_PROPERTY = 'aetheriusNpcObservation';
@@ -148,6 +149,25 @@ function unsupportedPerk(grant:Extract<Grant,{kind:'perk'}>,reason:string):Comba
     rank:grant.rank,status:'UNSUPPORTED',reason,compiled:null});
 }
 
+type CompiledPerkFields=Pick<CombatProfilePerk,'status'|'reason'|'compiled'>;
+function compileRecordPerk(record:CatalogEntry,stableFormKey:StableFormKey,origin:GrantOrigin):CompiledPerkFields {
+  const rawFields=(record.data.fields??{}) as Record<string,unknown>;
+  if (!rawFields || typeof rawFields!=='object' || Array.isArray(rawFields)
+    || Object.values(rawFields).some(value=>typeof value!=='string')) {
+    return {status:'UNSUPPORTED',reason:'PERK_FLAT_FIELDS_UNSUPPORTED',compiled:null};
+  }
+  const fields:FlatField[]=Object.entries(rawFields).map(([path,value])=>({path,value:value as string}));
+  try {
+    const compiled=compilePerk({formid:keyToPerkFormId(stableFormKey),winner:record.winnerPlugin,fields},origin);
+    const bad=compiled.rules.filter(rule=>rule.status!=='SUPPORTED');
+    const reason=bad.length?bad.map(rule=>rule.reason??'DS3_RULE_UNSUPPORTED').filter((x,i,a)=>a.indexOf(x)===i).join('; '):null;
+    return {status:compiled.rules.length>0&&!bad.length?'SUPPORTED':'UNSUPPORTED',
+      reason:compiled.rules.length===0?'PERK_HAS_NO_COMBAT_RULE':reason??'DS3_RULE_UNSUPPORTED',compiled:jsonValue(compiled)};
+  } catch {
+    return {status:'UNSUPPORTED',reason:'DS3_COMPILER_REJECTED_RECORD',compiled:null};
+  }
+}
+
 function compilePlayerPerks(grants:readonly Grant[],classFacts:ClassCombatProfileFacts|undefined,lookup:PerkCatalogLookup):CombatProfilePerkSet {
   const items:CombatProfilePerk[]=[];
   for (const grant of grants) {
@@ -176,26 +196,9 @@ function compilePlayerPerks(grants:readonly Grant[],classFacts:ClassCombatProfil
       items.push(unsupportedPerk(grant,'PERK_WINNER_OR_SIGNATURE_UNAVAILABLE'));
       continue;
     }
-    const rawFields=(record.data.fields??{}) as Record<string,unknown>;
-    if (!rawFields || typeof rawFields!=='object' || Array.isArray(rawFields)
-      || Object.values(rawFields).some(value=>typeof value!=='string')) {
-      items.push(unsupportedPerk(grant,'PERK_FLAT_FIELDS_UNSUPPORTED'));
-      continue;
-    }
-    const fields:FlatField[]=Object.entries(rawFields).map(([path,value])=>({path,value:value as string}));
-    try {
-      const compiled=compilePerk({formid:keyToPerkFormId(grant.definition.stableFormKey),
-        winner:record.winnerPlugin,fields},origin);
-      const bad=compiled.rules.filter(rule=>rule.status!=='SUPPORTED');
-      const reason=bad.length?bad.map(rule=>rule.reason??'DS3_RULE_UNSUPPORTED').filter((x,i,a)=>a.indexOf(x)===i).join('; '):null;
-      items.push(Object.freeze({sourceKind:grant.source.kind,sourceKey:grant.source.key,
-        stableFormKey:grant.definition.stableFormKey,rank:grant.rank,
-        status:compiled.rules.length>0&&!bad.length?'SUPPORTED':'UNSUPPORTED',
-        reason:compiled.rules.length===0?'PERK_HAS_NO_COMBAT_RULE':reason??'DS3_RULE_UNSUPPORTED',
-        compiled:jsonValue(compiled)}));
-    } catch {
-      items.push(unsupportedPerk(grant,'DS3_COMPILER_REJECTED_RECORD'));
-    }
+    items.push(Object.freeze({sourceKind:grant.source.kind,sourceKey:grant.source.key,
+      stableFormKey:grant.definition.stableFormKey,rank:grant.rank,
+      ...compileRecordPerk(record,grant.definition.stableFormKey,origin)}));
   }
   items.sort((a,b)=>a.sourceKind.localeCompare(b.sourceKind)||a.sourceKey.localeCompare(b.sourceKey)
     ||a.stableFormKey.localeCompare(b.stableFormKey));
@@ -287,14 +290,35 @@ function fieldValue(data:JsonObject,path:string):unknown {
   try { return npcField(data,path as typeof NPC_FIELDS[number]); }
   catch { return undefined; }
 }
-function npcSkills(record:CatalogEntry|undefined):Readonly<Record<CombatSkill,CombatProfileValue<number>>> {
+// DS-5c: AutoCalcStats = início + bônus da RACE + (nível-1)*pontos distribuídos pelos pesos da CLAS
+// (npc-autocalc.ts, mesmo algoritmo do host). CLAS vem do provedor Stats; RACE do provedor Traits.
+function autoCalcSkillValues(record:CatalogEntry,level:CombatProfileValue<number>,race:CombatProfileValue<StableFormKey>,
+  autoCalc:NpcAutoCalcSource|undefined):number[]|string {
+  if (!autoCalc) return 'NPC_AUTOCALC_GMST_CATALOG_UNAVAILABLE';
+  if (level.status!=='SUPPORTED') return level.reason??'NPC_LEVEL_UNAVAILABLE';
+  if (race.status!=='SUPPORTED') return race.reason??'NPC_RACE_UNAVAILABLE';
+  const classKey=fieldValue(record.data,'Class');
+  if (!isStableKey(classKey)) return 'NPC_CLASS_LINK_UNAVAILABLE';
+  const weights=autoCalc.classSkillWeights(classKey);
+  if (!weights) return 'NPC_CLASS_WINNER_UNAVAILABLE';
+  const boosts=autoCalc.raceSkillBoosts(race.value as StableFormKey);
+  if (!boosts) return 'NPC_RACE_SKILL_BOOSTS_UNAVAILABLE';
+  const settings=autoCalc.settings();
+  if (!settings) return 'NPC_AUTOCALC_GMST_WINNER_UNAVAILABLE';
+  try { return computeAutoCalcSkills(weights,boosts,level.value as number,settings.skillStart,settings.skillsPerLevel); }
+  catch (error) { return (error as Error).message; }
+}
+function npcSkills(record:CatalogEntry|undefined,level:CombatProfileValue<number>,race:CombatProfileValue<StableFormKey>,
+  autoCalc?:NpcAutoCalcSource):Readonly<Record<CombatSkill,CombatProfileValue<number>>> {
   const values={} as Record<CombatSkill,CombatProfileValue<number>>;
   if (!record || record.definition.recordType!=='NPC_') {
     for(const skill of SKILLS) values[skill]=unsupported('NPC_STATS_TEMPLATE_UNSUPPORTED');
     return Object.freeze(values);
   }
   if ((record.data as Record<string,unknown>).autoCalcStats===true) {
-    for(const skill of SKILLS) values[skill]=unsupported('NPC_AUTOCALC_GMST_CATALOG_UNAVAILABLE');
+    const computed=autoCalcSkillValues(record,level,race,autoCalc);
+    for(const skill of SKILLS) values[skill]=typeof computed==='string'?unsupported(computed)
+      :!autoCalc!.certified?unsupported('NPC_AUTOCALC_FORMULA_UNCERTIFIED'):supported(computed[AUTOCALC_SKILL_INDEX[skill]]!);
     return Object.freeze(values);
   }
   for(const skill of SKILLS) {
@@ -325,16 +349,27 @@ function npcPerks(record:CatalogEntry|undefined,lookup:PerkCatalogLookup,sourceK
   });
   if(data.perks===null)return Object.freeze({status:'SUPPORTED',value:Object.freeze([]),reason:null});
   if(!Array.isArray(data.perks))return Object.freeze({status:'UNSUPPORTED',value:Object.freeze([]),reason:'NPC_PERKS_UNAVAILABLE'});
+  // DS-5c: perks do NPC_ vencedor (provedor BaseData) compiladas pela DS-3 com origem NPC_RECORD.
+  // Perk fora dos catálogos entra como UNSUPPORTED: o host ainda conhece a presença (HasPerk).
   const items:CombatProfilePerk[]=[];
+  let malformed=0;
   for(const item of data.perks) {
-    if(!Array.isArray(item)||!isStableKey(item[0])||typeof item[1]!=='number'||!Number.isSafeInteger(item[1])||item[1]<1) continue;
-    const key=item[0],entry=lookup(key);
-    if(!entry||entry.definition.recordType!=='PERK') continue;
-    items.push(Object.freeze({sourceKind:'NPC_RECORD',sourceKey,stableFormKey:key,rank:item[1],status:'UNSUPPORTED',
-      reason:'DS3_COMPILER_SOURCE_KIND_UNSUPPORTED',compiled:null}));
+    if(!Array.isArray(item)||!isStableKey(item[0])||typeof item[1]!=='number'||!Number.isSafeInteger(item[1])||item[1]<1){malformed++;continue;}
+    const key=item[0] as StableFormKey,rank=item[1] as number;
+    let entry:CatalogEntry|undefined;
+    try { entry=lookup(key); } catch { /* missing catalog is explicit below */ }
+    const base={sourceKind:'NPC_RECORD' as const,sourceKey,stableFormKey:key,rank};
+    if(!entry||entry.definition.recordType!=='PERK'||entry.definition.stableFormKey!==key) {
+      items.push(Object.freeze({...base,status:'UNSUPPORTED' as const,reason:'PERK_WINNER_UNAVAILABLE',compiled:null}));
+      continue;
+    }
+    items.push(Object.freeze({...base,...compileRecordPerk(entry,key,{sourceKind:'NPC_RECORD',sourceKey})}));
   }
-  return Object.freeze({status:'UNSUPPORTED',value:Object.freeze(items),
-    reason:items.length?'NPC_PERKS_NOT_COMPILED':'NPC_PERK_ROWS_UNRESOLVED'});
+  items.sort((a,b)=>a.stableFormKey.localeCompare(b.stableFormKey));
+  const unsupportedCount=items.filter(item=>item.status!=='SUPPORTED').length+malformed;
+  const status=unsupportedCount===0?'SUPPORTED':unsupportedCount===items.length+malformed?'UNSUPPORTED':'PARTIAL';
+  return Object.freeze({status,value:Object.freeze(items),
+    reason:malformed?'NPC_PERK_ROWS_MALFORMED':unsupportedCount?'ONE_OR_MORE_NPC_PERKS_UNSUPPORTED':null});
 }
 
 function npcUnsupportedFields(reason:string) {
@@ -350,7 +385,8 @@ function npcUnsupportedFields(reason:string) {
 }
 
 export function composeNpcCombatProfile(
-  observation:unknown,npcs:DomainCatalog|undefined,races:DomainCatalog|undefined,lookupPerk:PerkCatalogLookup,revision=1
+  observation:unknown,npcs:DomainCatalog|undefined,races:DomainCatalog|undefined,lookupPerk:PerkCatalogLookup,revision=1,
+  autoCalc?:NpcAutoCalcSource
 ):NpcCombatProfileProjection {
   const raw=observation as Record<string,unknown>|null;
   const generation=typeof raw?.generation==='string'&&raw.generation.length>0?raw.generation:null;
@@ -385,7 +421,7 @@ export function composeNpcCombatProfile(
   const traitsRecord=traitsCategory?.status==='SUPPORTED'&&traitsCategory.provider?npcs.byKey(traitsCategory.provider):undefined;
   const level=npcLevel(statsRecord,raw.level);
   const race=npcRace(traitsRecord,races);
-  const skills=npcSkills(statsRecord);
+  const skills=npcSkills(statsRecord,level,race,autoCalc);
   const perks=npcPerks(baseDataRecord,lookupPerk,baseDataCategory?.provider??stableFormKey);
   const attributeUnsupported='NPC_ATTRIBUTE_MAXIMA_NOT_RESOLVED';
   const attributes=Object.freeze({health:unsupported<number>(attributeUnsupported),magicka:unsupported<number>(attributeUnsupported),stamina:unsupported<number>(attributeUnsupported)});
@@ -426,7 +462,7 @@ export class CombatProfileProjectionPort {
   private npcCompositions=0;
   private readonly npcProfileCacheLimit:number;
   constructor(private options:{readonly mp:RuntimeMp|undefined;readonly current:(binding:SessionBinding)=>boolean;readonly warn:(message:string)=>void;
-    readonly npcProfileCacheLimit?:number}) {
+    readonly npcProfileCacheLimit?:number;readonly autoCalc?:NpcAutoCalcSource|undefined}) {
     this.npcProfileCacheLimit=options.npcProfileCacheLimit??NPC_PROFILE_CACHE_LIMIT;
     if(!Number.isSafeInteger(this.npcProfileCacheLimit)||this.npcProfileCacheLimit<1)throw Error('NPC_PROFILE_CACHE_LIMIT_INVALID');
     this.register();
@@ -492,7 +528,7 @@ export class CombatProfileProjectionPort {
     this.npcCompositions++;
     const candidateRevision=previous?.profile.revision??this.npcRevisionWatermark+1;
     if(!Number.isSafeInteger(candidateRevision))throw Error('COMBAT_PROFILE_REVISION_EXHAUSTED');
-    const candidate=composeNpcCombatProfile(observation,npcs,races,lookupPerk,candidateRevision);
+    const candidate=composeNpcCombatProfile(observation,npcs,races,lookupPerk,candidateRevision,this.options.autoCalc);
     const unchanged=previous&&contentWithoutRevision(previous.profile)===contentWithoutRevision(candidate);
     const revision=unchanged?previous.profile.revision:(previous?previous.profile.revision+1:candidateRevision);
     if(!Number.isSafeInteger(revision))throw Error('COMBAT_PROFILE_REVISION_EXHAUSTED');

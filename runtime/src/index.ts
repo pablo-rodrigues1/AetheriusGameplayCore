@@ -1,4 +1,5 @@
 import { deliverCombatCatalog, startNpcCombatProfilePump } from './combat-catalog-bridge.ts';
+import { createNpcAutoCalcSource } from './npc-autocalc.ts';
 import type { FeatureMode } from '../../shared/contracts/src/capabilities.js';
 import type { SessionBinding } from '../../shared/contracts/src/identity.js';
 import { loadDomain } from '../../shared/record-catalog/src/index.ts';
@@ -376,8 +377,10 @@ export function createGameplayCore(host: HostContext) {
     if(availableProfileSources.length){
       const profileCanPublish=(binding:SessionBinding)=>availableProfileSources.some(id=>
         mode(id)==='active'||mode(id)==='canary'&&canary.has(binding.characterKey));
+      // DS-5c: skills de NPC com AutoCalcStats só valem depois dos casos dourados medidos no jogo.
       combatProfiles=new CombatProfileProjectionPort({mp:host.mp,
-        current:binding=>current()&&actors.isCurrent(binding)&&profileCanPublish(binding),warn});
+        current:binding=>current()&&actors.isCurrent(binding)&&profileCanPublish(binding),warn,
+        autoCalc:createNpcAutoCalcSource(host.mp,env.GAMEPLAY_CORE_NPC_AUTOCALC_SKILLS==='certified')});
       scope.add(actors.onUnbound(binding=>combatProfiles?.clear(binding)));
       if(nativeCombat?.status==='SUPPORTED')startNpcCombatProfilePump(host.mp,scope,actorId=>
         combatProfiles?.inspectNpc(actorId,catalogs.get('npcs'),catalogs.get('races'),currentNpcPerkLookup()));

@@ -2,6 +2,8 @@
 
 **DOC-2 · 25/10/2026 · guia vigente.** Esta edição substitui o guia de 12/10; o histórico daquela versão permanece no commit anterior. O código do Core desta entrega é o merge `a2f0517` na `main` (integra os nove commits do outro desenvolvedor); o commit seguinte só preenche esta referência. A aplicação dos patches em clones limpos não prova build, boot, load order oficial ou comportamento no jogo.
 
+> **Nota de 02/11/2026:** os pacotes deste guia já foram aplicados no `aetherius-server` (`b84ce03`) e no `aetherius-client` (`9a8cdf8`), que passaram a ter o código vivo do host e do cliente. O que mudou lá depois (DS-5c, DS-7) e voltou para este repositório está em [SINCRONIZACAO_SERVIDOR_20261102](../docs/operations/SINCRONIZACAO_SERVIDOR_20261102.md).
+
 ## Resumo para o mantenedor
 
 - **Entrega:** patch do host com 35 arquivos e patch de produção do cliente com 5 arquivos; há ainda um patch de trace separado, só diagnóstico. Os patches passaram em clones limpos nas bases declaradas e todos os hashes do manifesto bateram. A prova não incluiu build nem servidor oficial. Os pacotes e limites estão em [host](host/LEIA-ME.md) e [cliente](client/LEIA-ME.md).

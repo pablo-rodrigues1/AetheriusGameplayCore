@@ -32,9 +32,19 @@ sneak and bash bonuses are excluded pending DS-5b. Invalid numbers keep legacy d
 getAetheriusCombatCapabilities() returns ownership/modes per family; Core verifies it.
 getAetheriusCombatShadow() returns a JSON string only on request: last 1024 samples,
 profile revisions, components, status/reason, Q16/refinement and conversion counter.
-Hit code uses no JSON, I/O or per-hit logging. Buffer sequence is not hit identity:
-HOST_RECEIVED_NO_UNIQUENESS_CLAIM. Existing splash/CanHit protection remains; real
-client hit identity is a DS-7 prerequisite (DS-5a order, addendum 1).
+Hit code uses no JSON, I/O or per-hit logging. Buffer sequence is not hit identity.
+
+DS-7 hit identity (Aetherius, 27/10/2026): HitMessage carries `hitSeq`, a number the
+client increments on every OnHit. ActionListener::OnHit keeps one HitSequenceWindow
+per connection (UserInfo; highest number + previous 1023) and drops a repeated
+number (DUPLICATE_HIT_SEQ) or one older than the window (STALE_HIT_SEQ) before any
+other check. A hit without `hitSeq` (outdated client) is rejected (NO_HIT_SEQ, one
+warning per connection). The window resets on reconnect; no time-based expiry.
+Trace: hitIdentity HOST_DEDUPED_CLIENT_HIT_SEQ plus `hitSeq` per sample.
+Limit: this stops the same message being applied twice. It does not merge two
+game hit events for one swing, nor a client inventing new numbers; splash/CanHit
+and the DS-5b attack evidence still cover those. active remains blocked
+(ACTIVE_REQUIRES_DS7) until two-client application is certified.
 
 Native acceptance: aetherius-shadow-test --ds5a <loadorder-manifest>. Benchmark
 reports median/p99 of 20,001 individual hits after warmup, with the full real legacy chain.

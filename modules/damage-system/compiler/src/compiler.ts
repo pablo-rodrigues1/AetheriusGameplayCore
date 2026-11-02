@@ -56,6 +56,14 @@ export type GrantOrigin =
       sourceKey: string;
       classId?: never;
       level?: never;
+    }
+  | {
+      // DS-5c: perk listed on the winning NPC_ record (BaseData template provider).
+      // sourceKey = StableFormKey of that NPC_.
+      sourceKind: "NPC_RECORD";
+      sourceKey: string;
+      classId?: never;
+      level?: never;
     };
 
 export interface CompiledCondition {
@@ -288,7 +296,8 @@ export function compilePerk(record: PerkRecord, origin: GrantOrigin): CompiledPe
     !origin.sourceKey ||
     (origin.sourceKind !== "CLASS" &&
       origin.sourceKind !== "RACE" &&
-      origin.sourceKind !== "STANDING_STONE") ||
+      origin.sourceKind !== "STANDING_STONE" &&
+      origin.sourceKind !== "NPC_RECORD") ||
     (origin.sourceKind === "CLASS" &&
       (!origin.classId ||
         !Number.isInteger(origin.level) ||
