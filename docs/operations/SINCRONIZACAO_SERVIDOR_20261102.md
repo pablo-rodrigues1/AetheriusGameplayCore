@@ -53,4 +53,6 @@ acompanharam uma mudança intencional do servidor:
 2. `modules/leveling-system` (“entire authorized XP snapshot is represented without silent legacy values”):
    espera 51 perfis; com os perfis `mundo.*` são 100.
 
-Os dois precisam de uma ordem de correção dos testes (executor de código) e de revisão. Typecheck: sem falhas.
+Typecheck: sem falhas.
+
+**Corrigido em `41e8334` (SYNC-1102-fix1, Luna 6, revisado pelo Opus 5.5):** os dois testes passaram a afirmar o comportamento novo de forma exata. Depois disso: 175 / 189 no runtime e 2 pacotes com falha, exatamente as mesmas falhas da linha de base `1a7f017` nesta máquina.
