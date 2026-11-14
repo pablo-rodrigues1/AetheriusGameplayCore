@@ -7,6 +7,8 @@ import type { DomainCatalog, DomainData } from '../../shared/record-catalog/src/
 import { deepFreeze } from '../../shared/record-catalog/src/integrity.ts';
 import { createFileHost } from '../../tools/catalog/host.ts';
 import { applyMigrations, migrationStatus, executeCommand, withTransaction } from '../../shared/persistence/src/index.js';
+import { assertCharacterKey } from '../../shared/persistence/src/transaction.ts';
+export const professionPersistence = Object.freeze({ withTransaction, executeCommand, assertCharacterKey });
 import type { Migration, PoolPort } from '../../shared/persistence/src/index.js';
 import { createStandingStoneSpike } from '../spike-standing-stone/index.mjs';
 import type { StandingStoneMp } from '../spike-standing-stone/index.mjs';
@@ -31,6 +33,9 @@ import { RaceSystem } from './races.ts';
 import { developmentClassSweep } from './class-sweep.ts';
 export { developmentClassSweep, DevelopmentClassSweep } from './class-sweep.ts';
 import { ClassSystem } from './classes.ts';
+import { ClassSkillsProjection } from './class-skills.ts';
+import { SummonCapacityProjection } from './summon-capacity.ts';
+export { composeSummonCapacity, SummonCapacityProjection } from './summon-capacity.ts';
 import { scopedPool } from './persistence-scope.ts';
 import { RuntimeLeveling, levelingConfigs } from './leveling.ts';
 import type { XpEventInput } from '../../modules/leveling-system/src/integration/durable.ts';
@@ -151,6 +156,7 @@ export function createGameplayCore(host: HostContext) {
   let projection: SpellProjection | undefined;
   let composition: ActorComposition | undefined;
   let combatProfiles: CombatProfileProjectionPort | undefined;
+  let summonCapacity: SummonCapacityProjection | undefined;
   let nativeCombat: ReturnType<typeof deliverCombatCatalog> | undefined;
   let standingStones: StandingStoneSystem | undefined;
   let races: RaceSystem | undefined;
@@ -230,6 +236,7 @@ export function createGameplayCore(host: HostContext) {
     await attributes?.shutdown(); attributes=undefined;
     await composition?.shutdown(); composition = undefined;
     combatProfiles?.shutdown(); combatProfiles=undefined; standingStones = undefined; races = undefined; classes=undefined;
+    summonCapacity?.shutdown(); summonCapacity=undefined;
     await projection?.shutdown(); projection = undefined; clientDelivery=undefined;
   }
   async function boot(ticket: number) {
@@ -323,12 +330,16 @@ export function createGameplayCore(host: HostContext) {
     const deliveryAllowed=(binding:SessionBinding)=>current()&&actors.isCurrent(binding)&&(deliveryMode==='active'||deliveryMode==='canary'&&canary.has(binding.characterKey));
     let perks:PerkDelivery|undefined;
     const poisonEnabled = host.mp?.getServerSettings().aetheriusCombat?.weaponPoison === true;
+    const classSkillsEnabled=db.status==='SUPPORTED'&&!failures.has('classes')
+      &&['active','canary'].includes(mode('classes'))&&capability(specs.get('classes')!).status==='SUPPORTED';
+    const classSkillsAllowed=(binding:SessionBinding)=>classSkillsEnabled&&current()&&actors.isCurrent(binding)
+      &&(mode('classes')==='active'||mode('classes')==='canary'&&canary.has(binding.characterKey));
     const perkEnabled = ['active','canary'].includes(deliveryMode)&&db.status==='SUPPORTED'&&!perkDeliveryFailure&&!!pool;
     if(devSweep && (!['active','canary'].includes(mode('classes')) || capability(specs.get('classes')!).status!=='SUPPORTED' || !perkEnabled)){
       warn('ERROR DEV class sweep unavailable: active classes, catalog, migrations and client perks are required');devSweep=false;
     }
-    if((perkEnabled || poisonEnabled)&&host.mp?.on&&host.mp.getUserActor&&host.mp.getUserByActor&&host.mp.sendCustomPacket){
-      clientDelivery=new ClientDelivery(host.mp,actors,scope,binding=>poisonEnabled&&current()&&actors.isCurrent(binding)||deliveryAllowed(binding),warn);clientDelivery.start(hooks);
+    if((perkEnabled || poisonEnabled || classSkillsEnabled)&&host.mp?.on&&host.mp.getUserActor&&host.mp.getUserByActor&&host.mp.sendCustomPacket){
+      clientDelivery=new ClientDelivery(host.mp,actors,scope,binding=>poisonEnabled&&current()&&actors.isCurrent(binding)||deliveryAllowed(binding)||classSkillsAllowed(binding),warn);clientDelivery.start(hooks);
       if (poisonEnabled) new PoisonIntents(host.mp, clientDelivery, warn);
       if (perkEnabled && pool) {
       const ranks=new Map<import('../../shared/contracts/src/identity.js').StableFormKey,Set<number>>();
@@ -386,14 +397,32 @@ export function createGameplayCore(host: HostContext) {
         combatProfiles?.inspectNpc(actorId,catalogs.get('npcs'),catalogs.get('races'),currentNpcPerkLookup()));
     }
     const profileClassData=BUILD_DOMAINS.find(domain=>domain.domain==='classes');
+    summonCapacity=new SummonCapacityProjection(key=>findCatalogEntry([...catalogs.values()],key),
+      binding=>current()&&actors.isCurrent(binding), (binding,kind)=>{
+        const domain=({CLASS:'classes',RACE:'races',STANDING_STONE:'standing-stones'} as Record<string,string>)[kind];
+        return !!domain&&availableProfileSources.includes(domain as typeof availableProfileSources[number])
+          &&(mode(domain)==='active'||mode(domain)==='canary'&&canary.has(binding.characterKey));
+      });
+    scope.add(()=>summonCapacity?.shutdown());
+    scope.add(actors.onUnbound(binding=>summonCapacity?.clear(binding)));
+    const classSkills=clientDelivery&&profileClassData&&availableProfileSources.includes('classes')
+      ?new ClassSkillsProjection(clientDelivery,profileClassData,classSkillsAllowed,warn):undefined;
+    if(classSkills){
+      scope.add(()=>classSkills.shutdown());
+      scope.add(actors.onUnbound(binding=>classSkills.clear(binding)));
+      scope.add(clientDelivery!.onReset(binding=>classSkills.clear(binding)));
+    }
     composition = new ActorComposition({ pool: db.status === 'SUPPORTED' ? pool : undefined,
       schema: env.GAMEPLAY_CORE_DATABASE_SCHEMA ?? 'public',
       check: binding => { if (!current() || !actors.isCurrent(binding)) throw Object.assign(Error('STALE_BINDING'), { code: 'STALE_BINDING' }); },
       publish: (binding, set) => commonProjection.publish({ binding, set }),
       onComposed:(binding,set,outputs)=>{
+        try{summonCapacity?.publish(binding,set);}
+        catch{summonCapacity?.clear(binding);warn('summon capacity UNSUPPORTED: COMPOSITION_FAILED');}
         try{
           const classFacts=outputs.find(output=>output.combatProfile?.kind==='classes')?.combatProfile;
           const raceFacts=outputs.find(output=>output.combatProfile?.kind==='races')?.combatProfile;
+          classSkills?.publish(binding,set,classFacts?.kind==='classes'?classFacts:undefined);
           const facts:CombatProfileCompositionFacts={
             ...(classFacts?.kind==='classes'?{classes:classFacts}:{}),
             ...(raceFacts?.kind==='races'?{races:raceFacts}:{})
@@ -503,6 +532,7 @@ export function createGameplayCore(host: HostContext) {
       reason: failures.get('standing-stones') ?? 'STANDING_STONES_NOT_STARTED', committed: false }),
     observeRace: (binding: SessionBinding) => races?.observe(binding) ?? Promise.resolve({status:'UNSUPPORTED' as const,raceKey:null,reason:'RACES_NOT_STARTED'}),
     setCharacterClass:(input:{binding:SessionBinding;requestId:string;classId:string})=>classes?.set(input)??Promise.resolve({status:'UNSUPPORTED' as const,reason:failures.get('classes')??'CLASSES_NOT_STARTED'}),
+    setCharacterLevel:(input:{binding:SessionBinding;requestId:string;level:number})=>classes?.setLevel(input)??Promise.resolve({status:'UNSUPPORTED' as const,reason:failures.get('classes')??'CLASSES_NOT_STARTED'}),
     allocateAttributes:async(input:{binding:SessionBinding;requestId:string}&AttributeValues)=>{
       if(classes?.isSweeping(input.binding))return {status:'UNSUPPORTED' as const,reason:'DEV_SWEEP_IN_PROGRESS',committed:false};
       const result=await attributes?.allocate(input)
@@ -519,6 +549,8 @@ export function createGameplayCore(host: HostContext) {
     inspectActor:(binding:SessionBinding)=>composition?.inspect(binding)??Promise.reject(Error('COMPOSITION_UNAVAILABLE')),
     readCombatProfile:(binding:SessionBinding)=>combatProfiles?.read(binding)
       ??{status:'UNSUPPORTED' as const,value:null,reason:'COMBAT_PROFILE_NOT_INITIALIZED'},
+    readSummonCapacity:(binding:SessionBinding)=>summonCapacity?.read(binding)
+      ??{status:'UNSUPPORTED' as const,value:null,reason:'SUMMON_CAPACITY_NOT_INITIALIZED'},
     inspectNpcCombatProfile:(actorId:number)=>{
       const npcs=catalogs.get('npcs'),raceCatalog=catalogs.get('races'),lookup=currentNpcPerkLookup();
       return combatProfiles?.inspectNpc(actorId,npcs,raceCatalog,lookup)

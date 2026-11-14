@@ -11,12 +11,8 @@ interface Row { formid:string; type:string; editorid:string; winner:string; fiel
 interface Candidate { formid:string; chainRank:number; skill:string; editorid:string; winner:string }
 interface Crosswalk { label:string; rank:number|null; status:string; candidates:Candidate[] }
 
-export const CLASS_SKILL_NAMES = [
-  'OneHanded','TwoHanded','Marksman','Block','Smithing','HeavyArmor','LightArmor','Pickpocket','Lockpicking',
-  'Sneak','Alchemy','Speechcraft','Alteration','Conjuration','Destruction','Illusion','Restoration','Enchanting'
-] as const;
-export type ClassSkillName = typeof CLASS_SKILL_NAMES[number];
-export type ClassSkillValues = Readonly<Record<ClassSkillName,number>>;
+import { CLASS_SKILL_NAMES, type ClassSkillName, type ClassSkillValues } from '../../modules/class-progression-system/src/skills.ts';
+export { CLASS_SKILL_NAMES, type ClassSkillName, type ClassSkillValues } from '../../modules/class-progression-system/src/skills.ts';
 
 /** Exact Portuguese labels found in classes-config.json, mapped to stable ActorValue names. */
 export const CLASS_SKILL_LABEL_TO_ACTOR_VALUE: Readonly<Record<string,ClassSkillName>> = Object.freeze({

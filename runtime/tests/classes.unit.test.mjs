@@ -43,3 +43,10 @@ test('every class at every level 1..40 exactly matches independent catalog accum
   }
   console.log('C3c pure catalog comparisons='+checks+'; classes='+data.classes.length);
 });
+// 09/11: o Anti-Mago progride Conjuração e recebe Mystic Binding no nível 10, que exige a Maestria em Conjuração.
+test('Anti-Mago recebe a Maestria em Conjuração no nível 1',()=>{
+  const anti=data.classes.find(c=>c.id==='anti_mago');
+  assert(anti.stages[0].perks.some(p=>p.stableFormKey==='skyrim.esm|0F2CA7'&&p.status==='SUPPORTED'));
+  const grants=classGrants(data,catalog,{classId:'anti_mago',revision:1},1);
+  assert(JSON.stringify(grants).includes('skyrim.esm|0F2CA7'));
+});

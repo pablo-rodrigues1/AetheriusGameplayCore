@@ -31,6 +31,21 @@ export async function saveProgress(tx:QueryExecutor,key:CharacterKey,state:Recor
     [key,state.totalXpAccumulated,state.classLevel,JSON.stringify(progress),revision]);
 }
 
+/** Aetherius (painel da staff, class.level): fixa o nível, com o XP total coerente com a curva
+ * (soma do XP exigido dos níveis anteriores) e o XP do nível atual zerado. Mesmo contrato do
+ * resetProgress: chamado sob o lock do personagem, na transação do comando; fadiga intacta. */
+export async function setProgressLevel(tx:QueryExecutor,key:CharacterKey,level:number):Promise<{oldLevel:number;level:number;totalXp:number}> {
+  const rules=new ProgressionRules(progressionConfig);
+  if(!Number.isInteger(level)||level<1||level>rules.maxClassLevel)throw Error('LEVELING_LEVEL_INVALID');
+  const prior=await readProgress(tx,key);
+  const base=prior?.state??rules.createInitialState({playerId:key});
+  let totalXp=0;for(let l=1;l<level;l++)totalXp+=rules.xpRequiredFor(l);
+  const state=rules.normalizeState({...base,classLevel:level,currentXp:0,totalXpAccumulated:totalXp});
+  if(rules.validateState(state).length)throw Error('LEVELING_STATE_INVALID');
+  await saveProgress(tx,key,state,(prior?.revision??0)+1);
+  return {oldLevel:prior?.level??1,level,totalXp};
+}
+
 /** Called under the command character lock, in the caller's transaction.
  * Keep fatigue/cycle/cap facts verbatim; no second ledger or XP writer. */
 export async function resetProgress(tx:QueryExecutor,key:CharacterKey):Promise<void> {

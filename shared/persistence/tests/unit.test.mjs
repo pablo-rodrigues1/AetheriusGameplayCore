@@ -3,7 +3,20 @@ import { test } from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { canonicalJson, validateMigrationSql } from '../build/persistence/src/index.js';
+import { canonicalJson, validateMigrationSql, assertCharacterKey, lockCharacter } from '../build/persistence/src/index.js';
+
+test('profession UUID keys are canonical and leave exact profile locks unchanged', async () => {
+  const uuid = '11111111-1111-4111-8111-111111111111';
+  assert.doesNotThrow(() => assertCharacterKey(`character:${uuid}`));
+  for (const key of ['character:1', 'character:FFFFFFFF-FFFF-4FFF-8FFF-FFFFFFFFFFFF', 'profile:01', 'profile:0', 'other:'+uuid])
+    assert.throws(() => assertCharacterKey(key), TypeError);
+  const calls = [], tx = { query: async (sql, values) => { calls.push({sql,values}); return {rows:[],rowCount:0}; } };
+  await lockCharacter(tx, 'profile:12');
+  await lockCharacter(tx, `character:${uuid}`);
+  assert.deepEqual(calls[0].values, [-12]);
+  assert.equal(calls[1].values[0], `gc:character-uuid:character:${uuid}`);
+  assert.match(calls[1].sql, /hashtextextended/);
+});
 
 test('canonical JSON ignores object insertion order, preserves array order and rejects lossy inputs', () => {
   assert.equal(canonicalJson({ z: [1, { b: true, a: null }], a: -0 }), '{"a":0,"z":[1,{"a":null,"b":true}]}');

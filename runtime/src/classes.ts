@@ -1,6 +1,6 @@
 import type { SessionBinding } from '../../shared/contracts/src/index.ts';
 import type { DomainData } from '../../shared/record-catalog/src/types.ts';
-import { classGrants, readClass, createClassCommands, withDevelopmentLevel } from '../../modules/class-progression-system/src/index.ts';
+import { classGrants, readClass, createClassCommands, createLevelCommands, withDevelopmentLevel } from '../../modules/class-progression-system/src/index.ts';
 import { levelingLevelPort } from '../../modules/leveling-system/src/persistence/durable.ts';
 import type { AttributeSystem } from './attribute-system.ts';
 import { readProgress } from '../../modules/leveling-system/src/persistence/durable.ts';
@@ -78,6 +78,19 @@ export class ClassSystem {
       const attributes=await this.attributes?.publish(binding);
       return {status:'SUPPORTED' as const,receipt,attributes,composition:await this.refresh(binding)};
     }catch(error){return {status:'UNSUPPORTED' as const,reason:(error as {code?:string}).code??((error as Error).message==='MODE_OR_STALE_BINDING'?'MODE_OR_STALE_BINDING':'CLASS_COMMAND_FAILED')};}
+  }
+  // Aetherius (painel da staff, class.level): mesmo caminho do set(): comando durável, depois atributos e perks.
+  async setLevel(input:{binding:SessionBinding;requestId:string;level:number}){
+    const binding=Object.freeze({...input.binding,actorRef:Object.freeze({...input.binding.actorRef})}),ctx=this.context;
+    const check=()=>{if(ctx.signal.aborted||!ctx.canMutate(binding))throw Error('MODE_OR_STALE_BINDING');};
+    try{check();if(this.sweep?.active(binding.characterKey))throw Object.assign(Error('DEV_SWEEP_IN_PROGRESS'),{code:'DEV_SWEEP_IN_PROGRESS'});if(!ctx.persistence)throw Error('DATABASE_UNAVAILABLE');
+      if(this.devLevel!==undefined)throw Object.assign(Error('DEV_CLASS_LEVEL_ACTIVE'),{code:'DEV_CLASS_LEVEL_ACTIVE'});
+      const commands=createLevelCommands(scopedPool(ctx.persistence.pool,this.schema,check));
+      const receipt=await commands.set({characterKey:binding.characterKey,epoch:binding.epoch,requestId:input.requestId,level:input.level});check();
+      if(receipt.status==='conflict')return {status:'UNSUPPORTED' as const,reason:receipt.reason};
+      const attributes=await this.attributes?.publish(binding);
+      return {status:'SUPPORTED' as const,receipt,attributes,composition:await this.refresh(binding)};
+    }catch(error){return {status:'UNSUPPORTED' as const,reason:(error as {code?:string}).code??((error as Error).message==='MODE_OR_STALE_BINDING'?'MODE_OR_STALE_BINDING':'LEVEL_COMMAND_FAILED')};}
   }
   isSweeping(binding:SessionBinding){return this.sweep?.active(binding.characterKey)??false;}
   async shutdown(){await this.sweep?.shutdown();for(const stop of this.stops.splice(0))stop();await Promise.allSettled([...this.tails]);}

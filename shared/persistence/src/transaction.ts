@@ -94,6 +94,7 @@ export async function lockKey(tx: QueryExecutor, namespace: string, key: string)
 }
 
 export function assertCharacterKey(key: string): void {
+  if (/^character:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(key)) return;
   if (!/^profile:[1-9][0-9]*$/.test(key) || !Number.isSafeInteger(Number(key.slice(8)))) {
     throw new TypeError('Persistence: expected canonical profile:<profile_id> with a positive safe integer');
   }
@@ -101,6 +102,12 @@ export function assertCharacterKey(key: string): void {
 
 export async function lockCharacter(tx: QueryExecutor, characterKey: string): Promise<void> {
   assertCharacterKey(characterKey);
+  if (characterKey.startsWith('character:')) {
+    // UUID careers use a separate lock namespace; existing profile locks keep
+    // their exact negative-bigint identity and their previous behavior.
+    await lockKey(tx, 'character-uuid', characterKey);
+    return;
+  }
   // Exact negative bigint: distinct profile ids cannot hash-collide, and request/
   // migration locks occupy the nonnegative half of the bigint namespace.
   await tx.query('SELECT pg_advisory_xact_lock($1::bigint)', [-Number(characterKey.slice(8))]);

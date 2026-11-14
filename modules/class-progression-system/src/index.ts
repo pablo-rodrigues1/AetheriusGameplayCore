@@ -4,7 +4,8 @@ import type { QueryExecutor, PoolPort } from '../../../shared/persistence/src/in
 import { executeCommand } from '../../../shared/persistence/src/index.ts';
 import { assertCharacterKey } from '../../../shared/persistence/src/transaction.ts';
 import { requireDevelopmentOption, type CoreEnvironment } from '../../../runtime/src/development.js';
-import { resetProgress } from '../../leveling-system/src/persistence/durable.ts';
+import { resetProgress, setProgressLevel } from '../../leveling-system/src/persistence/durable.ts';
+import { earnedAttributePoints as earnedPoints, readAllocation as readSpent } from './attributes.ts';
 export interface ClassFact { readonly classId:string; readonly revision:number }
 export interface CharacterLevel { readonly level:number; readonly origin:'LEVELING'|'LEVELING_DEFAULT'|'DEV'; readonly revision:number }
 export interface CharacterLevelPort { read(tx:QueryExecutor,key:CharacterKey):Promise<CharacterLevel> }
@@ -50,6 +51,23 @@ export function createClassCommands(pool:PoolPort,data:DomainData) {
       await tx.query(`INSERT INTO gc_character_class(character_key,class_id,revision) VALUES($1,$2,$3)
         ON CONFLICT(character_key) DO UPDATE SET class_id=EXCLUDED.class_id,revision=EXCLUDED.revision`,[command.characterKey,classId,revision]);
       return {classId,previousClass:prior?.classId??null,revision,changed};
+    });
+  }};
+}
+/** Aetherius (painel da staff, class.level): define o nível de classe. Mantém a classe; se o novo nível
+ * der menos pontos de atributo do que os já gastos, zera a distribuição (como a troca de classe faz). */
+export function createLevelCommands(pool:PoolPort) {
+  return {async set(input:{characterKey:CharacterKey;level:number;requestId:string;epoch:SessionEpoch}) {
+    assertCharacterKey(input.characterKey);
+    if(!Number.isInteger(input.level)||input.level<1||input.level>40)throw new ClassError('CLASS_LEVEL_INVALID');
+    return executeCommand(pool,{requestId:input.requestId,characterKey:input.characterKey,epoch:input.epoch,type:'leveling.set-level',payload:{level:input.level}},async(tx,command)=>{
+      const level=(command.payload as {level:number}).level;
+      const result=await setProgressLevel(tx,command.characterKey,level);
+      const allocation=await readSpent(tx,command.characterKey);
+      const spent=Object.values(allocation.spent).reduce((a,b)=>a+b,0);
+      const attributesReset=!allocation.valid||spent>earnedPoints(level);
+      if(attributesReset)await tx.query('DELETE FROM gc_attribute_allocation WHERE character_key=$1',[command.characterKey]);
+      return {...result,attributesReset};
     });
   }};
 }

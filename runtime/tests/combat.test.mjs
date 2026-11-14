@@ -182,8 +182,13 @@ test('NPC winner leaves, levels, perks and item references match exports by Form
   assert.deepEqual(scaled.data.level, { kind: 'PC_LEVEL_MULT', multiplier: 1.5, min: 3, max: 20 });
   assert.equal(npcField(scaled.data, 'Configuration.HealthOffset'), -50);
   assert.deepEqual(scaled.data.perks, [['skyrim.esm|0E997B', 1]]);
-  assert.deepEqual(scaled.data.items, [['skyrim.esm|0A6E7A', null]]);
-  assert(npcDomain.unsupported.some(u => u.reason.includes('Item.Count: field not exported') && u.count > 1));
+  // Older depth-limited exports omitted Count; current houseCARL exports carry
+  // the ContainerItem leaf. Compare to the actual export rather than requiring
+  // a known old gap to remain present after regenerating the catalog.
+  const count = row('NPC_', '0173C2:Skyrim.esm').fields.find(f => f.path === 'Items[0].Item.Count')?.value;
+  assert.deepEqual(scaled.data.items, [['skyrim.esm|0A6E7A', count === undefined ? null : Number(count)]]);
+  if (count === undefined)
+    assert(npcDomain.unsupported.some(u => u.reason.includes('Item.Count: field not exported') && u.count > 1));
   // Exhaustive comparison of selected raw numeric/enum leaves for every NPC winner.
   for (const actual of npcDomain.records.filter(r => r.recordType === 'NPC_')) {
     const address = encodeFormKey(actual.stableFormKey, 'housecarl', actual.pluginKind);
