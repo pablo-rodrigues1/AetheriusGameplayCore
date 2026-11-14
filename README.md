@@ -1,5 +1,7 @@
 # AetheriusGameplayCore
 
+> Documentação no Acervo Aetherius: [02-sistemas/gameplay-core](https://github.com/pablo-rodrigues1/AETHERIUS-ACERVO-DE-INFORMACOES/blob/main/02-sistemas/gameplay-core/README.md).
+
 Monorepo dos sistemas de gameplay do **Aetherius Roleplay**.
 
 Este repositório consolida os sistemas que precisam evoluir de forma coordenada para o ambiente SkyMP/Aetherius. A migração inicial preservou as baselines; a integração UI descrita abaixo acrescenta alterações ao ClassSystem.
