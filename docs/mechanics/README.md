@@ -7,6 +7,10 @@ Complemento minucioso do [planejamento holístico](../../AETHERIUS_GAMEPLAY_CORE
 
 **Não há ativação de gameplay nesta entrega.** Os fatos são da instância `D:\modOrganizer`, perfil `AETHERIUS - GRAFICO - QUALIDADE`, epoch `e2-ad3c01c2aa184e91`, das baselines de código identificadas na auditoria e das extrações complementares. Uma regra proposta não deve ser confundida com comportamento já executado pelo servidor.
 
+## Feitiços das classes — revisão documental de 14/11/2026
+
+A lista atualizada da planilha, com 164 registros por classe/tier, está em [Feitiços por classe](../classes/FEITICOS_POR_CLASSE.md). Ela registra separadamente o design sincronizado e as divergências dos campos do código; os inventários históricos de records deste manual não foram regenerados.
+
 ## Roteiro de leitura
 
 |Documento|O que responde|

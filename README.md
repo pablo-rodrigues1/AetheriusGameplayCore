@@ -6,6 +6,10 @@ Monorepo dos sistemas de gameplay do **Aetherius Roleplay**.
 
 Este repositório consolida os sistemas que precisam evoluir de forma coordenada para o ambiente SkyMP/Aetherius. A migração inicial preservou as baselines; a integração UI descrita abaixo acrescenta alterações ao ClassSystem.
 
+## Catálogo documental de feitiços por classe
+
+A lista completa da aba Classes e sua conciliação com Classes - Progressão estão em [Feitiços por classe](docs/classes/FEITICOS_POR_CLASSE.md): 164 registros em 12 classes, nomes, escolas, tiers e diferenças entre `authorizedSpells` e `allSpellsList`. Atualização documental de 14/11/2026; não altera o runtime nem implica feitiços concedidos automaticamente.
+
 ## Arquitetura canônica
 
 A fonte normativa atual para decisões de arquitetura e implementação é [docs/architecture/AETHERIUS_GAMEPLAY_CORE_ARCHITECTURE.md](docs/architecture/AETHERIUS_GAMEPLAY_CORE_ARCHITECTURE.md).

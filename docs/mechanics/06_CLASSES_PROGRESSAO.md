@@ -1,5 +1,9 @@
 # 6. Classes, skills, progressão, party e NPCs
 
+## Lista de feitiços e tiers — revisão documental
+
+Consulte [Feitiços por classe](../classes/FEITICOS_POR_CLASSE.md) para a relação completa da aba Classes, sincronizada com Classes - Progressão em 14/11/2026. São 164 registros em 12 classes; as outras seis não listam feitiços. O documento distingue esta referência de design dos dados ainda divergentes em `authorizedSpells`/`allSpellsList`; não altera a implementação descrita pelo código.
+
 ## 6.1 Dezoito classes sem perder seus estágios
 
 [CLASS_STAGES](CLASS_STAGES.md) documenta todas as 18 classes e 350 ocorrências de perks nos estágios, incluindo nível, texto de skills e attributePoints configurado. Uma ocorrência repetida em duas classes não é uma nova definição de perk. [CLASS_PERK_MAPPING](CLASS_PERK_MAPPING.md) distingue as 162 entradas do resolvedor:156 IDs zero, seis entradas no manifesto histórico,146 nomes com candidatos instalados e dez sem correspondência exata.

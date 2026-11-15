@@ -50,3 +50,7 @@ Os testes de aceitação dependentes de PostgreSQL devem usar apenas o banco des
 Para operação com servidor parado, consulte `runtime/set-character-class.mjs`, `runtime/allocate-attributes.mjs` e `runtime/explain-character.mjs`, sempre seguindo [`docs/operations/ATIVACAO_DOS_SISTEMAS.md`](../../docs/operations/ATIVACAO_DOS_SISTEMAS.md).
 
 > **Histórico:** a baseline C3a inicialmente não possuía entrega B5b nem reset de XP na troca. Essas limitações foram superadas por B5b e C3d; por isso não se deve usar o antigo estado de C3a como comportamento atual.
+
+## Feitiços e a planilha de progressão
+
+A relação completa por classe, escola e tier está em [Feitiços por classe](../../docs/classes/FEITICOS_POR_CLASSE.md). Os tiers são independentes dos nove marcos de classe. O aprendizado por roleplay e a lista de permissões não são grants automáticos de perks do ClassProgressionSystem. A conciliação documental de 14/11/2026 não altera comandos, catálogos ou grants e registra as divergências ainda existentes nos JSONs.

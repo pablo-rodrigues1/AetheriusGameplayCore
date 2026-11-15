@@ -48,3 +48,7 @@ Foi incorporado o adapter de [AetheriusDamageSystem](https://github.com/mercuriu
 O modo `legacy` continua padrão. O modo experimental exige a build e os overlays nativos do DamageSystem; ele rejeita perks sem handler auditado e equipamentos não suportados. O ClassSystem não acrescenta multiplicadores sobre a fórmula. Falha de publicação não substitui a progressão persistida nem altera a cópia em memória. Skills recebidas do perfil são exatas, inclusive zero após reset. O resolver não inventa FormIDs em produção.
 
 SDK de servidor vendorizado do Core no commit `470526a24a003d5452802f90933c323c3bc4e300`; origem em `vendor/ui-core/PROVENANCE.md`. O frontend usa o checkout do Core informado no empacotamento. `AUDIT.md` é o histórico anterior à migração.
+
+## Lista documental de feitiços
+
+Consulte [Feitiços por classe](../../docs/classes/FEITICOS_POR_CLASSE.md) para os 164 registros da aba Classes, agora espelhados em Classes - Progressão. O documento registra as omissões e os nomes/tiers divergentes de `config/classes-config.json`: `authorizedSpells` tem 128 entradas (127 associações únicas; Aura of Thorns está repetida no Curandeiro), enquanto `allSpellsList` já tem os 164 nomes, com seis tiers divergentes. Esta atualização é documental; os JSONs e a apresentação em execução não foram alterados.
